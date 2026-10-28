@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=2">
+<link rel="stylesheet" href="shd-theme.css?v=3">
 <style>
   .wrap { max-width: var(--max-wide); margin: 0 auto; padding: var(--space-4); }
   main.wrap { padding-bottom: var(--space-6); }
@@ -72,10 +72,10 @@
 
   /* ---------- detail ---------- */
   .back { margin-bottom: var(--space-3); }
-  .photos { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .photos { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(var(--size-photo), 1fr)); }
   .photos a { display: block; }
-  .photos img { width: var(--size-thumb); height: var(--size-thumb); object-fit: cover; border-radius: var(--radius-s);
-    border: 1px solid var(--c-line); }
+  .photos img { display: block; width: 100%; height: auto; border-radius: var(--radius-s); border: 1px solid var(--c-line);
+    background: var(--c-surface-2); }
   details.hist { margin-top: var(--space-4); color: var(--c-ink-2); font-size: var(--fs-s); }
   details.hist summary { cursor: pointer; min-height: var(--size-target); display: flex; align-items: center; }
   .btn.danger { border-color: var(--c-err-line); color: var(--c-err); background: var(--c-surface); }
@@ -97,6 +97,14 @@
   .codes .bad { color: var(--c-err); font-weight: bold; }
   .codes .good { color: var(--c-ok); }
   .formbar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .formwrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+  .photopanel { margin-bottom: 0; }
+  .photopanel summary { cursor: pointer; font-weight: bold; min-height: var(--size-target); display: flex; align-items: center; }
+  @media (min-width: 900px) {
+    .formwrap.has-photos { grid-template-columns: minmax(0, 1fr) var(--size-photo); align-items: start; }
+    .formwrap.has-photos form { grid-column: 1; grid-row: 1; }
+    .formwrap.has-photos .photopanel { grid-column: 2; grid-row: 1; position: sticky; top: var(--space-4); }
+  }
 
   @media (pointer: coarse), (max-width: 640px) {
     .btn, .seg button, .linkbtn { min-height: var(--size-target-lg); }
@@ -250,6 +258,16 @@
     return d;
   }
 
+  // Photos the warehouse sent; opens full size in a new tab so brand text on the box can be read.
+  function photoGrid(photos) {
+    var strip = el('div', 'photos');
+    photos.forEach(function (p) {
+      var a = el('a'); a.href = p.url; a.target = '_blank'; a.rel = 'noopener';
+      var i = el('img'); i.src = p.url; i.alt = 'รูปจากคลัง'; i.loading = 'lazy'; a.appendChild(i); strip.appendChild(a);
+    });
+    return strip;
+  }
+
   // ---------- branch view ----------
   function renderBranch(list) {
     done(); var v = $('view'); v.textContent = '';
@@ -341,12 +359,7 @@
       v.appendChild(card(c, { office: true, actions: actions }));
       if (rs[1].photos.length) {
         var ph = el('section', 'card'); ph.appendChild(el('h2', 'sec', 'รูปจากคลัง'));
-        var strip = el('div', 'photos');
-        rs[1].photos.forEach(function (p) {
-          var a = el('a'); a.href = p.url; a.target = '_blank'; a.rel = 'noopener';
-          var i = el('img'); i.src = p.url; i.alt = 'รูปจากคลัง'; i.loading = 'lazy'; a.appendChild(i); strip.appendChild(a);
-        });
-        ph.appendChild(strip); v.appendChild(ph);
+        ph.appendChild(photoGrid(rs[1].photos)); v.appendChild(ph);
       }
       var ev = rs[0].events || [];
       if (ev.length) {
@@ -429,7 +442,18 @@
     var bar = el('div', 'formbar');
     var save = el('button', 'btn', 'บันทึก'); save.type = 'submit'; bar.appendChild(save);
     bar.appendChild(button('ยกเลิก', 'alt', renderOffice));
-    f.appendChild(bar); v.appendChild(f);
+    f.appendChild(bar);
+    var wrap = el('div', 'formwrap'); wrap.appendChild(f); v.appendChild(wrap);
+    // Editing a warehouse draft: keep the photo beside the form so the brand and dates can be read from it.
+    if (c.id) {
+      api('photos', { id: c.id }).then(function (r) {
+        if (!r.photos.length) return;
+        var det = el('details', 'card photopanel'); det.open = true;
+        det.appendChild(el('summary', '', 'รูปจากคลัง (' + r.photos.length + ')'));
+        det.appendChild(photoGrid(r.photos));
+        wrap.insertBefore(det, f); wrap.classList.add('has-photos');
+      }).catch(function () { /* the form still works without the photo */ });
+    }
 
     f.onsubmit = function (ev) {
       ev.preventDefault();

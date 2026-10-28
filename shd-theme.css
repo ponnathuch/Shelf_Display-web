@@ -1,4 +1,4 @@
-/* Shelf Display theme: same tokens as Product Q&A so the apps look like one family. */
+/* Shelf Display theme: same token structure as Product Q&A but its own violet brand so the two apps are told apart at a glance. */
 
 :root {
   color-scheme: light dark;
@@ -12,13 +12,13 @@
   --c-ink: #172033;
   --c-ink-2: #475069;
   --c-ink-3: #5b647a;
-  --c-brand: #1a5fd0;
-  --c-brand-strong: #1849a9;
-  --c-brand-soft: #eaf1fd;
-  --c-brand-line: #9dbcf0;
+  --c-brand: #6a3fc4;
+  --c-brand-strong: #52309f;
+  --c-brand-soft: #f1ecfb;
+  --c-brand-line: #c3aeea;
   --c-on-brand: #fcfdfe;
-  --c-header-1: #1849a9;
-  --c-header-2: #1d5bc4;
+  --c-header-1: #4a2a8f;
+  --c-header-2: #6238b5;
   --c-on-header: #fcfdfe;
   --c-on-header-faint: rgba(252, 253, 254, 0.18);
   --c-on-header-soft: rgba(252, 253, 254, 0.16);
@@ -74,6 +74,7 @@
   --size-empty: 64px;
   --size-tile: 130px;
   --size-thumb: 92px;
+  --size-photo: 320px;
   --size-strip-w: 54px;
   --size-strip-h: 70px;
   --size-field: 220px;
@@ -93,7 +94,7 @@
 
   /* depth, focus, motion */
   --shadow-1: 0 1px 2px rgba(23, 32, 51, 0.06), 0 4px 14px rgba(23, 32, 51, 0.06);
-  --focus: 0 0 0 3px rgba(26, 95, 208, 0.35);
+  --focus: 0 0 0 3px rgba(106, 63, 196, 0.35);
   --outline-w: 2px;
   --dur-fast: 120ms;
   --dur-shimmer: 1200ms;
@@ -109,13 +110,13 @@
     --c-ink: #e6e9f0;
     --c-ink-2: #b7bfcf;
     --c-ink-3: #959eb2;
-    --c-brand: #8ab4ff;
-    --c-brand-strong: #a9c7ff;
-    --c-brand-soft: #1f2d48;
-    --c-brand-line: #3a5a94;
-    --c-on-brand: #0d1526;
-    --c-header-1: #142c5c;
-    --c-header-2: #18397a;
+    --c-brand: #b9a2f2;
+    --c-brand-strong: #d0c0f7;
+    --c-brand-soft: #2a2145;
+    --c-brand-line: #5a4496;
+    --c-on-brand: #1a1030;
+    --c-header-1: #2d1b5e;
+    --c-header-2: #3d2680;
     --c-ok: #6fd39a;
     --c-ok-soft: #173426;
     --c-warn: #f2c46b;
@@ -132,7 +133,7 @@
     --c-kind-promo: #f08cc0;
     --c-kind-payment: #6fd39a;
     --shadow-1: none;
-    --focus: 0 0 0 3px rgba(138, 180, 255, 0.4);
+    --focus: 0 0 0 3px rgba(185, 162, 242, 0.4);
   }
 }
 
