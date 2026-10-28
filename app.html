@@ -348,9 +348,9 @@
       x.onclick = function () { tab = t[0]; renderOffice(); }; seg.appendChild(x);
     });
     b.appendChild(seg);
-    var sb = el('input', 'input search'); sb.type = 'search'; sb.value = q;
+    var sb = el('input', 'input search'); sb.type = 'search'; sb.value = needle;
     sb.placeholder = 'ค้นหาจากชื่อหรือเลขทะเบียน SD...'; sb.setAttribute('aria-label', 'ค้นหาแคมเปญจากชื่อหรือเลขทะเบียน');
-    sb.oninput = function () { q = sb.value; renderList(); };
+    sb.oninput = function () { needle = sb.value; renderList(); };
     b.appendChild(sb); b.appendChild(el('span', 'grow'));
     if (isApprover()) { var s = el('button', 'linkbtn', 'ตั้งค่าตำแหน่ง'); s.type = 'button'; s.onclick = settings; b.appendChild(s); }
     b.appendChild(button('+ ลงทะเบียนแคมเปญ', '', function () { form(null); }));
@@ -360,11 +360,11 @@
     if (!keepMsg) loading();
     api('list', {}).then(function (d) { all = d.campaigns; done(); show(m, m ? 'ok' : ''); renderOffice(); }).catch(fail);
   }
-  var q = '';
+  var needle = '';
   function renderOffice() { renderBar(); renderList(); }
   function renderList() {
     var v = $('view'); v.textContent = '';
-    var term = q.trim().toLowerCase();
+    var term = needle.trim().toLowerCase();
     // a search looks in every tab, so a code typed from LINE is found whatever its status
     var rows = all.filter(function (c) {
       return term ? ((c.code || '') + ' ' + (c.brand || '') + ' ' + (c.registrant_name || '')).toLowerCase().indexOf(term) !== -1 : c.status === tab;
