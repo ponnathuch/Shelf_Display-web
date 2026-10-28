@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="th">
 <head>
 <meta charset="utf-8">
@@ -261,7 +261,7 @@
     var head = el('div', 'card-head'), left = el('div');
     left.appendChild(el('h3', '', c.brand || '(ยังไม่มีชื่อแบรนด์)'));
     var chips = el('div', 'chips');
-    if (opts.office && c.code) chips.appendChild(el('span', 'chip code', c.code));
+    if (c.code) chips.appendChild(el('span', 'chip code', c.code));
     if (c.position_types) chips.appendChild(el('span', 'chip', c.position_types.name));
     if (c.package) chips.appendChild(el('span', 'chip', 'แพ็กเกจ ' + c.package));
     if (c.status === 'pending') chips.appendChild(el('span', 'chip warn', 'รออนุมัติ'));
@@ -334,20 +334,32 @@
   function renderBranch(list) {
     branchList = list;
     done(); var v = $('view'); v.textContent = '';
-    var g = { soon: [], on: [], next: [] };
-    list.forEach(function (c) {
+    var tb = el('div', 'toolbar');
+    var sb = el('input', 'input search'); sb.type = 'search'; sb.value = needle;
+    sb.placeholder = 'ค้นหาชื่อหรือเลขทะเบียน'; sb.setAttribute('aria-label', 'ค้นหาสื่อจากชื่อหรือเลขทะเบียน');
+    var box = el('div');
+    sb.oninput = function () { needle = sb.value; renderBranchBox(box); };
+    tb.appendChild(sb); tb.appendChild(sortBox(function () { renderBranchBox(box); }));
+    v.appendChild(tb); v.appendChild(box); renderBranchBox(box);
+  }
+  function renderBranchBox(v) {
+    v.textContent = '';
+    var term = needle.trim().toLowerCase();
+    var g = { soon: [], on: [], next: [] }, any = false;
+    branchList.forEach(function (c) {
       if (!c.start_date || (!c.end_date && !c.open_ended)) return;
       if (c.end_date && daysTo(c.end_date) < 0) return;
+      any = true;
+      if (term && ((c.code || '') + ' ' + (c.brand || '')).toLowerCase().indexOf(term) === -1) return;
       if (daysTo(c.start_date) > 0) g.next.push(c);
       else if (c.end_date && daysTo(c.end_date) <= 7) g.soon.push(c);
       else g.on.push(c);
     });
     ['soon', 'on', 'next'].forEach(function (k) { sortRows(g[k]); });
     if (!g.soon.length && !g.on.length && !g.next.length) {
-      v.appendChild(el('p', 'empty', 'ตอนนี้ยังไม่มีสื่อที่ต้องวางในสาขานี้'));
+      v.appendChild(el('p', 'empty', any ? 'ไม่พบสื่อที่ตรงกับคำค้น' : 'ตอนนี้ยังไม่มีสื่อที่ต้องวางในสาขานี้'));
       return;
     }
-    var tb = el('div', 'toolbar'); tb.appendChild(sortBox(function () { renderBranch(branchList); })); v.appendChild(tb);
     [['soon', 'ใกล้สิ้นสุด (ภายใน 7 วัน)'], ['on', 'วางอยู่ตอนนี้'], ['next', 'กำลังจะเริ่ม']].forEach(function (s) {
       if (!g[s[0]].length) return;
       var h = el('h2', 'sec', s[1]); h.appendChild(el('span', 'count', String(g[s[0]].length))); v.appendChild(h);
