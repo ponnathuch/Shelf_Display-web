@@ -120,11 +120,13 @@
   .formbar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .formwrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
   .photopanel { margin-bottom: 0; }
+  .photopanel .photos { grid-template-columns: minmax(0, 1fr); }
+  .photopanel .photos img { max-height: 70vh; object-fit: contain; }
   .photopanel summary { cursor: pointer; font-weight: bold; min-height: var(--size-target); display: flex; align-items: center; }
   @media (min-width: 900px) {
     .formwrap.has-photos { grid-template-columns: minmax(0, 1fr) var(--size-photo); align-items: start; }
     .formwrap.has-photos form { grid-column: 1; grid-row: 1; }
-    .formwrap.has-photos .photopanel { grid-column: 2; grid-row: 1; position: sticky; top: var(--space-4); }
+    .formwrap.has-photos .photopanel { grid-column: 2; grid-row: 1; position: sticky; top: var(--space-4); max-height: calc(100vh - var(--space-6)); overflow: auto; }
   }
 
   @media (pointer: coarse), (max-width: 640px) {
@@ -153,7 +155,7 @@
   var STORE_KEY = 'shd-session';
   var BRANCH_RE = /^[A-Z]{2}\d{3}$/;
   var $ = function (id) { return document.getElementById(id); };
-  var sess = null, tab = 'pending', types = [], all = [], units = [];
+  var sess = null, tab = 'pending', types = [], all = [], units = [], people = [];
 
   var ROLE_TH = { ADMIN: 'ผู้ดูแลระบบ', APPROVER: 'ผู้อนุมัติ', REGISTRANT: 'ผู้ลงทะเบียน', STAFF: 'สาขา' };
   var ERR = {
@@ -391,9 +393,101 @@
     }).catch(fail);
   }
 
-  // ---------- branch picker ----------
-  // Same idea as the unit picker in Job Tracker: search, tick branches one by one or tick a whole department / area
-  // to take every branch under it. The state is always a set of branch codes, so single branches can still be removed.
+  // ---------- multi picker ----------
+  // Same idea as the pickers in Job Tracker: a dropdown with search and tick boxes, ticked items shown as removable chips.
+  // An item can stand for several leaves (a department or area stands for every branch under it); the state is always the
+  // set of leaf codes, so a single leaf can still be removed after ticking its group.
+  // cfg: {title, required, noun, placeholder, searchPlaceholder, items:[{code,name,sub,leaves,group}], initial:[codes],
+  //       labelOf(code), filters:[[key,label,test(item)]], validCode(code)}
+  function multiPicker(box, cfg) {
+    var chosen = {};
+    cfg.initial.forEach(function (x) { chosen[x] = true; });
+    var filterKey = 'all', query = '';
+
+    var root = el('div', 'picker');
+    var t = el('span', 't', cfg.title);
+    if (cfg.required) t.appendChild(el('span', 'req', ' *'));
+    root.appendChild(t);
+    var open = button('', 'alt pick-btn', function () { toggle(); }); open.setAttribute('aria-expanded', 'false'); root.appendChild(open);
+    var panel = el('div', 'pick-panel'); panel.hidden = true; root.appendChild(panel);
+
+    var search = el('input', 'input'); search.type = 'search'; search.placeholder = cfg.searchPlaceholder;
+    search.setAttribute('aria-label', cfg.searchPlaceholder);
+    panel.appendChild(search);
+    var filters = cfg.filters || [];
+    if (filters.length > 1) {
+      var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'ประเภท');
+      filters.forEach(function (f, i) {
+        var b = el('button', '', f[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(i === 0));
+        b.onclick = function () {
+          filterKey = f[0];
+          Array.prototype.forEach.call(seg.children, function (x, j) { x.setAttribute('aria-pressed', String(filters[j][0] === filterKey)); });
+          render();
+        };
+        seg.appendChild(b);
+      });
+      panel.appendChild(seg);
+    }
+    var tools = el('div', 'row');
+    var list = el('div', 'pick-list');
+    tools.appendChild(button('เลือกทั้งหมดที่แสดง', 'alt', function () {
+      visible().forEach(function (it) { it.leaves.forEach(function (x) { chosen[x] = true; }); }); render();
+    }));
+    tools.appendChild(button('ล้างที่เลือก', 'alt', function () { chosen = {}; render(); }));
+    tools.appendChild(button('เสร็จ', '', function () { toggle(false); }));
+    panel.appendChild(tools); panel.appendChild(list);
+    var chips = el('div', 'chosen'); chips.setAttribute('aria-live', 'polite'); root.appendChild(chips);
+
+    function toggle(force) {
+      var willOpen = force === undefined ? panel.hidden : force;
+      panel.hidden = !willOpen; open.setAttribute('aria-expanded', String(willOpen));
+      if (willOpen) search.focus();
+    }
+    function visible() {
+      var q = query.trim().toLowerCase();
+      var f = filters.filter(function (x) { return x[0] === filterKey; })[0];
+      return cfg.items.filter(function (it) {
+        if (f && !f[2](it)) return false;
+        return !q || (it.name + ' ' + it.code).toLowerCase().indexOf(q) !== -1;
+      });
+    }
+    function render() {
+      var keep = list.scrollTop;
+      list.textContent = '';
+      var vis = visible();
+      if (!vis.length) list.appendChild(el('p', 'empty', 'ไม่พบรายการที่ตรงกับคำค้น'));
+      vis.forEach(function (it) {
+        var n = it.leaves.filter(function (b) { return chosen[b]; }).length;
+        var l = el('label', 'pick-row'), cb = el('input'); cb.type = 'checkbox';
+        cb.checked = it.leaves.length > 0 && n === it.leaves.length; cb.indeterminate = n > 0 && n < it.leaves.length;
+        cb.onchange = function () { it.leaves.forEach(function (b) { if (cb.checked) chosen[b] = true; else delete chosen[b]; }); render(); };
+        l.appendChild(cb);
+        var tx = el('span', 'pick-tx'); tx.appendChild(el('span', 'nm', it.name)); tx.appendChild(el('span', 'sub', it.sub));
+        l.appendChild(tx); list.appendChild(l);
+      });
+      list.scrollTop = keep;
+      var codes = Object.keys(chosen).sort();
+      open.textContent = codes.length ? 'เลือกแล้ว ' + codes.length + ' ' + cfg.noun + ' (กดเพื่อเพิ่ม/แก้ไข)' : cfg.placeholder;
+      chips.textContent = '';
+      codes.forEach(function (code) {
+        var chip = el('span', 'chip');
+        chip.appendChild(document.createTextNode(cfg.labelOf(code) + ' '));
+        var x = el('button', 'chip-x', 'ลบ'); x.type = 'button'; x.setAttribute('aria-label', 'ลบ ' + cfg.labelOf(code));
+        x.onclick = function () { delete chosen[code]; render(); };
+        chip.appendChild(x); chips.appendChild(chip);
+      });
+    }
+    search.oninput = function () { query = search.value; render(); };
+    panel.addEventListener('keydown', function (e) { if (e.key === 'Escape') { toggle(false); open.focus(); } });
+    box.appendChild(root); render();
+    return {
+      getCodes: function () { return Object.keys(chosen); },
+      valid: function () { return !cfg.validCode || Object.keys(chosen).every(cfg.validCode); },
+      focus: function () { open.focus(); }
+    };
+  }
+
+  // Branches: single branches, or a department / area that stands for every branch under it.
   function branchPicker(box, initial) {
     var byCode = {}, children = {};
     units.forEach(function (u) { byCode[u.code] = u; var k = u.parent_code || ''; (children[k] = children[k] || []).push(u.code); });
@@ -408,84 +502,32 @@
       }
       return out;
     }
-    var rows = units.filter(function (u) { return u.is_branch || under(u.code).length > 0; });
-    var chosen = {};
-    initial.forEach(function (x) { chosen[x] = true; });
-    var filter = 'all', query = '';
-
-    var root = el('div', 'picker');
-    var t = el('span', 't', 'สาขา / แผนก'); t.appendChild(el('span', 'req', ' *')); root.appendChild(t);
-    var open = button('', 'alt pick-btn', function () { toggle(); }); open.setAttribute('aria-expanded', 'false'); root.appendChild(open);
-    var panel = el('div', 'pick-panel'); panel.hidden = true; root.appendChild(panel);
-
-    var search = el('input', 'input'); search.type = 'search'; search.placeholder = 'พิมพ์ชื่อหรือรหัสสาขา/แผนก...';
-    search.setAttribute('aria-label', 'ค้นหาสาขาหรือแผนก');
-    panel.appendChild(search);
-    var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'ประเภท');
-    [['all', 'ทั้งหมด'], ['branch', 'สาขา'], ['group', 'แผนก/กลุ่ม']].forEach(function (f) {
-      var b = el('button', '', f[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(filter === f[0]));
-      b.onclick = function () { filter = f[0]; Array.prototype.forEach.call(seg.children, function (x, i) { x.setAttribute('aria-pressed', String(['all', 'branch', 'group'][i] === filter)); }); render(); };
-      seg.appendChild(b);
+    var items = [];
+    units.forEach(function (u) {
+      var leaves = under(u.code);
+      if (!leaves.length) return;
+      items.push({ code: u.code, name: u.name, group: !u.is_branch, leaves: leaves,
+        sub: u.code + ' · ' + (u.is_branch ? 'สาขา' : (u.unit_type || 'กลุ่ม') + ' · ' + leaves.length + ' สาขา') });
     });
-    panel.appendChild(seg);
-    var tools = el('div', 'row');
-    var list = el('div', 'pick-list');
-    tools.appendChild(button('เลือกทั้งหมดที่แสดง', 'alt', function () {
-      visible().forEach(function (u) { under(u.code).forEach(function (b) { chosen[b] = true; }); }); render();
-    }));
-    tools.appendChild(button('ล้างที่เลือก', 'alt', function () { chosen = {}; render(); }));
-    tools.appendChild(button('เสร็จ', '', function () { toggle(false); }));
-    panel.appendChild(tools); panel.appendChild(list);
-    var chips = el('div', 'chosen'); chips.setAttribute('aria-live', 'polite'); root.appendChild(chips);
+    return multiPicker(box, {
+      title: 'สาขา / แผนก', required: true, noun: 'สาขา', placeholder: 'เลือกสาขาหรือแผนก...',
+      searchPlaceholder: 'พิมพ์ชื่อหรือรหัสสาขา/แผนก...', items: items, initial: initial,
+      labelOf: function (code) { return byCode[code] ? byCode[code].name + ' ' + code : code; },
+      filters: [['all', 'ทั้งหมด', function () { return true; }], ['branch', 'สาขา', function (i) { return !i.group; }], ['group', 'แผนก/กลุ่ม', function (i) { return i.group; }]],
+      validCode: function (x) { return BRANCH_RE.test(x); }
+    });
+  }
 
-    function toggle(force) {
-      var willOpen = force === undefined ? panel.hidden : force;
-      panel.hidden = !willOpen; open.setAttribute('aria-expanded', String(willOpen));
-      if (willOpen) search.focus();
-    }
-    function visible() {
-      var q = query.trim().toLowerCase();
-      return rows.filter(function (u) {
-        if (filter === 'branch' && !u.is_branch) return false;
-        if (filter === 'group' && u.is_branch) return false;
-        return !q || (u.name + ' ' + u.code).toLowerCase().indexOf(q) !== -1;
-      });
-    }
-    function render() {
-      var keep = list.scrollTop;
-      list.textContent = '';
-      var vis = visible();
-      if (!vis.length) list.appendChild(el('p', 'empty', 'ไม่พบรายการที่ตรงกับคำค้น'));
-      vis.forEach(function (u) {
-        var bs = under(u.code), n = bs.filter(function (b) { return chosen[b]; }).length;
-        var l = el('label', 'pick-row'), cb = el('input'); cb.type = 'checkbox';
-        cb.checked = bs.length > 0 && n === bs.length; cb.indeterminate = n > 0 && n < bs.length;
-        cb.onchange = function () { bs.forEach(function (b) { if (cb.checked) chosen[b] = true; else delete chosen[b]; }); render(); };
-        l.appendChild(cb);
-        var tx = el('span', 'pick-tx'); tx.appendChild(el('span', 'nm', u.name));
-        tx.appendChild(el('span', 'sub', u.code + ' · ' + (u.is_branch ? 'สาขา' : (u.unit_type || 'กลุ่ม') + ' · ' + bs.length + ' สาขา')));
-        l.appendChild(tx); list.appendChild(l);
-      });
-      list.scrollTop = keep;
-      var codes = Object.keys(chosen).sort();
-      open.textContent = codes.length ? 'เลือกแล้ว ' + codes.length + ' สาขา (กดเพื่อเพิ่ม/แก้ไข)' : 'เลือกสาขาหรือแผนก...';
-      chips.textContent = '';
-      codes.forEach(function (code) {
-        var chip = el('span', 'chip'), u = byCode[code];
-        chip.appendChild(document.createTextNode((u ? u.name + ' ' : '') + code + ' '));
-        var x = el('button', 'chip-x', 'ลบ'); x.type = 'button'; x.setAttribute('aria-label', 'ลบ ' + code);
-        x.onclick = function () { delete chosen[code]; render(); };
-        chip.appendChild(x); chips.appendChild(chip);
-      });
-    }
-    search.oninput = function () { query = search.value; render(); };
-    panel.addEventListener('keydown', function (e) { if (e.key === 'Escape') { toggle(false); open.focus(); } });
-    box.appendChild(root); render();
-    return {
-      getCodes: function () { return Object.keys(chosen); },
-      valid: function () { return Object.keys(chosen).every(function (x) { return BRANCH_RE.test(x); }); },
-      focus: function () { open.focus(); }
-    };
+  // Designated Approver: the people listed as approvers in Job Tracker.
+  function peoplePicker(box, initial) {
+    var byName = {};
+    people.forEach(function (x) { byName[x.username] = x.name; });
+    return multiPicker(box, {
+      title: 'ผู้อนุมัติที่ต้องการ (ไม่บังคับ)', required: false, noun: 'คน', placeholder: 'เลือกผู้อนุมัติ...',
+      searchPlaceholder: 'พิมพ์ชื่อผู้อนุมัติ...', initial: initial,
+      items: people.map(function (x) { return { code: x.username, name: x.name, sub: x.username, leaves: [x.username] }; }),
+      labelOf: function (code) { return byName[code] || code; }
+    });
   }
 
   // ---------- form ----------
@@ -554,8 +596,14 @@
     }
     var initial = (c.campaign_branches || []).map(function (b) { return b.branch_code; });
     var bf = units.length ? branchPicker(s4, initial) : branchTextarea(s4, initial);
-    var dz = area(s4, 'ผู้อนุมัติที่ต้องการ (ไม่บังคับ)', (c.designated || []).join(' '), false);
-    s4.appendChild(el('p', 'hint', 'ใส่ชื่อผู้ใช้ JT คั่นด้วยเว้นวรรค ทุกคนในรายชื่อผู้อนุมัติอนุมัติได้ คนที่ระบุจะได้รับอีเมลเตือนเมื่อยังค้าง'));
+    var dz;
+    if (people.length) {
+      dz = peoplePicker(s4, c.designated || []);
+    } else {
+      var dta = area(s4, 'ผู้อนุมัติที่ต้องการ (ไม่บังคับ, ชื่อผู้ใช้ JT คั่นด้วยเว้นวรรค)', (c.designated || []).join(' '), false);
+      dz = { getCodes: function () { return dta.value.split(/[\s,]+/).filter(Boolean); } };
+    }
+    s4.appendChild(el('p', 'hint', 'ทุกคนในรายชื่อผู้อนุมัติอนุมัติได้ คนที่เลือกไว้จะได้รับอีเมลเตือนเมื่อแคมเปญยังค้างอนุมัติ'));
     f.appendChild(s4);
 
     var s5 = el('fieldset', 'card'); s5.appendChild(el('legend', '', 'วิธีวางและหมายเหตุ'));
@@ -583,7 +631,7 @@
       ev.preventDefault();
       if (!bf.valid()) { show(ERR.bad_branches, 'err'); bf.focus(); return; }
       var b = { position_type_id: Number(ts.value), how_to_place: how.value, open_ended: oe.checked,
-        branches: bf.getCodes(), designated: dz.value.split(/[\s,]+/).filter(Boolean) };
+        branches: bf.getCodes(), designated: dz.getCodes() };
       for (var k in inputs) b[k] = inputs[k].value;
       if (rent) b.rent_note = rent.value;
       if (c.id) b.id = c.id;
@@ -621,7 +669,7 @@
     var role = $('role'); role.textContent = ROLE_TH[s.staff.role] || s.staff.role || ''; role.hidden = !role.textContent;
     show('');
     if (isOffice()) {
-      var unitsReq = api('units').then(function (d) { units = d.units || []; }).catch(function () { units = []; });
+      var unitsReq = api('units').then(function (d) { units = d.units || []; people = d.people || []; }).catch(function () { units = []; people = []; });
       api('types_list').then(function (d) { types = d.types.filter(function (t) { return t.active; }); return unitsReq; })
         .then(function () { loadOffice(); }).catch(fail);
     } else {
