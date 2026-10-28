@@ -237,6 +237,9 @@
     u.appendChild(el('strong', '', head)); u.appendChild(el('span', '', 'สิ้นสุด ' + thDate(c.end_date)));
     return u;
   }
+  function incomplete(c) {
+    return c.status === 'approved' && (!c.brand || !(c.position_types || c.shd_position_types) || !(c.campaign_branches || []).length);
+  }
   function toneOf(c) {
     if (c.status === 'cancelled') return 'tone-err';
     if (c.status === 'pending') return 'tone-warn';
@@ -257,6 +260,7 @@
     if (c.status === 'cancelled') chips.appendChild(el('span', 'chip err', 'ยกเลิกแล้ว'));
     if (c.source === 'warehouse') chips.appendChild(el('span', 'chip warn', 'จากคลัง'));
     if (c.status === 'pending' && c.start_date && daysTo(c.start_date) <= 14) chips.appendChild(el('span', 'chip err', 'เร่งด่วน'));
+    if (opts.office && incomplete(c)) chips.appendChild(el('span', 'chip warn', 'ต้องกรอกข้อมูลเพิ่ม'));
     if (c.open_ended && c.status !== 'approved') chips.appendChild(el('span', 'chip ok', 'ไม่มีวันหมดอายุ'));
     left.appendChild(chips); head.appendChild(left);
     var u = untilBlock(c); if (u) head.appendChild(u);
@@ -274,6 +278,7 @@
       var br = (c.campaign_branches || []).length;
       fact(dl, 'สาขา', br ? br + ' สาขา' : 'ยังไม่ได้เลือกสาขา');
       if (c.status === 'pending') fact(dl, 'ค้างมา', ageDays(c) + ' วัน');
+      if (c.approved_by_name) fact(dl, 'อนุมัติโดย', c.approved_by_name + (String(c.approved_by || '').indexOf('line:') === 0 ? ' (ผ่าน LINE)' : ''));
       if (c.notes) fact(dl, 'หมายเหตุ', c.notes, true);
     }
     if (dl.childNodes.length) d.appendChild(dl);
@@ -325,7 +330,8 @@
     var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'กรองตามสถานะ');
     TABS.forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(tab === t[0]));
-      x.appendChild(el('span', 'n' + (t[0] === 'pending' && urgentCount() ? ' hot' : ''), String(countOf(t[0]))));
+      var hot = (t[0] === 'pending' && urgentCount()) || (t[0] === 'approved' && all.some(incomplete));
+      x.appendChild(el('span', 'n' + (hot ? ' hot' : ''), String(countOf(t[0]))));
       x.onclick = function () { tab = t[0]; renderOffice(); }; seg.appendChild(x);
     });
     b.appendChild(seg); b.appendChild(el('span', 'grow'));
@@ -346,6 +352,7 @@
         if ((a.source === 'warehouse') !== (b.source === 'warehouse')) return a.source === 'warehouse' ? -1 : 1;
         return String(a.start_date || '9999').localeCompare(String(b.start_date || '9999'));
       }
+      if (tab === 'approved' && incomplete(a) !== incomplete(b)) return incomplete(a) ? -1 : 1;
       return String(a.end_date || '9999').localeCompare(String(b.end_date || '9999'));
     });
     if (!rows.length) { v.appendChild(el('p', 'empty', tab === 'pending' ? 'ไม่มีแคมเปญรออนุมัติ' : 'ไม่มีรายการ')); return; }
