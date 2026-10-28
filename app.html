@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>การวางสื่อในร้าน</title>
+<link rel="stylesheet" href="shd-theme.css?v=2">
+<style>
+  .wrap { max-width: var(--max-wide); margin: 0 auto; padding: var(--space-4); }
+  main.wrap { padding-bottom: var(--space-6); }
+  body { line-height: 1.6; }
+
+  /* ---------- status line ---------- */
+  .msg { padding: var(--space-3) var(--space-4); border-radius: var(--radius-s); margin-bottom: var(--space-4);
+    border: 1px solid var(--c-brand-line); background: var(--c-brand-soft); color: var(--c-brand-strong); }
+  .msg.err { background: var(--c-err-soft); color: var(--c-err); border-color: var(--c-err-line); font-weight: bold; }
+  .msg.ok { background: var(--c-ok-soft); color: var(--c-ok); border-color: var(--c-ok-line); }
+
+  /* ---------- office toolbar ---------- */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+  .seg { display: flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-1); background: var(--c-surface-2);
+    border: 1px solid var(--c-line); border-radius: var(--radius-m); }
+  .seg button { min-height: var(--size-target); padding: var(--space-1) var(--space-3); border: 0; border-radius: var(--radius-s);
+    background: transparent; color: var(--c-ink-2); font-size: var(--fs-m); cursor: pointer; }
+  .seg button:hover { background: var(--c-brand-soft); }
+  .seg button[aria-pressed="true"] { background: var(--c-surface); color: var(--c-brand-strong); font-weight: bold;
+    box-shadow: var(--shadow-1); }
+  .seg .n { display: inline-block; min-width: var(--size-icon); margin-left: var(--space-1); padding: 0 var(--space-2);
+    border-radius: var(--radius-pill); background: var(--c-line); color: var(--c-ink); font-size: var(--fs-xs); }
+  .seg .n.hot { background: var(--c-warn-soft); color: var(--c-warn); border: 1px solid var(--c-warn-line); }
+  .toolbar .grow { flex: 1; }
+  .linkbtn { min-height: var(--size-target); padding: var(--space-1) var(--space-2); border: 0; background: transparent;
+    color: var(--c-brand-strong); font-size: var(--fs-m); cursor: pointer; text-decoration: underline; }
+
+  /* ---------- section heads ---------- */
+  .sec { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-5) 0 var(--space-3);
+    font-size: var(--fs-l); }
+  .sec:first-child { margin-top: 0; }
+  .sec .count { font-size: var(--fs-xs); padding: var(--space-0) var(--space-2); border-radius: var(--radius-pill);
+    background: var(--c-line); color: var(--c-ink); }
+  .empty { padding: var(--space-4); color: var(--c-ink-2); background: var(--c-surface-2); border: 1px dashed var(--c-line-strong);
+    border-radius: var(--radius-m); margin: 0; }
+
+  /* ---------- campaign card ---------- */
+  .card { --accent: var(--c-line-strong); background: var(--c-surface); border: 1px solid var(--c-line);
+    border-left: var(--space-1) solid var(--accent); border-radius: var(--radius-m); padding: var(--space-4);
+    margin-bottom: var(--space-3); box-shadow: var(--shadow-1); }
+  .card.tone-ok { --accent: var(--c-ok); }
+  .card.tone-warn { --accent: var(--c-warn-line); }
+  .card.tone-err { --accent: var(--c-err); }
+  .card-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+  .card h3 { margin: 0; font-size: var(--fs-xl); line-height: 1.3; }
+  .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+  .chip { display: inline-block; padding: var(--space-0) var(--space-3); border-radius: var(--radius-pill);
+    font-size: var(--fs-s); border: 1px solid var(--c-line-strong); background: var(--c-surface-2); color: var(--c-ink-2); }
+  .chip.ok { background: var(--c-ok-soft); color: var(--c-ok); border-color: var(--c-ok-line); }
+  .chip.warn { background: var(--c-warn-soft); color: var(--c-warn); border-color: var(--c-warn-line); }
+  .chip.err { background: var(--c-err-soft); color: var(--c-err); border-color: var(--c-err-line); }
+  .until { text-align: right; min-width: var(--size-strip-w); }
+  .until strong { display: block; font-size: var(--fs-xl); line-height: 1.3; }
+  .until span { font-size: var(--fs-s); color: var(--c-ink-2); }
+  .tone-ok .until strong { color: var(--c-ok); }
+  .tone-warn .until strong { color: var(--c-warn); }
+  .tone-err .until strong { color: var(--c-err); }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--size-field), 1fr)); gap: var(--space-3) var(--space-4);
+    margin: var(--space-4) 0 0; }
+  .facts div { min-width: 0; }
+  .facts .wide { grid-column: 1 / -1; }
+  .facts dt { font-size: var(--fs-xs); color: var(--c-ink-3); }
+  .facts dd { margin: 0; overflow-wrap: anywhere; }
+  .card .row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+
+  /* ---------- detail ---------- */
+  .back { margin-bottom: var(--space-3); }
+  .photos { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .photos a { display: block; }
+  .photos img { width: var(--size-thumb); height: var(--size-thumb); object-fit: cover; border-radius: var(--radius-s);
+    border: 1px solid var(--c-line); }
+  details.hist { margin-top: var(--space-4); color: var(--c-ink-2); font-size: var(--fs-s); }
+  details.hist summary { cursor: pointer; min-height: var(--size-target); display: flex; align-items: center; }
+  .btn.danger { border-color: var(--c-err-line); color: var(--c-err); background: var(--c-surface); }
+  .btn.danger:hover { background: var(--c-err-soft); border-color: var(--c-err); }
+
+  /* ---------- form ---------- */
+  fieldset.card { margin-inline: 0; min-width: 0; }
+  fieldset.card legend { padding: 0 var(--space-2); font-size: var(--fs-l); font-weight: bold; }
+  .hint { margin: 0 0 var(--space-3); font-size: var(--fs-s); color: var(--c-ink-2); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--size-field), 1fr)); gap: var(--space-3); }
+  label.f { display: block; font-size: var(--fs-s); color: var(--c-ink-2); margin-bottom: var(--space-3); }
+  .grid label.f { margin-bottom: 0; }
+  label.f > span.t { display: block; margin-bottom: var(--space-1); }
+  label.f .req { color: var(--c-err); }
+  label.f input.input, label.f select.input, label.f textarea.input { width: 100%; }
+  label.check { display: flex; align-items: center; gap: var(--space-2); min-height: var(--size-target-lg); font-size: var(--fs-m); color: var(--c-ink); }
+  label.check input { width: var(--size-icon); height: var(--size-icon); }
+  .codes { margin: calc(var(--space-1) * -2) 0 var(--space-3); font-size: var(--fs-s); }
+  .codes .bad { color: var(--c-err); font-weight: bold; }
+  .codes .good { color: var(--c-ok); }
+  .formbar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+  @media (pointer: coarse), (max-width: 640px) {
+    .btn, .seg button, .linkbtn { min-height: var(--size-target-lg); }
+    .wrap { padding: var(--space-3); }
+    .until { text-align: left; }
+    .card-head { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<header class="top"><div class="top-inner wrap">
+  <div class="title"><h1>การวางสื่อในร้าน</h1><p id="who"></p></div>
+  <span class="top-link" id="role" hidden></span>
+</div></header>
+<main class="wrap">
+  <div id="msg" class="msg" role="status" aria-live="polite" hidden></div>
+  <div id="bar" class="toolbar" hidden></div>
+  <section id="view"></section>
+</main>
+<script>
+(function () {
+  'use strict';
+  // Filled when the page is published (see docs/deploy.md). The page refuses to run on the placeholder.
+  var SUPABASE_URL = 'https://zuyqwkjvjuwykrdhzhwq.supabase.co';
+  var STORE_KEY = 'shd-session';
+  var BRANCH_RE = /^[A-Z]{2}\d{3}$/;
+  var $ = function (id) { return document.getElementById(id); };
+  var sess = null, tab = 'pending', types = [], all = [];
+
+  var ROLE_TH = { ADMIN: 'ผู้ดูแลระบบ', APPROVER: 'ผู้อนุมัติ', REGISTRANT: 'ผู้ลงทะเบียน', STAFF: 'สาขา' };
+  var ERR = {
+    'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
+    'missing:dates': 'ยังไม่ได้ใส่วันเริ่ม และวันสิ้นสุด (หรือติ๊ก "ไม่มีวันหมดอายุ")', 'missing:agreement_no': 'ยังไม่ได้ใส่เลขที่สัญญา/TTA',
+    'missing:ad': 'ยังไม่ได้ใส่เลขโฆษณาและวันหมดอายุ', 'missing:branches': 'ยังไม่ได้เลือกสาขา',
+    self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
+    expired: 'เซสชันหมดอายุ กรุณาเข้าใหม่จากเมนู Job Tracker', bad_signature: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker',
+    malformed: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker', reused: 'ลิงก์ถูกใช้แล้ว กรุณาเข้าใหม่จากเมนู Job Tracker',
+    forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', bad_branches: 'รหัสสาขาไม่ถูกต้อง (รูปแบบ เช่น IC008)'
+  };
+  function errText(code) {
+    if (ERR[code]) return ERR[code];
+    if (/^cap:/.test(code)) return 'สาขา ' + code.slice(4) + ' วางตำแหน่งนี้เต็มเพดานในช่วงวันที่ชนกัน อนุมัติไม่ได้';
+    return 'ทำรายการไม่สำเร็จ (' + code + ')';
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  }
+  function button(label, cls, onClick) {
+    var b = el('button', 'btn' + (cls ? ' ' + cls : ''), label); b.type = 'button'; b.onclick = onClick; return b;
+  }
+  // kind: 'err' interrupts the reader (role=alert); others are polite status updates
+  function show(text, kind) {
+    var m = $('msg');
+    m.hidden = !text; m.textContent = text || '';
+    m.className = 'msg' + (kind ? ' ' + kind : '');
+    m.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+  }
+  function loading(text) { show(text || 'กำลังโหลด...'); $('view').setAttribute('aria-busy', 'true'); }
+  function done() { $('view').removeAttribute('aria-busy'); }
+
+  function post(path, body, headers) {
+    var h = { 'content-type': 'application/json' };
+    for (var k in (headers || {})) h[k] = headers[k];
+    return fetch(SUPABASE_URL + '/functions/v1/' + path, { method: 'POST', headers: h, body: JSON.stringify(body), cache: 'no-store' })
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }, function () { return { status: r.status, data: null }; }); },
+        function () { return { status: 0, data: null }; });
+  }
+  function api(action, body) {
+    var b = body || {}; b.action = action;
+    return post('shd-api', b, { 'x-shd-session': sess.session }).then(function (r) {
+      if (r.status === 401) { sessionStorage.removeItem(STORE_KEY); throw new Error(errText(r.data && r.data.error)); }
+      if (r.status === 0) throw new Error('เชื่อมต่อไม่ได้ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+      if (r.status !== 200) { var e = new Error(errText(r.data && r.data.error)); e.code = r.data && r.data.error; throw e; }
+      return r.data;
+    });
+  }
+  function fail(e) { done(); show(e.message, 'err'); }
+
+  var isApprover = function () { return sess.staff.role === 'ADMIN' || sess.staff.role === 'APPROVER'; };
+  var isOffice = function () { return isApprover() || sess.staff.role === 'REGISTRANT'; };
+
+  // ---------- dates ----------
+  var TH_M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  function thDate(s) { if (!s) return '-'; var p = s.split('-'); return Number(p[2]) + ' ' + TH_M[Number(p[1]) - 1] + ' ' + (Number(p[0]) + 543); }
+  function today() { return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10); }
+  function daysTo(s) { return Math.round((Date.parse(s + 'T00:00:00Z') - Date.parse(today() + 'T00:00:00Z')) / 86400000); }
+  function ageDays(c) { return c.created_at ? Math.max(0, -daysTo(c.created_at.slice(0, 10))) : 0; }
+
+  // ---------- campaign card (shared by branch list, office list, detail) ----------
+  function fact(dl, label, value, wide) {
+    if (!value) return;
+    var d = el('div', wide ? 'wide' : ''); d.appendChild(el('dt', '', label)); d.appendChild(el('dd', '', value)); dl.appendChild(d);
+  }
+  // The answer branches look for first: how long may this stay?
+  function untilBlock(c) {
+    if (c.status !== 'approved') return null;
+    var u = el('div', 'until');
+    if (c.open_ended) { u.appendChild(el('strong', '', 'ไม่มีวันหมดอายุ')); u.appendChild(el('span', '', 'เริ่ม ' + thDate(c.start_date))); return u; }
+    if (!c.end_date) return null;
+    var left = daysTo(c.end_date);
+    var head = left < 0 ? 'สิ้นสุดแล้ว' : left === 0 ? 'วันสุดท้ายวันนี้' : 'เหลือ ' + left + ' วัน';
+    if (c.start_date && daysTo(c.start_date) > 0) head = 'เริ่มอีก ' + daysTo(c.start_date) + ' วัน';
+    u.appendChild(el('strong', '', head)); u.appendChild(el('span', '', 'สิ้นสุด ' + thDate(c.end_date)));
+    return u;
+  }
+  function toneOf(c) {
+    if (c.status === 'cancelled') return 'tone-err';
+    if (c.status === 'pending') return 'tone-warn';
+    if (c.open_ended) return 'tone-ok';
+    if (!c.end_date) return '';
+    var left = daysTo(c.end_date);
+    return left <= 0 ? 'tone-err' : left <= 7 ? 'tone-warn' : 'tone-ok';
+  }
+  function card(c, opts) {
+    opts = opts || {};
+    var d = el('article', 'card ' + toneOf(c));
+    var head = el('div', 'card-head'), left = el('div');
+    left.appendChild(el('h3', '', c.brand || '(ยังไม่มีชื่อแบรนด์)'));
+    var chips = el('div', 'chips');
+    if (c.position_types) chips.appendChild(el('span', 'chip', c.position_types.name));
+    if (c.package) chips.appendChild(el('span', 'chip', 'แพ็กเกจ ' + c.package));
+    if (c.status === 'pending') chips.appendChild(el('span', 'chip warn', 'รออนุมัติ'));
+    if (c.status === 'cancelled') chips.appendChild(el('span', 'chip err', 'ยกเลิกแล้ว'));
+    if (c.source === 'warehouse') chips.appendChild(el('span', 'chip warn', 'จากคลัง'));
+    if (c.status === 'pending' && c.start_date && daysTo(c.start_date) <= 14) chips.appendChild(el('span', 'chip err', 'เร่งด่วน'));
+    if (c.open_ended && c.status !== 'approved') chips.appendChild(el('span', 'chip ok', 'ไม่มีวันหมดอายุ'));
+    left.appendChild(chips); head.appendChild(left);
+    var u = untilBlock(c); if (u) head.appendChild(u);
+    d.appendChild(head);
+
+    var dl = el('dl', 'facts');
+    var period = c.open_ended ? thDate(c.start_date) + ' เป็นต้นไป' : (c.start_date || c.end_date) ? thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) : '';
+    fact(dl, 'ช่วงที่วาง', period);
+    fact(dl, 'เลขที่สัญญา/TTA', c.agreement_no);
+    fact(dl, 'เลขโฆษณา', c.ad_no ? c.ad_no + (c.ad_expiry ? ' (หมดอายุ ' + thDate(c.ad_expiry) + ')' : '') : '');
+    fact(dl, 'ติดต่อ', [c.registrant_dept, c.supplier_contact].filter(Boolean).join(' · '));
+    fact(dl, 'วิธีวาง/ข้อห้าม', c.how_to_place, true);
+    fact(dl, 'หลังสิ้นสุด', c.return_to, true);
+    if (opts.office) {
+      var br = (c.campaign_branches || []).length;
+      fact(dl, 'สาขา', br ? br + ' สาขา' : 'ยังไม่ได้เลือกสาขา');
+      if (c.status === 'pending') fact(dl, 'ค้างมา', ageDays(c) + ' วัน');
+      if (c.notes) fact(dl, 'หมายเหตุ', c.notes, true);
+    }
+    if (dl.childNodes.length) d.appendChild(dl);
+    if (opts.actions) { var row = el('div', 'row'); opts.actions.forEach(function (a) { row.appendChild(a); }); d.appendChild(row); }
+    return d;
+  }
+
+  // ---------- branch view ----------
+  function renderBranch(list) {
+    done(); var v = $('view'); v.textContent = '';
+    var g = { soon: [], on: [], next: [] };
+    list.forEach(function (c) {
+      if (!c.start_date || (!c.end_date && !c.open_ended)) return;
+      if (c.end_date && daysTo(c.end_date) < 0) return;
+      if (daysTo(c.start_date) > 0) g.next.push(c);
+      else if (c.end_date && daysTo(c.end_date) <= 7) g.soon.push(c);
+      else g.on.push(c);
+    });
+    g.soon.sort(function (a, b) { return a.end_date < b.end_date ? -1 : 1; });
+    if (!g.soon.length && !g.on.length && !g.next.length) {
+      v.appendChild(el('p', 'empty', 'ตอนนี้ยังไม่มีสื่อที่ต้องวางในสาขานี้'));
+      return;
+    }
+    [['soon', 'ใกล้สิ้นสุด (ภายใน 7 วัน)'], ['on', 'วางอยู่ตอนนี้'], ['next', 'กำลังจะเริ่ม']].forEach(function (s) {
+      if (!g[s[0]].length) return;
+      var h = el('h2', 'sec', s[1]); h.appendChild(el('span', 'count', String(g[s[0]].length))); v.appendChild(h);
+      g[s[0]].forEach(function (c) { v.appendChild(card(c)); });
+    });
+  }
+
+  // ---------- office list ----------
+  var TABS = [['pending', 'รออนุมัติ'], ['approved', 'อนุมัติแล้ว'], ['cancelled', 'ยกเลิก']];
+  function countOf(status) { return all.filter(function (c) { return c.status === status; }).length; }
+  function urgentCount() {
+    return all.filter(function (c) { return c.status === 'pending' && (c.source === 'warehouse' || (c.start_date && daysTo(c.start_date) <= 14)); }).length;
+  }
+  function renderBar() {
+    var b = $('bar'); b.textContent = ''; b.hidden = false;
+    var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'กรองตามสถานะ');
+    TABS.forEach(function (t) {
+      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(tab === t[0]));
+      x.appendChild(el('span', 'n' + (t[0] === 'pending' && urgentCount() ? ' hot' : ''), String(countOf(t[0]))));
+      x.onclick = function () { tab = t[0]; renderOffice(); }; seg.appendChild(x);
+    });
+    b.appendChild(seg); b.appendChild(el('span', 'grow'));
+    if (isApprover()) { var s = el('button', 'linkbtn', 'ตั้งค่าตำแหน่ง'); s.type = 'button'; s.onclick = settings; b.appendChild(s); }
+    b.appendChild(button('+ ลงทะเบียนแคมเปญ', '', function () { form(null); }));
+  }
+  function loadOffice(keepMsg) {
+    var m = keepMsg ? $('msg').textContent : '';
+    if (!keepMsg) loading();
+    api('list', {}).then(function (d) { all = d.campaigns; done(); show(m, m ? 'ok' : ''); renderOffice(); }).catch(fail);
+  }
+  function renderOffice() {
+    renderBar();
+    var v = $('view'); v.textContent = '';
+    var rows = all.filter(function (c) { return c.status === tab; });
+    rows.sort(function (a, b) {
+      if (tab === 'pending') {
+        if ((a.source === 'warehouse') !== (b.source === 'warehouse')) return a.source === 'warehouse' ? -1 : 1;
+        return String(a.start_date || '9999').localeCompare(String(b.start_date || '9999'));
+      }
+      return String(a.end_date || '9999').localeCompare(String(b.end_date || '9999'));
+    });
+    if (!rows.length) { v.appendChild(el('p', 'empty', tab === 'pending' ? 'ไม่มีแคมเปญรออนุมัติ' : 'ไม่มีรายการ')); return; }
+    rows.forEach(function (c) {
+      var primary = tab === 'pending' && isApprover();
+      v.appendChild(card(c, { office: true, actions: [button(primary ? 'ตรวจและอนุมัติ' : 'เปิดดู', primary ? '' : 'alt', function () { detail(c.id); })] }));
+    });
+  }
+
+  // ---------- detail ----------
+  function detail(id) {
+    loading();
+    Promise.all([api('get', { id: id }), api('photos', { id: id })]).then(function (rs) {
+      done(); show('');
+      var c = rs[0].campaign, v = $('view'); v.textContent = '';
+      $('bar').hidden = true;
+      v.appendChild(button('← กลับรายการ', 'alt back', renderOffice));
+      var actions = [];
+      if (isApprover() && c.status === 'pending') {
+        var ok = button('อนุมัติ', '', function () {
+          ok.disabled = true;
+          api('approve', { id: id }).then(function () { tab = 'approved'; show('อนุมัติแล้ว แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
+            .catch(function (e) { ok.disabled = false; show(e.message, 'err'); });
+        });
+        actions.push(ok);
+      }
+      actions.push(button('แก้ไข', 'alt', function () { form(c); }));
+      if (c.status !== 'cancelled') {
+        actions.push(button('ยกเลิกแคมเปญ', 'danger', function () {
+          if (!confirm('ยกเลิกแคมเปญนี้?')) return;
+          api('cancel', { id: id }).then(function () { tab = 'cancelled'; loadOffice(); }).catch(function (e) { show(e.message, 'err'); });
+        }));
+      }
+      v.appendChild(card(c, { office: true, actions: actions }));
+      if (rs[1].photos.length) {
+        var ph = el('section', 'card'); ph.appendChild(el('h2', 'sec', 'รูปจากคลัง'));
+        var strip = el('div', 'photos');
+        rs[1].photos.forEach(function (p) {
+          var a = el('a'); a.href = p.url; a.target = '_blank'; a.rel = 'noopener';
+          var i = el('img'); i.src = p.url; i.alt = 'รูปจากคลัง'; i.loading = 'lazy'; a.appendChild(i); strip.appendChild(a);
+        });
+        ph.appendChild(strip); v.appendChild(ph);
+      }
+      var ev = rs[0].events || [];
+      if (ev.length) {
+        var det = el('details', 'hist'); det.appendChild(el('summary', '', 'ประวัติการเปลี่ยนแปลง (' + ev.length + ')'));
+        ev.forEach(function (e) { det.appendChild(el('div', '', e.at.slice(0, 16).replace('T', ' ') + ' · ' + e.actor + ' · ' + e.action)); });
+        v.appendChild(det);
+      }
+    }).catch(fail);
+  }
+
+  // ---------- form ----------
+  function form(c) {
+    c = c || {};
+    $('bar').hidden = true; show('');
+    var v = $('view'); v.textContent = '';
+    v.appendChild(button('← กลับรายการ', 'alt back', renderOffice));
+    v.appendChild(el('h2', 'sec', c.id ? 'แก้ไขแคมเปญ ' + (c.code || '') : 'ลงทะเบียนแคมเปญ'));
+    v.appendChild(el('p', 'hint', 'ช่องที่มี * ต้องครบก่อนจึงจะอนุมัติได้ บันทึกก่อนแล้วกลับมากรอกเพิ่มได้'));
+    var f = el('form'); f.noValidate = true; var inputs = {};
+
+    function set(title) { var fs = el('fieldset', 'card'); fs.appendChild(el('legend', '', title)); var g = el('div', 'grid'); fs.appendChild(g); f.appendChild(fs); return g; }
+    function label(text, req) {
+      var l = el('label', 'f'), t = el('span', 't', text);
+      if (req) t.appendChild(el('span', 'req', ' *'));
+      l.appendChild(t); return l;
+    }
+    function field(g, key, text, type, val, req) {
+      var l = label(text, req), i = el('input', 'input'); i.type = type; i.value = val || '';
+      l.appendChild(i); g.appendChild(l); inputs[key] = i; return i;
+    }
+
+    var g1 = set('ข้อมูลหลัก');
+    field(g1, 'brand', 'แบรนด์/ผู้ส่ง', 'text', c.brand, true);
+    var tl = label('ประเภทตำแหน่ง', true), ts = el('select', 'input');
+    types.forEach(function (t) { var o = el('option', '', t.name); o.value = t.id; if (c.position_type_id === t.id) o.selected = true; ts.appendChild(o); });
+    tl.appendChild(ts); g1.appendChild(tl);
+    field(g1, 'package', 'แพ็กเกจ (A/B)', 'text', c.package);
+    field(g1, 'supplier_contact', 'ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c.supplier_contact);
+    field(g1, 'registrant_dept', 'แผนกผู้ลงทะเบียน', 'text', c.registrant_dept);
+
+    var g2 = set('ช่วงเวลา');
+    field(g2, 'start_date', 'วันเริ่มวาง', 'date', c.start_date, true);
+    var end = field(g2, 'end_date', 'วันสิ้นสุด', 'date', c.end_date, true);
+    var oel = el('label', 'check'), oe = el('input'); oe.type = 'checkbox'; oe.checked = !!c.open_ended;
+    oel.appendChild(oe); oel.appendChild(document.createTextNode('ไม่มีวันหมดอายุ (วางต่อเนื่องไม่มีกำหนดสิ้นสุด)'));
+    g2.appendChild(oel);
+    function syncOpen() { end.disabled = oe.checked; if (oe.checked) end.value = ''; }
+    oe.onchange = syncOpen; syncOpen();
+    field(g2, 'return_to', 'หลังสิ้นสุดให้ทำอย่างไร', 'text', c.return_to);
+
+    var g3 = set('สัญญาและโฆษณา');
+    field(g3, 'agreement_no', 'เลขที่สัญญา/TTA', 'text', c.agreement_no, true);
+    field(g3, 'ad_no', 'เลขโฆษณา', 'text', c.ad_no, true);
+    field(g3, 'ad_expiry', 'วันหมดอายุโฆษณา', 'date', c.ad_expiry, true);
+
+    var s4 = el('fieldset', 'card'); s4.appendChild(el('legend', '', 'สาขาและผู้อนุมัติ'));
+    function area(box, text, val, req) {
+      var l = label(text, req), a = el('textarea', 'input'); a.rows = 3; a.value = val || ''; l.appendChild(a); box.appendChild(l); return a;
+    }
+    var br = area(s4, 'สาขา (รหัสสาขา คั่นด้วยเว้นวรรคหรือจุลภาค)', (c.campaign_branches || []).map(function (b) { return b.branch_code; }).join(' '), true);
+    var codes = el('div', 'codes'); codes.setAttribute('aria-live', 'polite'); s4.appendChild(codes);
+    function parseCodes() { return br.value.split(/[\s,]+/).filter(Boolean).map(function (x) { return x.toUpperCase(); }); }
+    function checkCodes() {
+      var list = parseCodes(), bad = list.filter(function (x) { return !BRANCH_RE.test(x); });
+      codes.textContent = '';
+      if (list.length) codes.appendChild(el('span', 'good', 'พบ ' + (list.length - bad.length) + ' สาขา'));
+      if (bad.length) codes.appendChild(el('span', 'bad', '  ไม่ถูกต้อง: ' + bad.join(', ') + ' (รูปแบบ เช่น IC008)'));
+      return bad.length === 0;
+    }
+    br.oninput = checkCodes; checkCodes();
+    var dz = area(s4, 'ผู้อนุมัติที่ต้องการ (ไม่บังคับ)', (c.designated || []).join(' '), false);
+    s4.appendChild(el('p', 'hint', 'ใส่ชื่อผู้ใช้ JT คั่นด้วยเว้นวรรค ทุกคนในรายชื่อผู้อนุมัติอนุมัติได้ คนที่ระบุจะได้รับอีเมลเตือนเมื่อยังค้าง'));
+    f.appendChild(s4);
+
+    var s5 = el('fieldset', 'card'); s5.appendChild(el('legend', '', 'วิธีวางและหมายเหตุ'));
+    var how = area(s5, 'วิธีวาง/ข้อห้าม (สาขาจะเห็น)', c.how_to_place, false);
+    var rent = isOffice() ? area(s5, 'ค่าเช่า (เห็นเฉพาะผู้ลงทะเบียนและผู้อนุมัติ ไม่แสดงให้สาขา)', c.rent_note, false) : null;
+    f.appendChild(s5);
+
+    var bar = el('div', 'formbar');
+    var save = el('button', 'btn', 'บันทึก'); save.type = 'submit'; bar.appendChild(save);
+    bar.appendChild(button('ยกเลิก', 'alt', renderOffice));
+    f.appendChild(bar); v.appendChild(f);
+
+    f.onsubmit = function (ev) {
+      ev.preventDefault();
+      if (!checkCodes()) { show(ERR.bad_branches, 'err'); br.focus(); return; }
+      var b = { position_type_id: Number(ts.value), how_to_place: how.value, open_ended: oe.checked,
+        branches: parseCodes(), designated: dz.value.split(/[\s,]+/).filter(Boolean) };
+      for (var k in inputs) b[k] = inputs[k].value;
+      if (rent) b.rent_note = rent.value;
+      if (c.id) b.id = c.id;
+      save.disabled = true;
+      api(c.id ? 'update' : 'register', b).then(function () { tab = 'pending'; show('บันทึกแล้ว', 'ok'); loadOffice(true); })
+        .catch(function (e) { save.disabled = false; show(e.message, 'err'); });
+    };
+  }
+
+  // ---------- settings ----------
+  function settings() {
+    $('bar').hidden = true; show('');
+    var v = $('view'); v.textContent = '';
+    v.appendChild(button('← กลับรายการ', 'alt back', renderOffice));
+    v.appendChild(el('h2', 'sec', 'ตั้งค่าประเภทตำแหน่ง'));
+    types.forEach(function (t) {
+      var d = el('section', 'card'); d.appendChild(el('h3', '', t.name));
+      var l = el('label', 'f'); l.appendChild(el('span', 't', 'เพดานต่อสาขา (เว้นว่าง = ไม่จำกัด)'));
+      var i = el('input', 'input'); i.type = 'number'; i.min = 1; i.value = t.max_per_branch === null ? '' : t.max_per_branch;
+      l.appendChild(i); d.appendChild(l);
+      var row = el('div', 'row');
+      row.appendChild(button('บันทึก', '', function () {
+        var max = i.value === '' ? null : Number(i.value);
+        api('types_save', { name: t.name, max_per_branch: max, extendable: t.extendable, needs_ad: t.needs_ad, active: t.active })
+          .then(function () { t.max_per_branch = max; show('บันทึกเพดานของ ' + t.name + ' แล้ว', 'ok'); }).catch(function (e) { show(e.message, 'err'); });
+      }));
+      d.appendChild(row); v.appendChild(d);
+    });
+  }
+
+  // ---------- start ----------
+  function start(s) {
+    sess = s;
+    $('who').textContent = (s.staff.n || '') + ' · ' + (s.staff.un || '');
+    var role = $('role'); role.textContent = ROLE_TH[s.staff.role] || s.staff.role || ''; role.hidden = !role.textContent;
+    show('');
+    if (isOffice()) {
+      api('types_list').then(function (d) { types = d.types.filter(function (t) { return t.active; }); loadOffice(); }).catch(fail);
+    } else {
+      loading();
+      api('list').then(function (d) { show(''); renderBranch(d.campaigns); }).catch(fail);
+    }
+  }
+  if (SUPABASE_URL.indexOf('__') === 0) { show('หน้านี้ยังไม่ได้ตั้งค่า (SUPABASE_URL)', 'err'); return; }
+  var q = new URLSearchParams(location.search), sso = q.get('sso');
+  if (sso) {
+    q.delete('sso'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : ''));
+    show('กำลังเข้าสู่ระบบ...');
+    post('shd-session', { link: sso }).then(function (r) {
+      if (r.status === 200 && r.data && r.data.session) {
+        var s = { session: r.data.session, staff: r.data.staff || {} };
+        try { sessionStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) { /* storage blocked */ }
+        start(s);
+      } else show(errText(r.data && r.data.error), 'err');
+    });
+  } else {
+    var raw = null; try { raw = JSON.parse(sessionStorage.getItem(STORE_KEY)); } catch (e) { /* ignore */ }
+    if (raw && raw.session) start(raw); else show('กรุณาเข้าผ่านเมนูใน Job Tracker', 'err');
+  }
+})();
+</script>
+</body>
+</html>
