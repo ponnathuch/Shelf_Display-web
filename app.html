@@ -244,7 +244,7 @@
     return u;
   }
   function incomplete(c) {
-    return c.status === 'approved' && (!c.brand || !(c.position_types || c.shd_position_types) || !(c.campaign_branches || []).length);
+    return c.status === 'approved' && (!c.brand || !(c.position_types || c.shd_position_types));
   }
   function toneOf(c) {
     if (c.status === 'cancelled') return 'tone-err';
@@ -289,7 +289,7 @@
     fact(dl, 'หลังสิ้นสุด', c.return_to, true);
     if (opts.office) {
       var br = (c.campaign_branches || []).length;
-      fact(dl, 'สาขา', br ? br + ' สาขา' : 'ยังไม่ได้เลือกสาขา');
+      fact(dl, 'สาขา', br ? br + ' สาขา' : 'ทุกสาขา');
       if (c.status === 'pending') fact(dl, 'ค้างมา', ageDays(c) + ' วัน');
       if (c.approved_by_name) fact(dl, 'อนุมัติโดย', c.approved_by_name + (String(c.approved_by || '').indexOf('line:') === 0 ? ' (ผ่าน LINE)' : ''));
       if (c.notes) fact(dl, 'หมายเหตุ', c.notes, true);
