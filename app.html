@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261101c">
+<link rel="stylesheet" href="shd-theme.css?v=20261103a">
 <style>
   body { line-height: 1.6; }
 
@@ -175,7 +175,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261101c">
+<link rel="stylesheet" href="shd-v2.css?v=20261103a">
 </head>
 <body>
 <div class="app" id="app">
@@ -256,7 +256,7 @@
     return post('shd-api', b, { 'x-shd-session': sess.session }).then(function (r) {
       if (r.status === 401) { sessionStorage.removeItem(STORE_KEY); throw new Error(errText(r.data && r.data.error)); }
       if (r.status === 0) throw new Error('เชื่อมต่อไม่ได้ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
-      if (r.status !== 200) { var e = new Error(errText(r.data && r.data.error)); e.code = r.data && r.data.error; throw e; }
+      if (r.status !== 200) { var e = new Error(errText(r.data && r.data.error)); e.code = r.data && r.data.error; e.data = r.data; throw e; }
       return r.data;
     });
   }
@@ -973,6 +973,150 @@
     };
   }
 
+
+  // ---------- cashier shelf rental ----------
+  var CASHIER_CAP = 6; // brands per branch counter box
+  var cash = { packages: [], contracts: [], view: 'live' };
+  var baht = function (n) { return Number(n).toLocaleString('th-TH'); };
+  function cashState(c) {
+    var t = today();
+    return c.status === 'cancelled' ? 'cancelled' : c.end_date < t ? 'ended' : c.start_date > t ? 'next' : 'live';
+  }
+  function pkgOf(id) { return cash.packages.filter(function (p) { return p.id === id; })[0]; }
+
+  // Settings: packages (name, rate per brand per month, which branches). Approvers only.
+  function cashierSettings(v) {
+    v.appendChild(el('h2', 'sec', 'ตั้งค่าแพ็กเกจชั้นแคชเชียร์'));
+    var holder = el('div'); v.appendChild(holder); holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
+    api('cashier_packages').then(function (d) {
+      holder.textContent = '';
+      d.packages.concat([{ id: null, code: '', name: '', rate: 0, active: true, branches: [] }]).forEach(function (p) { holder.appendChild(packageCard(p)); });
+    }).catch(function (e) { holder.textContent = ''; show(e.message, 'err'); });
+  }
+  function packageCard(p) {
+    var d = el('section', 'card'), fresh = p.id === null;
+    d.appendChild(el('h3', '', fresh ? 'เพิ่มแพ็กเกจใหม่' : p.code + ' · ' + p.name));
+    var g = el('div', 'grid');
+    function fld(text, type, val) {
+      var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el('input', 'input'); i.type = type; i.value = val;
+      l.appendChild(i); g.appendChild(l); return i;
+    }
+    var code = fld('รหัส (เช่น A, B, A+B)', 'text', p.code); if (!fresh) code.readOnly = true;
+    var name = fld('ชื่อแพ็กเกจ', 'text', p.name);
+    var rate = fld('ค่าเช่าต่อแบรนด์ต่อเดือน (บาท)', 'number', p.rate); rate.min = 0;
+    d.appendChild(g);
+    var bl = el('label', 'f'); bl.appendChild(el('span', 't', 'สาขาในแพ็กเกจ (รหัสสาขา คั่นด้วยเว้นวรรคหรือขึ้นบรรทัดใหม่)'));
+    var ta = el('textarea', 'input'); ta.rows = 3; ta.value = p.branches.join(' '); bl.appendChild(ta); d.appendChild(bl);
+    var count = el('p', 'sub'); d.appendChild(count);
+    var codes = function () { return ta.value.toUpperCase().split(/[\s,]+/).filter(Boolean); };
+    var upd = function () { count.textContent = 'ทั้งหมด ' + new Set(codes()).size + ' สาขา'; }; ta.oninput = upd; upd();
+    var row = el('div', 'row');
+    row.appendChild(button('ทุกสาขา', '', function () {
+      ta.value = units.filter(function (u) { return u.is_branch; }).map(function (u) { return u.code; }).join(' '); upd();
+    }));
+    row.appendChild(button('บันทึก', '', function () {
+      var list = codes(), known = {}; units.forEach(function (u) { known[u.code] = true; });
+      var bad = list.filter(function (c) { return !BRANCH_RE.test(c) || (units.length && !known[c]); });
+      if (bad.length) { show('รหัสสาขาไม่ถูกต้อง: ' + bad.slice(0, 8).join(', '), 'err'); return; }
+      if (!code.value.trim() || !name.value.trim()) { show('ใส่รหัสและชื่อแพ็กเกจก่อน', 'err'); return; }
+      api('cashier_package_save', { code: code.value.trim(), name: name.value.trim(), rate: Number(rate.value) || 0, active: p.active, branches: list })
+        .then(function () { show('บันทึกแพ็กเกจ ' + code.value.trim() + ' แล้ว', 'ok'); if (fresh) settings(); }).catch(function (e) { show(e.message, 'err'); });
+    }));
+    d.appendChild(row); return d;
+  }
+
+  function cashier() {
+    $('bar').hidden = true; show(''); $('view').textContent = ''; loading();
+    Promise.all([api('cashier_packages'), api('cashier_list')]).then(function (r) {
+      done(); show(''); cash.packages = r[0].packages; cash.contracts = r[1].contracts; renderCashier();
+    }).catch(fail);
+  }
+  function cashierStats() {
+    var live = cash.contracts.filter(function (c) { return cashState(c) === 'live'; }), per = {}, income = 0;
+    live.forEach(function (c) {
+      var p = pkgOf(c.package_id); if (!p) return;
+      income += Number(p.rate); p.branches.forEach(function (b) { per[b] = (per[b] || 0) + 1; });
+    });
+    return {
+      live: live, income: income, soon: live.filter(function (c) { return daysTo(c.end_date) <= 30; }),
+      full: Object.keys(per).filter(function (b) { return per[b] >= CASHIER_CAP; }).length, branches: Object.keys(per).length
+    };
+  }
+  function renderCashier() {
+    var v = $('view'); v.textContent = '';
+    var st = cashierStats(), k = el('div', 'kpi');
+    var view = function (x) { return function () { cash.view = x; renderCashier(); }; };
+    k.appendChild(kpiCard('สัญญาที่ใช้งานอยู่', st.live.length, st.branches + ' สาขามีเวนเดอร์', 'ok', view('live')));
+    k.appendChild(kpiCard('ใกล้หมดใน 30 วัน', st.soon.length, st.soon[0] ? st.soon[0].brand : 'ไม่มี', st.soon.length ? 'warn' : '', view('live')));
+    k.appendChild(kpiCard('ค่าเช่าต่อเดือน', baht(st.income), 'รวมสัญญาที่ใช้งานอยู่ (บาท)', '', view('live')));
+    k.appendChild(kpiCard('สาขาเต็ม ' + CASHIER_CAP + ' แบรนด์', st.full, 'เพิ่มแบรนด์ในสาขาเหล่านี้ไม่ได้', st.full ? 'warn' : '', view('live')));
+    v.appendChild(k);
+    var bar = el('div', 'toolbar'), seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'กรองตามสถานะ');
+    [['live', 'ใช้งานอยู่'], ['next', 'ยังไม่เริ่ม'], ['ended', 'หมดอายุ'], ['cancelled', 'ยกเลิก']].forEach(function (t) {
+      var n = cash.contracts.filter(function (c) { return cashState(c) === t[0]; }).length;
+      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(cash.view === t[0]));
+      x.appendChild(el('span', 'n', String(n))); x.onclick = view(t[0]); seg.appendChild(x);
+    });
+    bar.appendChild(seg); bar.appendChild(el('span', 'grow'));
+    bar.appendChild(button('+ เพิ่มสัญญา', '', function () { cashierForm(null); }));
+    v.appendChild(bar);
+    var list = cash.contracts.filter(function (c) { return cashState(c) === cash.view; });
+    if (!list.length) v.appendChild(el('p', 'empty-note', 'ไม่มีสัญญาในกลุ่มนี้'));
+    list.forEach(function (c) {
+      var p = pkgOf(c.package_id), d = el('section', 'card compact');
+      d.appendChild(el('h3', '', c.brand + (c.vendor ? ' · ' + c.vendor : '')));
+      var meta = el('div', 'row'); meta.appendChild(el('span', 'chip', p ? p.code : '?'));
+      meta.appendChild(el('span', 'sub', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) + (p ? ' · ' + baht(p.rate) + ' บาท/เดือน · ' + p.branches.length + ' สาขา' : '')));
+      d.appendChild(meta);
+      if (c.note) d.appendChild(el('p', 'sub', c.note));
+      if (cash.view !== 'cancelled') {
+        var row = el('div', 'row');
+        row.appendChild(button('แก้ไข', '', function () { cashierForm(c); }));
+        row.appendChild(button('ยกเลิกสัญญา', 'danger', function () {
+          if (!confirm('ยกเลิกสัญญา ' + c.brand + ' ?')) return;
+          api('cashier_cancel', { id: c.id }).then(cashier).catch(function (e) { show(e.message, 'err'); });
+        }));
+        d.appendChild(row);
+      }
+      v.appendChild(d);
+    });
+  }
+  function cashierForm(c) {
+    var v = $('view'); v.textContent = ''; show('');
+    var d = el('section', 'card'); d.appendChild(el('h2', 'sec', c ? 'แก้ไขสัญญา' : 'เพิ่มสัญญาชั้นแคชเชียร์'));
+    var g = el('div', 'grid');
+    function fld(text, type, val) {
+      var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el(type === 'textarea' ? 'textarea' : 'input', 'input');
+      if (type !== 'textarea') i.type = type; i.value = val || ''; l.appendChild(i); g.appendChild(l); return i;
+    }
+    var brand = fld('แบรนด์', 'text', c && c.brand), vendor = fld('บริษัท/เวนเดอร์', 'text', c && c.vendor);
+    var pl = el('label', 'f'); pl.appendChild(el('span', 't', 'แพ็กเกจ')); var ps = el('select', 'input');
+    cash.packages.filter(function (p) { return p.active || (c && c.package_id === p.id); }).forEach(function (p) {
+      var o = el('option', '', p.code + ' · ' + baht(p.rate) + ' บาท/เดือน · ' + p.branches.length + ' สาขา'); o.value = p.id;
+      if (c && c.package_id === p.id) o.selected = true; ps.appendChild(o);
+    });
+    pl.appendChild(ps); g.appendChild(pl);
+    var from = fld('วันเริ่ม', 'date', c && c.start_date), to = fld('วันสิ้นสุด', 'date', c && c.end_date);
+    d.appendChild(g);
+    var note = fld('หมายเหตุ', 'textarea', c && c.note); note.rows = 2; d.appendChild(note.parentNode);
+    var row = el('div', 'row');
+    var save = button('บันทึก', '', function () {
+      var p = pkgOf(Number(ps.value));
+      if (!brand.value.trim() || !from.value || !to.value) { show('ใส่แบรนด์ วันเริ่ม และวันสิ้นสุดก่อน', 'err'); return; }
+      if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
+      if (p && !p.branches.length) { show('แพ็กเกจนี้ยังไม่มีสาขา ให้ผู้ดูแลเพิ่มสาขาในหน้าตั้งค่าก่อน', 'err'); return; }
+      save.disabled = true;
+      var b = { brand: brand.value, vendor: vendor.value, package_id: Number(ps.value), start_date: from.value, end_date: to.value, note: note.value };
+      if (c) b.id = c.id;
+      api('cashier_save', b).then(cashier).catch(function (e) {
+        save.disabled = false;
+        show(e.code === 'branch_full' ? 'สาขา ' + e.data.branches.join(', ') + (e.data.count > e.data.branches.length ? ' และอีก ' + (e.data.count - e.data.branches.length) : '') +
+          ' มีครบ ' + CASHIER_CAP + ' แบรนด์ในช่วงวันที่ชนกัน' : e.message, 'err');
+      });
+    });
+    row.appendChild(save); row.appendChild(button('ยกเลิก', '', renderCashier)); d.appendChild(row); v.appendChild(d);
+  }
+
   // ---------- settings ----------
   function settings() {
     $('bar').hidden = true; show('');
@@ -991,6 +1135,7 @@
       }));
       d.appendChild(row); v.appendChild(d);
     });
+    cashierSettings(v);
   }
 
   // ---------- home: the dashboard (office) or the store's own view (branch); the warehouse only searches ----------
@@ -1105,7 +1250,8 @@
     home: 'M3 11l9-8 9 8M5 10v10h14V10',
     media: 'M4 5h16v11H4zM8 20h8M12 16v4',
     gear: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19 12l2-1-2-4-2 1-2-1-1-2h-4l-1 2-2 1-2-1-2 4 2 1v2l-2 1 2 4 2-1 2 1 1 2h4l1-2 2-1 2 1 2-4-2-1z',
-    shelf: 'M4 4v16M20 4v16M4 9h16M4 15h16'
+    shelf: 'M4 4v16M20 4v16M4 9h16M4 15h16',
+    cashier: 'M3 8h18v10H3zM7 8V5h10v3M8 13h8'
   };
   function icon(k) {
     var n = 'http://www.w3.org/2000/svg', sv = document.createElementNS(n, 'svg'), p = document.createElementNS(n, 'path');
@@ -1118,7 +1264,7 @@
     var r = sess.staff.role;
     if (r === 'WAREHOUSE') return [{ id: 'home', label: 'ค้นหา', icon: 'home' }];
     if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม', icon: 'home' }];
-    var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }];
+    var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }];
     if (isApprover()) m.push({ id: 'settings', label: 'ตั้งค่า', icon: 'gear' });
     return m;
   }
@@ -1152,7 +1298,7 @@
     var id = (location.hash || '#/home').slice(2).split('/')[0];
     if (!modules().some(function (m) { return m.id === id; })) id = 'home';
     setCurrent(id); $('app').classList.remove('open'); $('bar').hidden = true; show('');
-    if (id === 'media') loadOffice(); else if (id === 'settings') settings(); else showHome();
+    if (id === 'media') loadOffice(); else if (id === 'cashier') cashier(); else if (id === 'settings') settings(); else showHome();
   }
 
   // ---------- start ----------
