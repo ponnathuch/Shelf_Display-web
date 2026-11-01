@@ -60,6 +60,9 @@
   .card.compact .thumb { width: var(--size-thumb-s); height: var(--size-thumb-s); }
   .card.compact .facts { margin-top: var(--space-2); gap: var(--space-2) var(--space-4); grid-template-columns: repeat(auto-fit, minmax(var(--size-fact), 1fr)); }
   .card.compact .row { margin-top: var(--space-2); }
+  .ptiles { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); }
+  .ptile { width: var(--size-tile); display: grid; gap: var(--space-1); }
+  .ptile img { width: 100%; height: var(--size-tile); object-fit: cover; border-radius: var(--radius-s); border: 1px solid var(--c-line); }
   .pick { display: flex; align-items: center; gap: var(--space-2); }
   .pick input { width: var(--size-icon); height: var(--size-icon); }
   .delbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
@@ -179,6 +182,7 @@
   var ERR = {
     'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
     'missing:dates': 'ยังไม่ได้ใส่วันเริ่ม และวันสิ้นสุด (หรือติ๊ก "ไม่มีวันหมดอายุ")', 'missing:agreement_no': 'ยังไม่ได้ใส่เลขที่สัญญา/TTA',
+    bad_photo: 'รูปนี้ใช้ไม่ได้ (ต้องเป็นรูปที่เปิดได้ และไม่ใหญ่เกินไป)', too_many_photos: 'ใส่รูปตัวอย่างได้ไม่เกิน 10 รูปต่อแคมเปญ',
     bad_target: 'แคมเปญที่เลือกผูกไม่ได้ (ยกเลิกแล้วหรือเป็นเคสจากคลัง)',
     'missing:ad': 'ยังไม่ได้ใส่เลขโฆษณาและวันหมดอายุ', 'missing:branches': 'ยังไม่ได้เลือกสาขา',
     self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
@@ -457,18 +461,23 @@
     function same(x) { var b = String(x.brand || '').toLowerCase().replace(/\s+/g, ''); return key.length >= 3 && b.length >= 3 && (key.indexOf(b) !== -1 || b.indexOf(key) !== -1); }
     cands.sort(function (a, b) { return (same(b) ? 1 : 0) - (same(a) ? 1 : 0) || b.id - a.id; });
     var box = el('section', 'card'); box.appendChild(el('h2', 'sec', 'ตรงกับแคมเปญที่ลงทะเบียนไว้ไหม'));
-    var sel = el('select', 'input'); sel.setAttribute('aria-label', 'แคมเปญที่ลงทะเบียนไว้');
+    // type to search by code or name; the typed text must match one of the options
+    var sel = el('input', 'input'); sel.setAttribute('list', 'link-list'); sel.placeholder = 'พิมพ์ค้นหาเลขทะเบียนหรือชื่อ'; sel.setAttribute('aria-label', 'แคมเปญที่ลงทะเบียนไว้');
+    var dl = el('datalist'); dl.id = 'link-list'; var byLabel = {};
     cands.forEach(function (x) {
-      var op = el('option', '', (same(x) ? '★ ' : '') + x.code + ' ' + (x.brand || '') + ' · ' + ((x.position_types || {}).name || 'ยังไม่ระบุตำแหน่ง') + ' · ' + (x.end_date ? 'ถึง ' + x.end_date : 'ไม่มีวันหมดอายุ') + (x.status === 'pending' ? ' (รออนุมัติ)' : ''));
-      op.value = x.id; sel.appendChild(op);
+      var lab = x.code + ' ' + (x.brand || '') + ' · ' + ((x.position_types || {}).name || 'ยังไม่ระบุตำแหน่ง') + ' · ' + (x.end_date ? 'ถึง ' + x.end_date : 'ไม่มีวันหมดอายุ') + (x.status === 'pending' ? ' (รออนุมัติ)' : '');
+      byLabel[lab] = x.id; var op = el('option'); op.value = lab; dl.appendChild(op);
     });
+    if (cands.length && same(cands[0])) sel.value = dl.firstChild.value; // the best brand match is pre-filled
     var go = button('ใช่ ผูกกับแคมเปญนี้', 'alt', function () {
+      var target = byLabel[sel.value];
+      if (!target) { show('เลือกแคมเปญจากรายการที่ขึ้นให้ (พิมพ์เลขทะเบียนหรือชื่อเพื่อค้นหา)', 'err'); sel.focus(); return; }
       if (!confirm('ย้ายรูปไปแคมเปญที่เลือก และยกเลิกเคสร่างนี้?')) return;
       go.disabled = true;
-      api('link', { id: c.id, target: Number(sel.value) }).then(function (r) { show('ผูกกับ ' + r.code + ' แล้ว แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
+      api('link', { id: c.id, target: target }).then(function (r) { show('ผูกกับ ' + r.code + ' แล้ว แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
         .catch(function (e) { go.disabled = false; show(e.message, 'err'); });
     });
-    var row = el('div', 'row'); row.appendChild(sel); row.appendChild(go);
+    var row = el('div', 'row'); row.appendChild(sel); row.appendChild(dl); row.appendChild(go);
     box.appendChild(row); v.appendChild(box);
   }
   function detail(id) {
@@ -496,10 +505,12 @@
       }
       v.appendChild(card(c, { office: true, actions: actions }));
       linkBox(v, c);
-      if (rs[1].photos.length) {
-        var ph = el('section', 'card'); ph.appendChild(el('h2', 'sec', 'รูปจากคลัง'));
-        ph.appendChild(photoGrid(rs[1].photos)); v.appendChild(ph);
-      }
+      [['example_ok', 'รูปตัวอย่างสื่อ'], ['warehouse', 'รูปจากคลัง']].forEach(function (g) {
+        var ps = rs[1].photos.filter(function (p) { return (p.kind === 'example_ok') === (g[0] === 'example_ok'); });
+        if (!ps.length) return;
+        var ph = el('section', 'card'); ph.appendChild(el('h2', 'sec', g[1]));
+        ph.appendChild(photoGrid(ps)); v.appendChild(ph);
+      });
       var ev = rs[0].events || [];
       if (ev.length) {
         var det = el('details', 'hist'); det.appendChild(el('summary', '', 'ประวัติการเปลี่ยนแปลง (' + ev.length + ')'));
@@ -647,6 +658,24 @@
   }
 
   // ---------- form ----------
+  // Resize to at most 1600 px and re-encode as JPEG, so a phone photo is about 300 KB; resolves to the base64 text.
+  function toJpegBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function () {
+        var s = Math.min(1, 1600 / Math.max(im.width, im.height)), cv = document.createElement('canvas');
+        cv.width = Math.round(im.width * s); cv.height = Math.round(im.height * s);
+        var cx = cv.getContext('2d'); cx.fillStyle = 'white'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(im, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        cv.toBlob(function (b) {
+          if (!b) { reject(new Error('อ่านรูปไม่ได้')); return; }
+          var r = new FileReader(); r.onload = function () { resolve(String(r.result).split(',')[1]); }; r.readAsDataURL(b);
+        }, 'image/jpeg', 0.82);
+      };
+      im.onerror = function () { URL.revokeObjectURL(url); reject(new Error('ไฟล์นี้ไม่ใช่รูปที่เปิดได้')); };
+      im.src = url;
+    });
+  }
   function form(c) {
     c = c || {};
     $('bar').hidden = true; show('');
@@ -727,6 +756,38 @@
     var rent = isOffice() ? area(s5, 'ค่าเช่า (เห็นเฉพาะผู้ลงทะเบียนและผู้อนุมัติ ไม่แสดงให้สาขา)', c.rent_note, false) : null;
     f.appendChild(s5);
 
+    // Sample photos of the media: several at once; new files wait in a queue and are sent after the campaign is saved.
+    var s6 = el('fieldset', 'card'); s6.appendChild(el('legend', '', 'รูปตัวอย่างสื่อ'));
+    s6.appendChild(el('p', 'hint', 'ใส่ได้หลายรูป เช่น ภาพตัวอย่างสื่อที่จะส่งมา ระบบย่อรูปให้อัตโนมัติ สาขาจะเห็นรูปแรกเพื่อรู้ว่าต้องวางสื่ออะไร'));
+    var tiles = el('div', 'ptiles'); s6.appendChild(tiles);
+    var queue = [], existing = [];
+    var fileIn = el('input'); fileIn.type = 'file'; fileIn.accept = 'image/*'; fileIn.multiple = true; fileIn.setAttribute('aria-label', 'เลือกรูปตัวอย่าง');
+    fileIn.onchange = function () {
+      Array.prototype.forEach.call(fileIn.files, function (file) { queue.push({ file: file, url: URL.createObjectURL(file) }); });
+      fileIn.value = ''; drawTiles();
+    };
+    s6.appendChild(fileIn);
+    function tile(src, note, onRemove) {
+      var t = el('div', 'ptile'), im = el('img'); im.src = src; im.alt = note; t.appendChild(im);
+      if (note) t.appendChild(el('span', 'sub', note));
+      if (onRemove) t.appendChild(button('ลบ', 'danger', onRemove));
+      return t;
+    }
+    function drawTiles() {
+      tiles.textContent = '';
+      existing.forEach(function (p) {
+        var can = p.kind === 'example_ok' || isApprover();
+        tiles.appendChild(tile(p.url, p.kind === 'example_ok' ? 'ตัวอย่าง' : 'จากคลัง', can ? function () {
+          if (!confirm('ลบรูปนี้?')) return;
+          api('photo_remove', { id: p.id }).then(function () { existing = existing.filter(function (x) { return x !== p; }); drawTiles(); })
+            .catch(function (e) { show(e.message, 'err'); });
+        } : null));
+      });
+      queue.forEach(function (q) { tiles.appendChild(tile(q.url, 'รอส่ง', function () { queue = queue.filter(function (x) { return x !== q; }); drawTiles(); })); });
+    }
+    drawTiles();
+    f.appendChild(s6);
+
     var bar = el('div', 'formbar');
     var save = el('button', 'btn', 'บันทึก'); save.type = 'submit'; bar.appendChild(save);
     bar.appendChild(button('ยกเลิก', 'alt', renderOffice));
@@ -735,10 +796,12 @@
     // Editing a warehouse draft: keep the photo beside the form so the brand and dates can be read from it.
     if (c.id) {
       api('photos', { id: c.id }).then(function (r) {
-        if (!r.photos.length) return;
+        existing = r.photos; drawTiles();
+        var wh = r.photos.filter(function (p) { return p.kind !== 'example_ok'; });
+        if (!wh.length) return;
         var det = el('details', 'card photopanel'); det.open = true;
-        det.appendChild(el('summary', '', 'รูปจากคลัง (' + r.photos.length + ')'));
-        det.appendChild(photoGrid(r.photos));
+        det.appendChild(el('summary', '', 'รูปจากคลัง (' + wh.length + ')'));
+        det.appendChild(photoGrid(wh));
         wrap.insertBefore(det, f); wrap.classList.add('has-photos');
       }).catch(function () { /* the form still works without the photo */ });
     }
@@ -752,8 +815,17 @@
       if (rent) b.rent_note = rent.value;
       if (c.id) b.id = c.id;
       save.disabled = true;
-      api(c.id ? 'update' : 'register', b).then(function () { tab = 'pending'; show('บันทึกแล้ว', 'ok'); loadOffice(true); })
-        .catch(function (e) { save.disabled = false; show(e.message, 'err'); });
+      api(c.id ? 'update' : 'register', b).then(function (r) {
+        var id = c.id || r.id, i = 0;
+        function next() {
+          if (i >= queue.length) return Promise.resolve();
+          show('กำลังส่งรูป ' + (i + 1) + '/' + queue.length + '...');
+          return toJpegBase64(queue[i].file).then(function (d) { return api('photo_add', { id: id, data: d }); }).then(function () { i++; return next(); });
+        }
+        return next().then(function () { show('บันทึกแล้ว', 'ok'); loadOffice(true); }, function (e) {
+          show('บันทึกแล้ว แต่ใส่รูปไม่สำเร็จ: ' + e.message + ' (เปิดแก้ไขเพื่อใส่รูปใหม่)', 'err'); loadOffice(true);
+        });
+      }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     };
   }
 
