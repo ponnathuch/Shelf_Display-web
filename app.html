@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261105b">
+<link rel="stylesheet" href="shd-theme.css?v=20261106b">
 <style>
   body { line-height: 1.6; }
 
@@ -150,6 +150,17 @@
   .cform .grid { margin-bottom: var(--space-4); }
   .cform label.f { margin-bottom: var(--space-4); }
   .cform fieldset.card { margin: var(--space-4) 0; }
+  .trow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--c-line); }
+  .trow > input[type=text] { flex: 1 1 var(--size-cell); min-width: var(--size-cell); }
+  .trow > .cap { width: var(--size-cell); }
+  .trow:last-child { border-bottom: 0; }
+  .fold { padding: 0; margin-bottom: var(--space-2); }
+  .fold > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--size-target-lg); padding: var(--space-2) var(--space-4); cursor: pointer; list-style: none; }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary::after { content: ''; width: var(--space-2); height: var(--space-2); border: solid var(--c-ink-3); border-width: 0 var(--outline-w) var(--outline-w) 0; transform: rotate(45deg); flex: none; }
+  .fold[open] > summary::after { transform: rotate(-135deg); }
+  .fold > summary b { flex: 1; }
+  .fold-body { padding: var(--space-2) var(--space-4) var(--space-4); border-top: 1px solid var(--c-line); }
   label.f { display: block; font-size: var(--fs-s); color: var(--c-ink-2); margin-bottom: var(--space-3); }
   .grid label.f { margin-bottom: 0; }
   label.f > span.t { display: block; margin-bottom: var(--space-1); }
@@ -178,7 +189,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261105b">
+<link rel="stylesheet" href="shd-v2.css?v=20261106b">
 </head>
 <body>
 <div class="app" id="app">
@@ -1040,8 +1051,7 @@
 
   // Settings: packages (name, rate per brand per month, which branches). Approvers only.
   function cashierSettings(v) {
-    v.appendChild(el('h2', 'sec', 'สิทธิ์แก้ไขสัญญาชั้นแคชเชียร์'));
-    var eb = el('section', 'card'); v.appendChild(eb);
+    var ef = fold('สิทธิ์แก้ไขสัญญา', 'ใครเพิ่ม/แก้ไข/ยกเลิกสัญญาได้', false), eb = ef.body; v.appendChild(ef.node);
     eb.appendChild(el('p', 'hint', 'ผู้ดูแลและผู้อนุมัติแก้ได้เสมอ คนอื่นในทีมที่เลือกไว้ที่นี่จะเพิ่ม/แก้ไข/ยกเลิกสัญญาได้ คนที่ไม่ได้เลือกยังดูได้อย่างเดียว'));
     api('cashier_editors').then(function (d) {
       var byName = {}; people.forEach(function (x) { byName[x.username] = x.name; });
@@ -1056,7 +1066,6 @@
       }));
       eb.appendChild(row);
     }).catch(function (e) { show(e.message, 'err'); });
-    v.appendChild(el('h2', 'sec', 'ตั้งค่าแพ็กเกจชั้นแคชเชียร์'));
     var holder = el('div'); v.appendChild(holder); holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
     api('cashier_packages').then(function (d) {
       holder.textContent = '';
@@ -1064,8 +1073,8 @@
     }).catch(function (e) { holder.textContent = ''; show(e.message, 'err'); });
   }
   function packageCard(p) {
-    var d = el('section', 'card'), fresh = p.id === null;
-    d.appendChild(el('h3', '', fresh ? 'เพิ่มแพ็กเกจใหม่' : p.code + ' · ' + p.name));
+    var fresh = p.id === null;
+    var fd = fold(fresh ? 'เพิ่มแพ็กเกจใหม่' : 'แพ็กเกจ ' + p.code + ' · ' + p.name, fresh ? '' : baht(p.rate) + ' บาท/เดือน · ' + (p.branches.length ? p.branches.length + ' สาขาเริ่มต้น' : 'ทุกสาขา'), false), d = fd.body;
     var g = el('div', 'grid');
     function fld(text, type, val) {
       var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el('input', 'input'); i.type = type; i.value = val;
@@ -1092,7 +1101,7 @@
       api('cashier_package_save', { code: code.value.trim(), name: name.value.trim(), rate: Number(rate.value) || 0, active: p.active, branches: list })
         .then(function () { show('บันทึกแพ็กเกจ ' + code.value.trim() + ' แล้ว', 'ok'); if (fresh) settings(); }).catch(function (e) { show(e.message, 'err'); });
     }));
-    d.appendChild(row); return d;
+    d.appendChild(row); return fd.node;
   }
 
   function cashier() {
@@ -1269,24 +1278,54 @@
   }
 
   // ---------- settings ----------
+  var setTab = 'media';
+  // A collapsible block: a title row that opens and closes its body.
+  function fold(title, note, open) {
+    var d = el('details', 'card fold'), sm = el('summary'); d.open = !!open;
+    sm.appendChild(el('b', '', title)); if (note) sm.appendChild(el('span', 'sub', note));
+    d.appendChild(sm); var body = el('div', 'fold-body'); d.appendChild(body);
+    return { node: d, body: body };
+  }
   function settings() {
     $('bar').hidden = true; show('');
     var v = $('view'); v.textContent = '';
-    v.appendChild(el('h2', 'sec', 'ตั้งค่าประเภทตำแหน่ง'));
-    types.forEach(function (t) {
-      var d = el('section', 'card'); d.appendChild(el('h3', '', t.name));
-      var l = el('label', 'f'); l.appendChild(el('span', 't', 'เพดานต่อสาขา (เว้นว่าง = ไม่จำกัด)'));
-      var i = el('input', 'input'); i.type = 'number'; i.min = 1; i.value = t.max_per_branch === null ? '' : t.max_per_branch;
-      l.appendChild(i); d.appendChild(l);
-      var row = el('div', 'row');
-      row.appendChild(button('บันทึก', '', function () {
-        var max = i.value === '' ? null : Number(i.value);
-        api('types_save', { name: t.name, max_per_branch: max, extendable: t.extendable, needs_ad: t.needs_ad, active: t.active })
-          .then(function () { t.max_per_branch = max; show('บันทึกเพดานของ ' + t.name + ' แล้ว', 'ok'); }).catch(function (e) { show(e.message, 'err'); });
-      }));
-      d.appendChild(row); v.appendChild(d);
+    var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'หมวดการตั้งค่า');
+    [['media', 'สื่อ'], ['cashier', 'ชั้นแคชเชียร์']].forEach(function (t) {
+      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(setTab === t[0]));
+      x.onclick = function () { setTab = t[0]; settings(); }; seg.appendChild(x);
     });
-    cashierSettings(v);
+    var tb = el('div', 'toolbar'); tb.appendChild(seg); v.appendChild(tb);
+    if (setTab === 'cashier') { cashierSettings(v); return; }
+    var fd = fold('ประเภทตำแหน่งสื่อ', 'เพดานต่อสาขา เพิ่มประเภทใหม่ได้', true), card = fd.body; v.appendChild(fd.node); card.classList.add('tset');
+    card.appendChild(el('p', 'hint', 'เพดาน = จำนวนสื่อสูงสุดต่อสาขาในช่วงวันที่ชนกัน เว้นว่าง = ไม่จำกัด ประเภทที่ปิดการใช้งานจะไม่ให้เลือกตอนลงทะเบียน แต่แคมเปญเดิมยังอยู่'));
+    var body = el('div'); card.appendChild(body);
+    function trow(t) {
+      var fresh = !t, r = el('div', 'trow');
+      var name = el('input', 'input'); name.type = 'text'; name.maxLength = 60; name.value = fresh ? '' : t.name; name.setAttribute('aria-label', 'ชื่อประเภท');
+      if (fresh) name.placeholder = 'ชื่อประเภทใหม่ เช่น ตู้แช่'; else name.readOnly = true;
+      var cap = el('input', 'input cap'); cap.type = 'number'; cap.min = 1; cap.placeholder = 'ไม่จำกัด'; cap.setAttribute('aria-label', 'เพดานต่อสาขา');
+      cap.value = !fresh && t.max_per_branch !== null ? t.max_per_branch : '';
+      function chk(text, on) { var l = el('label', 'check'), c = el('input'); c.type = 'checkbox'; c.checked = on; l.appendChild(c); l.appendChild(document.createTextNode(text)); r.appendChild(l); return c; }
+      r.appendChild(name); r.appendChild(cap);
+      var ext = chk('ต่อสัญญา', fresh ? false : !!t.extendable), ad = chk('มีเลขโฆษณา', fresh ? true : t.needs_ad !== false), on = chk('ใช้งาน', fresh ? true : t.active !== false);
+      r.appendChild(button(fresh ? 'เพิ่ม' : 'บันทึก', fresh ? '' : 'alt', function () {
+        if (!name.value.trim()) { show('ใส่ชื่อประเภทก่อน', 'err'); return; }
+        var max = cap.value === '' ? null : Number(cap.value);
+        api('types_save', { name: name.value.trim(), max_per_branch: max, extendable: ext.checked, needs_ad: ad.checked, active: on.checked })
+          .then(function () { show('บันทึก ' + name.value.trim() + ' แล้ว', 'ok'); return loadTypes(); })
+          .catch(function (e) { show(e.message, 'err'); });
+      }));
+      return r;
+    }
+    function loadTypes() {
+      return api('types_list').then(function (d) {
+        types = d.types.filter(function (x) { return x.active; });
+        body.textContent = '';
+        d.types.forEach(function (t) { body.appendChild(trow(t)); });
+        body.appendChild(trow(null));
+      });
+    }
+    loadTypes().catch(function (e) { show(e.message, 'err'); });
   }
 
   // ---------- home: the dashboard (office) or the store's own view (branch); the warehouse only searches ----------
