@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261110e">
+<link rel="stylesheet" href="shd-theme.css?v=20261110f">
 <style>
   body { line-height: 1.6; }
 
@@ -214,7 +214,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261110e">
+<link rel="stylesheet" href="shd-v2.css?v=20261110f">
 </head>
 <body>
 <div class="app" id="app">
@@ -489,7 +489,7 @@
       var im = el('img', 'thumb'); im.src = c.thumb_url; im.alt = c.brand; im.loading = 'lazy'; a.appendChild(im); head.appendChild(a);
     }
     d.appendChild(head);
-    if (onOpen) { var row = el('div', 'row'); row.appendChild(button('เปิดดู', 'alt', function () { go('cashier'); })); d.appendChild(row); }
+    if (onOpen) { var row = el('div', 'row'); row.appendChild(button('เปิดดู', 'alt', function () { if (isOffice()) go('cashier'); else cashierBranchOpen(c); })); d.appendChild(row); }
     return d;
   }
   function resultRow(r, onOpen) {
@@ -511,7 +511,7 @@
       var im = el('img', 'thumb'); im.src = r.thumb_url; im.alt = 'รูป ' + r.code; im.loading = 'lazy'; a.appendChild(im); head.appendChild(a);
     }
     d.appendChild(head);
-    if (onOpen) { var row = el('div', 'row'); row.appendChild(button('เปิดดู', 'alt', function () { onOpen(r.id); })); d.appendChild(row); }
+    if (onOpen && (r.mine === null || (r.mine && r.status === 'approved'))) { var row = el('div', 'row'); row.appendChild(button('เปิดดู', 'alt', function () { onOpen(r.id); })); d.appendChild(row); }
     return d;
   }
   function findPanel(host, opts) {
@@ -1950,7 +1950,7 @@
     });
     var card = el('section', 'card'); card.appendChild(el('h2', 'sec', 'ไทม์ไลน์ชั้นแคชเชียร์ (10 สัปดาห์)'));
     var live = rows.filter(function (r) { return r.start_date && daysTo(r.end_date) >= FROM; }).sort(function (a, b) { return String(a.start_date).localeCompare(String(b.start_date)); });
-    card.appendChild(live.length ? gantt(live, isOffice() ? function () { go('cashier'); } : null) : el('p', 'empty-note', 'ยังไม่มีแบรนด์ที่วางที่ชั้นแคชเชียร์'));
+    card.appendChild(live.length ? gantt(live, isOffice() ? function () { go('cashier'); } : function (id) { cashierBranchOpen(cashHome.filter(function (c) { return c.id === id; })[0]); }) : el('p', 'empty-note', 'ยังไม่มีแบรนด์ที่วางที่ชั้นแคชเชียร์'));
     return card;
   }
   // Cashier contracts that ended (or end within a week); an ended contract stays listed until it is cancelled or its date is changed.
@@ -1979,7 +1979,7 @@
     k.appendChild(kpiCard('กำลังจะเริ่มใน 14 วัน', next.length, next[0] ? next[0].brand : 'ไม่มี', '', noop));
     k.appendChild(kpiCard('ใกล้ครบกำหนดเก็บ (7 วัน)', soon.length, soon[0] ? soon[0].brand : 'ไม่มี', soon.length ? 'warn' : '', noop));
     host.appendChild(k);
-    host.appendChild(timelineCard(all.filter(function (c) { return c.status === 'approved'; }), null));
+    host.appendChild(timelineCard(all.filter(function (c) { return c.status === 'approved'; }), branchOpen));
     host.appendChild(cashierTimeline(cashHome));
     host.appendChild(cashierDueCard(cashHome));
     host.appendChild(cashierDueCard(signHome, 'ป้ายหัวชั้น/กระจก'));
@@ -1991,7 +1991,7 @@
     $('bar').hidden = true; show('');
     var v = $('view'); v.textContent = '';
     var dash = el('div');
-    homeFind = findPanel(v, { onActive: function (on) { dash.hidden = on; }, onOpen: isOffice() ? openDetail : null });
+    homeFind = findPanel(v, { onActive: function (on) { dash.hidden = on; }, onOpen: isOffice() ? openDetail : branchOpen });
     v.appendChild(dash);
     if (pendingQuery) { homeFind.run(pendingQuery); pendingQuery = ''; }
     if (sess.staff.role === 'WAREHOUSE') { homeFind.focus(); return; }
@@ -2003,6 +2003,31 @@
     }).catch(fail);
   }
   function openDetail(id) { setCurrent('media'); detail(id); }
+  // A branch opens a cashier-shelf contract: the list it already holds has everything it may see; only the photos are fetched.
+  function cashierBranchOpen(c) {
+    if (!c) return;
+    loading();
+    api('cashier_photos', { id: c.id }).then(function (d) {
+      done(); var v = $('view'); v.textContent = ''; $('bar').hidden = true; window.scrollTo(0, 0);
+      v.appendChild(button('← กลับภาพรวม', 'alt back', showHome));
+      v.appendChild(card({ brand: c.brand, code: 'ชั้นแคชเชียร์', position_types: c.house ? { name: 'House Brand' } : null, status: 'approved', start_date: c.start_date, end_date: c.end_date, ad_no: c.ad_no, ad_expiry: c.ad_expiry, how_to_place: c.how_to_place, return_to: c.return_to, _raw: c._raw }));
+      if (d.photos.length) { var ph = el('section', 'card'); ph.appendChild(el('h2', 'sec', 'รูปตัวอย่าง')); ph.appendChild(photoGrid(d.photos)); v.appendChild(ph); }
+    }).catch(fail);
+  }
+  // A branch opens a campaign to see which material it is: facts (with the advertising number) and the photos, never money or paperwork.
+  function branchOpen(id) {
+    loading();
+    Promise.all([api('get', { id: id }), api('photos', { id: id })]).then(function (rs) {
+      done(); var v = $('view'); v.textContent = ''; $('bar').hidden = true; window.scrollTo(0, 0);
+      v.appendChild(button('← กลับภาพรวม', 'alt back', showHome));
+      v.appendChild(card(normEnd(rs[0].campaign)));
+      [['example_ok', 'รูปตัวอย่างสื่อ'], ['warehouse', 'รูปจากคลัง']].forEach(function (g) {
+        var ps = rs[1].photos.filter(function (p) { return (p.kind === 'example_ok') === (g[0] === 'example_ok'); });
+        if (!ps.length) return;
+        var ph = el('section', 'card'); ph.appendChild(el('h2', 'sec', g[1])); ph.appendChild(photoGrid(ps)); v.appendChild(ph);
+      });
+    }).catch(fail);
+  }
 
   // ---------- shell: modules, sidebar, routing ----------
   var IC = {
