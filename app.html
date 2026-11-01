@@ -429,7 +429,7 @@
   // A pending warehouse draft can be linked to a registered campaign: its photos move there and the draft is cancelled.
   function linkBox(v, c) {
     if (c.source !== 'warehouse' || c.status !== 'pending') return;
-    var cands = all.filter(function (x) { return x.source !== 'warehouse' && (x.status === 'pending' || x.status === 'approved'); });
+    var cands = all.filter(function (x) { return x.id !== c.id && (x.status === 'approved' || (x.source !== 'warehouse' && x.status === 'pending')); });
     if (!cands.length) return;
     var key = String(c.brand || '').toLowerCase().replace(/\s+/g, '');
     function same(x) { var b = String(x.brand || '').toLowerCase().replace(/\s+/g, ''); return key.length >= 3 && b.length >= 3 && (key.indexOf(b) !== -1 || b.indexOf(key) !== -1); }
