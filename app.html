@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261108b">
+<link rel="stylesheet" href="shd-theme.css?v=20261108c">
 <style>
   body { line-height: 1.6; }
 
@@ -162,6 +162,8 @@
     border: var(--outline-w) solid var(--c-surface); font-size: var(--fs-xs); line-height: 1.4; cursor: pointer; touch-action: none; }
   .pin.rent { background: var(--c-warn); }
   .pin.taken { background: var(--c-err); }
+  .rents { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--size-cell), 1fr)); gap: var(--space-3); margin-top: var(--space-3); }
+  .rents label.f { margin-bottom: 0; }
   .signrow { padding: var(--space-3) 0; border-bottom: 1px solid var(--c-line); }
   .pin.sel { outline: var(--outline-w) solid var(--c-ink); z-index: 1; }
   .pininfo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
@@ -203,7 +205,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261108b">
+<link rel="stylesheet" href="shd-v2.css?v=20261108c">
 </head>
 <body>
 <div class="app" id="app">
@@ -798,6 +800,7 @@
       });
       list.scrollTop = keep;
       var codes = Object.keys(chosen).sort();
+      if (cfg.onChange) cfg.onChange(codes);
       open.textContent = codes.length ? 'เลือกแล้ว ' + codes.length + ' ' + cfg.noun + ' (กดเพื่อเพิ่ม/แก้ไข)' : cfg.placeholder;
       chips.textContent = '';
       codes.forEach(function (code) {
@@ -1527,22 +1530,34 @@
     function area(text, val) { var f = fld(text, 'textarea', val); f.i.rows = 2; d.appendChild(f.l); return f.i; }
     var how = area('วิธีวาง/ข้อห้าม (สาขาจะเห็น)', c && c.how_to_place), ret = area('หลังสิ้นสุดให้ทำอย่างไร (สาขาจะเห็น)', c && c.return_to), note = area('หมายเหตุ', c && c.note);
     // places: tick the places of this branch and give the rent per month of each; places of other branches in the same contract stay as they are
-    var chosen = {}, keep = [];
-    (c ? c.slots : []).forEach(function (x) { if (x.branch_code === flo.branch) chosen[x.slot_id] = x.rent; else keep.push({ slot_id: x.slot_id, rent: x.rent }); });
+    var rents = {}, keep = [], byId = {};
+    (c ? c.slots : []).forEach(function (x) { if (x.branch_code === flo.branch) rents[x.slot_id] = x.rent; else keep.push({ slot_id: x.slot_id, rent: x.rent }); });
     var sb = el('fieldset', 'card'); sb.appendChild(el('legend', '', 'ตำแหน่งที่เช่า (สาขา ' + flo.branch + ')'));
-    var list = el('div'); sb.appendChild(list); var inputs = {};
-    flo.data.slots.filter(function (x) { return x.active; }).forEach(function (x) {
-      var r = el('div', 'trow'), l = el('label', 'check'), cb = el('input'); cb.type = 'checkbox'; cb.checked = x.id in chosen; l.appendChild(cb); l.appendChild(document.createTextNode(x.code + (x.name ? ' ' + x.name : '') + (x.category ? ' · ' + x.category : '')));
-      var rent = el('input', 'input cap'); rent.type = 'number'; rent.min = 0; rent.placeholder = 'บาท/เดือน'; rent.setAttribute('aria-label', 'ค่าเช่า ' + x.code); rent.value = cb.checked && chosen[x.id] != null ? chosen[x.id] : '';
-      r.appendChild(l); r.appendChild(rent); list.appendChild(r); inputs[x.id] = { cb: cb, rent: rent };
+    var rentBox = el('div', 'rents');
+    var items = flo.data.slots.filter(function (x) { return x.active; }).map(function (x) {
+      byId[x.id] = x;
+      return { code: String(x.id), name: x.code + (x.name ? ' ' + x.name : ''), sub: [KIND_TH[x.kind], x.category].filter(Boolean).join(' · '), leaves: [String(x.id)] };
     });
+    var picker = multiPicker(sb, {
+      title: 'ตำแหน่ง', required: true, noun: 'ตำแหน่ง', placeholder: 'เลือกตำแหน่ง (พิมพ์ค้นหารหัสหรือหมวดได้)...', searchPlaceholder: 'พิมพ์รหัสหรือหมวด เช่น OA03 หรือ VITAMIN...',
+      initial: Object.keys(rents), items: items, labelOf: function (id) { return byId[id] ? byId[id].code : id; },
+      onChange: function (ids) {
+        rentBox.textContent = '';
+        ids.forEach(function (id) {
+          var l = el('label', 'f'), inp = el('input', 'input'); inp.type = 'number'; inp.min = 0; inp.placeholder = 'บาท/เดือน'; inp.value = rents[id] == null ? '' : rents[id];
+          inp.oninput = function () { rents[id] = inp.value === '' ? null : Number(inp.value); };
+          l.appendChild(el('span', 't', 'ค่าเช่า ' + (byId[id] ? byId[id].code : id))); l.appendChild(inp); rentBox.appendChild(l);
+        });
+      }
+    });
+    sb.appendChild(rentBox);
     d.appendChild(sb);
     var pm = photoManager({ addAction: 'sign_photo_add', removeAction: 'sign_photo_remove' });
     d.appendChild(el('h3', '', 'รูปตัวอย่าง')); d.appendChild(pm.node);
     if (c) api('sign_photos', { id: c.id }).then(function (r) { pm.setExisting(r.photos); }).catch(function () { /* the form works without the photos */ });
     var row = el('div', 'row');
     var save = button('บันทึก', '', function () {
-      var slots = keep.slice(); Object.keys(inputs).forEach(function (id) { if (inputs[id].cb.checked) slots.push({ slot_id: Number(id), rent: inputs[id].rent.value === '' ? null : Number(inputs[id].rent.value) }); });
+      var slots = keep.slice(); picker.getCodes().forEach(function (id) { slots.push({ slot_id: Number(id), rent: rents[id] == null ? null : rents[id] }); });
       if (!brand.value.trim() || !from.value || !to.value) { show('ใส่แบรนด์ วันเริ่ม และวันสิ้นสุดก่อน', 'err'); return; }
       if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
       if (!slots.length) { show('เลือกตำแหน่งที่เช่าอย่างน้อย 1 ตำแหน่ง', 'err'); return; }
