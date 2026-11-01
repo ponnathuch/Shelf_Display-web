@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261110c">
+<link rel="stylesheet" href="shd-theme.css?v=20261110d">
 <style>
   body { line-height: 1.6; }
 
@@ -162,6 +162,7 @@
     border: var(--outline-w) solid var(--c-surface); font-size: var(--fs-xs); line-height: 1.4; cursor: pointer; touch-action: none; }
   .pin.rent { background: var(--c-warn); }
   .pin.taken { background: var(--c-err); }
+  .backbtn { margin-bottom: var(--space-3); }
   .linker { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
   .linker input { flex: 1 1 var(--size-cell); }
   .pin.tmp { background: var(--c-ok); }
@@ -213,7 +214,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261110c">
+<link rel="stylesheet" href="shd-v2.css?v=20261110d">
 </head>
 <body>
 <div class="app" id="app">
@@ -728,7 +729,7 @@
         var missing = want.filter(function (b) { return !tied[b]; });
         sc.appendChild(el('h2', 'sec', 'ตำแหน่งในร้าน'));
         sc.appendChild(el('p', 'sub', want.length ? 'ผูกแล้ว ' + (want.length - missing.length) + ' จาก ' + want.length + ' สาขา' + (everyBranch ? ' (แคมเปญนี้ใช้ทุกสาขา)' : '') : 'ยังไม่ได้ผูกกับตำแหน่งในร้าน (ใช้กับป้ายสื่อชั่วคราว)'));
-        var goFloor = function (code, sel) { flo.branch = code; flo.sel = sel; flo.mode = 'branch'; flo.view = 'temp'; go('floor'); };
+        var goFloor = function (code, sel) { flo.branch = code; flo.sel = sel; flo.mode = 'branch'; flo.view = 'temp'; flo.backTo = { id: id, code: c.code }; go('floor'); };
         if (spots.length) {
           var sr = el('div', 'row'); sr.appendChild(el('span', 'sub', 'ผูกแล้ว:'));
           spots.forEach(function (sp) { sr.appendChild(button(sp.branch_code + ' · ' + sp.code, 'alt', function () { goFloor(sp.branch_code, sp.slot_id); })); });
@@ -1419,6 +1420,9 @@
       if (BRANCH_RE.test(flo.branch)) loadFloor(mine); else mine.appendChild(el('p', 'empty-note', 'ไม่พบรหัสสาขาของคุณ'));
       return;
     }
+    if (flo.backTo) { // came from a campaign: one click back to it
+      var bk = flo.backTo, back = button('← กลับไปแคมเปญ ' + (bk.code || ''), 'alt', function () { flo.backTo = null; openDetail(bk.id); }); back.classList.add('backbtn'); v.appendChild(back);
+    }
     var tb = el('div', 'toolbar'), inp = el('input', 'input search'), dl = el('datalist'); dl.id = 'flo-list';
     inp.type = 'text'; inp.setAttribute('list', 'flo-list'); inp.placeholder = 'พิมพ์รหัสหรือชื่อสาขา เช่น IC002'; inp.setAttribute('aria-label', 'เลือกสาขา'); inp.value = flo.branch;
     units.filter(function (u) { return u.is_branch; }).forEach(function (u) { var o = el('option'); o.value = u.code; o.label = u.name; dl.appendChild(o); });
@@ -2022,7 +2026,7 @@
     return m;
   }
   var whoText = '', roleText = '', current = 'home';
-  function setCurrent(id) { current = id; renderNav(); var m = modules().filter(function (x) { return x.id === id; })[0]; $('title').textContent = m ? m.label : 'การวางสื่อในร้าน'; }
+  function setCurrent(id) { current = id; if (id !== 'floor') flo.backTo = null; renderNav(); var m = modules().filter(function (x) { return x.id === id; })[0]; $('title').textContent = m ? m.label : 'การวางสื่อในร้าน'; }
   function renderNav() {
     var mods = modules(), nav = $('nav'); nav.textContent = '';
     $('app').classList.toggle('solo', mods.length < 2);
