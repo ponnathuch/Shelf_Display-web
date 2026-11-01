@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="th">
 <head>
 <meta charset="utf-8">
@@ -57,6 +57,10 @@
   .chip.warn { background: var(--c-warn-soft); color: var(--c-warn); border-color: var(--c-warn-line); }
   .chip.err { background: var(--c-err-soft); color: var(--c-err); border-color: var(--c-err-line); }
   .chip.code { font-family: var(--font-code); }
+  .seg-solo { min-height: var(--size-target-lg); padding: 0 var(--space-3); border: 1px solid var(--c-line-strong); border-radius: var(--radius-s); background: var(--c-surface); color: var(--c-ink-2); cursor: pointer; }
+  .seg-solo[aria-pressed="true"] { background: var(--c-brand-soft); border-color: var(--c-brand); color: var(--c-brand-strong); font-weight: bold; }
+  .seg-solo .n { display: inline-block; margin-left: var(--space-2); min-width: var(--size-icon); padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--c-line); font-size: var(--fs-xs); text-align: center; }
+  .seg-solo .n.hot { background: var(--c-warn-soft); color: var(--c-warn); border: 1px solid var(--c-warn-line); }
   .sortsel { width: auto; }
   .search { flex: 1; min-width: 14rem; max-width: 26rem; }
   .thumb { display: block; width: var(--size-thumb); height: var(--size-thumb); object-fit: cover; border-radius: var(--radius-s);
@@ -168,6 +172,7 @@
   var ERR = {
     'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
     'missing:dates': 'ยังไม่ได้ใส่วันเริ่ม และวันสิ้นสุด (หรือติ๊ก "ไม่มีวันหมดอายุ")', 'missing:agreement_no': 'ยังไม่ได้ใส่เลขที่สัญญา/TTA',
+    bad_target: 'แคมเปญที่เลือกผูกไม่ได้ (ยกเลิกแล้วหรือเป็นเคสจากคลัง)',
     'missing:ad': 'ยังไม่ได้ใส่เลขโฆษณาและวันหมดอายุ', 'missing:branches': 'ยังไม่ได้เลือกสาขา',
     self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
     expired: 'เซสชันหมดอายุ กรุณาเข้าใหม่จากเมนู Job Tracker', bad_signature: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker',
@@ -244,6 +249,7 @@
     u.appendChild(el('strong', '', head)); u.appendChild(el('span', '', 'สิ้นสุด ' + thDate(c.end_date)));
     return u;
   }
+  function fromLine(c) { return c.status === 'approved' && String(c.approved_by || '').indexOf('line:') === 0; }
   function incomplete(c) {
     return c.status === 'approved' && (!c.brand || !(c.position_types || c.shd_position_types));
   }
@@ -269,6 +275,7 @@
     if (c.source === 'warehouse') chips.appendChild(el('span', 'chip warn', 'จากคลัง'));
     if (opts.office && c.photo_count > 1) chips.appendChild(el('span', 'chip', c.photo_count + ' รูป'));
     if (c.status === 'pending' && c.start_date && daysTo(c.start_date) <= 14) chips.appendChild(el('span', 'chip err', 'เร่งด่วน'));
+    if (opts.office && fromLine(c)) chips.appendChild(el('span', 'chip', 'อนุมัติจาก LINE'));
     if (opts.office && incomplete(c)) chips.appendChild(el('span', 'chip warn', 'ต้องกรอกข้อมูลเพิ่ม'));
     if (c.open_ended && c.status !== 'approved') chips.appendChild(el('span', 'chip ok', 'ไม่มีวันหมดอายุ'));
     left.appendChild(chips); head.appendChild(left);
@@ -386,7 +393,12 @@
     var sb = el('input', 'input search'); sb.type = 'search'; sb.value = needle;
     sb.placeholder = 'ค้นหาชื่อหรือเลขทะเบียน'; sb.setAttribute('aria-label', 'ค้นหาแคมเปญจากชื่อหรือเลขทะเบียน');
     sb.oninput = function () { needle = sb.value; renderList(); };
-    b.appendChild(sb); b.appendChild(sortBox(renderList)); b.appendChild(el('span', 'grow'));
+    b.appendChild(sb); b.appendChild(sortBox(renderList));
+    var nl = all.filter(fromLine).length;
+    var lf = el('button', 'seg-solo', 'อนุมัติจาก LINE'); lf.type = 'button'; lf.setAttribute('aria-pressed', String(lineOnly));
+    lf.appendChild(el('span', 'n' + (nl ? ' hot' : ''), String(nl)));
+    lf.onclick = function () { lineOnly = !lineOnly; lf.setAttribute('aria-pressed', String(lineOnly)); renderList(); };
+    b.appendChild(lf); b.appendChild(el('span', 'grow'));
     if (isApprover()) { var s = el('button', 'linkbtn', 'ตั้งค่าตำแหน่ง'); s.type = 'button'; s.onclick = settings; b.appendChild(s); }
     b.appendChild(button('+ ลงทะเบียนแคมเปญ', '', function () { form(null); }));
   }
@@ -395,14 +407,15 @@
     if (!keepMsg) loading();
     api('list', {}).then(function (d) { all = d.campaigns; done(); show(m, m ? 'ok' : ''); renderOffice(); }).catch(fail);
   }
-  var needle = '';
+  var needle = '', lineOnly = false;
   function renderOffice() { renderBar(); renderList(); }
   function renderList() {
     var v = $('view'); v.textContent = '';
     var term = needle.trim().toLowerCase();
     // a search looks in every tab, so a code typed from LINE is found whatever its status
     var rows = all.filter(function (c) {
-      return term ? ((c.code || '') + ' ' + (c.brand || '') + ' ' + (c.registrant_name || '')).toLowerCase().indexOf(term) !== -1 : c.status === tab;
+      if (lineOnly && !fromLine(c)) return false;
+      return term ? ((c.code || '') + ' ' + (c.brand || '') + ' ' + (c.registrant_name || '')).toLowerCase().indexOf(term) !== -1 : (lineOnly || c.status === tab);
     });
     sortRows(rows);
     if (!rows.length) { v.appendChild(el('p', 'empty', term ? 'ไม่พบแคมเปญที่ตรงกับคำค้น' : tab === 'pending' ? 'ไม่มีแคมเปญรออนุมัติ' : 'ไม่มีรายการ')); return; }
@@ -413,6 +426,29 @@
   }
 
   // ---------- detail ----------
+  // A pending warehouse draft can be linked to a registered campaign: its photos move there and the draft is cancelled.
+  function linkBox(v, c) {
+    if (c.source !== 'warehouse' || c.status !== 'pending') return;
+    var cands = all.filter(function (x) { return x.source !== 'warehouse' && (x.status === 'pending' || x.status === 'approved'); });
+    if (!cands.length) return;
+    var key = String(c.brand || '').toLowerCase().replace(/\s+/g, '');
+    function same(x) { var b = String(x.brand || '').toLowerCase().replace(/\s+/g, ''); return key.length >= 3 && b.length >= 3 && (key.indexOf(b) !== -1 || b.indexOf(key) !== -1); }
+    cands.sort(function (a, b) { return (same(b) ? 1 : 0) - (same(a) ? 1 : 0) || b.id - a.id; });
+    var box = el('section', 'card'); box.appendChild(el('h2', 'sec', 'ตรงกับแคมเปญที่ลงทะเบียนไว้ไหม'));
+    var sel = el('select', 'input'); sel.setAttribute('aria-label', 'แคมเปญที่ลงทะเบียนไว้');
+    cands.forEach(function (x) {
+      var op = el('option', '', (same(x) ? '★ ' : '') + x.code + ' ' + (x.brand || '') + ' · ' + ((x.position_types || {}).name || 'ยังไม่ระบุตำแหน่ง') + ' · ' + (x.end_date ? 'ถึง ' + x.end_date : 'ไม่มีวันหมดอายุ') + (x.status === 'pending' ? ' (รออนุมัติ)' : ''));
+      op.value = x.id; sel.appendChild(op);
+    });
+    var go = button('ใช่ ผูกกับแคมเปญนี้', 'alt', function () {
+      if (!confirm('ย้ายรูปไปแคมเปญที่เลือก และยกเลิกเคสร่างนี้?')) return;
+      go.disabled = true;
+      api('link', { id: c.id, target: Number(sel.value) }).then(function (r) { tab = 'approved'; show('ผูกกับ ' + r.code + ' แล้ว แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
+        .catch(function (e) { go.disabled = false; show(e.message, 'err'); });
+    });
+    var row = el('div', 'row'); row.appendChild(sel); row.appendChild(go);
+    box.appendChild(row); v.appendChild(box);
+  }
   function detail(id) {
     loading();
     Promise.all([api('get', { id: id }), api('photos', { id: id })]).then(function (rs) {
@@ -437,6 +473,7 @@
         }));
       }
       v.appendChild(card(c, { office: true, actions: actions }));
+      linkBox(v, c);
       if (rs[1].photos.length) {
         var ph = el('section', 'card'); ph.appendChild(el('h2', 'sec', 'รูปจากคลัง'));
         ph.appendChild(photoGrid(rs[1].photos)); v.appendChild(ph);

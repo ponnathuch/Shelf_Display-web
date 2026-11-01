@@ -74,6 +74,14 @@
   --size-empty: 64px;
   --size-tile: 130px;
   --size-thumb: 120px;
+  --size-nav: 244px;
+  --size-row-thumb: 44px;
+  --size-cell: 132px;
+  --size-bar: 56px;
+  --size-card-min: 260px;
+  --size-kpi-min: 160px;
+  --size-bar-h: 8px;
+  --size-tab-line: 3px;
   --size-photo: 320px;
   --size-strip-w: 54px;
   --size-strip-h: 70px;
