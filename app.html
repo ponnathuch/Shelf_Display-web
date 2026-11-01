@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261107b">
+<link rel="stylesheet" href="shd-theme.css?v=20261107c">
 <style>
   body { line-height: 1.6; }
 
@@ -193,7 +193,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261107b">
+<link rel="stylesheet" href="shd-v2.css?v=20261107c">
 </head>
 <body>
 <div class="app" id="app">
@@ -1360,6 +1360,11 @@
 
   function floor() {
     $('bar').hidden = true; show(''); var v = $('view'); v.textContent = '';
+    if (!isOffice()) { // a branch sees only its own plan
+      flo.branch = sess.staff.unit; var mine = el('div'); v.appendChild(mine);
+      if (BRANCH_RE.test(flo.branch)) loadFloor(mine); else mine.appendChild(el('p', 'empty-note', 'ไม่พบรหัสสาขาของคุณ'));
+      return;
+    }
     var tb = el('div', 'toolbar'), inp = el('input', 'input search'), dl = el('datalist'); dl.id = 'flo-list';
     inp.type = 'text'; inp.setAttribute('list', 'flo-list'); inp.placeholder = 'พิมพ์รหัสหรือชื่อสาขา เช่น IC002'; inp.setAttribute('aria-label', 'เลือกสาขา'); inp.value = flo.branch;
     units.filter(function (u) { return u.is_branch; }).forEach(function (u) { var o = el('option'); o.value = u.code; o.label = u.name; dl.appendChild(o); });
@@ -1708,7 +1713,7 @@
   function modules() {
     var r = sess.staff.role;
     if (r === 'WAREHOUSE') return [{ id: 'home', label: 'ค้นหา', icon: 'home' }];
-    if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม', icon: 'home' }];
+    if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'floor', label: 'ผังร้าน', icon: 'floor' }];
     var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }, { id: 'floor', label: 'ผังและพื้นที่', icon: 'floor' }];
     if (isApprover()) m.push({ id: 'settings', label: 'ตั้งค่า', icon: 'gear' });
     return m;
