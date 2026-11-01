@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261106e">
+<link rel="stylesheet" href="shd-theme.css?v=20261107a">
 <style>
   body { line-height: 1.6; }
 
@@ -155,6 +155,9 @@
   .trow > .cap { width: var(--size-cell); }
   .trow:last-child { border-bottom: 0; }
   .facts.one { grid-template-columns: minmax(0, 1fr); margin-top: var(--space-2); }
+  .floor-img { display: block; width: 100%; max-width: var(--max-page-image); height: auto; border: 1px solid var(--c-line); border-radius: var(--radius-s); margin-bottom: var(--space-3); }
+  .slot-code { min-width: var(--size-cell); }
+  .trow .grow { flex: 1 1 var(--size-cell); }
   .fold { padding: 0; margin-bottom: var(--space-2); }
   .fold > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--size-target-lg); padding: var(--space-2) var(--space-4); cursor: pointer; list-style: none; }
   .fold > summary::-webkit-details-marker { display: none; }
@@ -190,7 +193,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261106e">
+<link rel="stylesheet" href="shd-v2.css?v=20261107a">
 </head>
 <body>
 <div class="app" id="app">
@@ -850,11 +853,11 @@
 
   // ---------- form ----------
   // Resize to at most 1600 px and re-encode as JPEG, so a phone photo is about 300 KB; resolves to the base64 text.
-  function toJpegBase64(file) {
+  function toJpegBase64(file, maxSide) {
     return new Promise(function (resolve, reject) {
       var url = URL.createObjectURL(file), im = new Image();
       im.onload = function () {
-        var s = Math.min(1, 1600 / Math.max(im.width, im.height)), cv = document.createElement('canvas');
+        var s = Math.min(1, (maxSide || 1600) / Math.max(im.width, im.height)), cv = document.createElement('canvas');
         cv.width = Math.round(im.width * s); cv.height = Math.round(im.height * s);
         var cx = cv.getContext('2d'); cx.fillStyle = 'white'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(im, 0, 0, cv.width, cv.height);
         URL.revokeObjectURL(url);
@@ -1051,22 +1054,26 @@
   function pkgOf(id) { return cash.packages.filter(function (p) { return p.id === id; })[0]; }
 
   // Settings: packages (name, rate per brand per month, which branches). Approvers only.
-  function cashierSettings(v) {
-    var ef = fold('สิทธิ์แก้ไขสัญญา', 'ใครเพิ่ม/แก้ไข/ยกเลิกสัญญาได้', false), eb = ef.body; v.appendChild(ef.node);
-    eb.appendChild(el('p', 'hint', 'ผู้ดูแลและผู้อนุมัติแก้ได้เสมอ คนอื่นในทีมที่เลือกไว้ที่นี่จะเพิ่ม/แก้ไข/ยกเลิกสัญญาได้ คนที่ไม่ได้เลือกยังดูได้อย่างเดียว'));
-    api('cashier_editors').then(function (d) {
+  // A people list saved under its own actions: who may edit one area (cashier contracts, floor plans).
+  function editorsFold(v, title, note, listAction, saveAction, hint) {
+    var ef = fold(title, note, false), eb = ef.body; v.appendChild(ef.node);
+    eb.appendChild(el('p', 'hint', hint));
+    api(listAction).then(function (d) {
       var byName = {}; people.forEach(function (x) { byName[x.username] = x.name; });
       var pick = multiPicker(eb, {
-        title: 'ผู้มีสิทธิ์แก้ไขสัญญา', required: false, noun: 'คน', placeholder: 'เลือกคน...', searchPlaceholder: 'พิมพ์ชื่อ...', initial: d.usernames,
+        title: 'ผู้มีสิทธิ์', required: false, noun: 'คน', placeholder: 'เลือกคน...', searchPlaceholder: 'พิมพ์ชื่อ...', initial: d.usernames,
         items: people.map(function (x) { return { code: x.username, name: x.name, sub: x.username, leaves: [x.username] }; }),
         labelOf: function (code) { return byName[code] || code; }
       });
       var row = el('div', 'row');
       row.appendChild(button('บันทึกสิทธิ์', '', function () {
-        api('cashier_editors_save', { usernames: pick.getCodes() }).then(function () { show('บันทึกสิทธิ์แล้ว', 'ok'); }).catch(function (e) { show(e.message, 'err'); });
+        api(saveAction, { usernames: pick.getCodes() }).then(function () { show('บันทึกสิทธิ์แล้ว', 'ok'); }).catch(function (e) { show(e.message, 'err'); });
       }));
       eb.appendChild(row);
     }).catch(function (e) { show(e.message, 'err'); });
+  }
+  function cashierSettings(v) {
+    editorsFold(v, 'สิทธิ์แก้ไขสัญญา', 'ใครเพิ่ม/แก้ไข/ยกเลิกสัญญาได้', 'cashier_editors', 'cashier_editors_save', 'ผู้ดูแลและผู้อนุมัติแก้ได้เสมอ คนอื่นในทีมที่เลือกไว้ที่นี่จะเพิ่ม/แก้ไข/ยกเลิกสัญญาได้ คนที่ไม่ได้เลือกยังดูได้อย่างเดียว');
     var holder = el('div'); v.appendChild(holder); holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
     api('cashier_packages').then(function (d) {
       holder.textContent = '';
@@ -1290,6 +1297,208 @@
   }
 
   // ---------- settings ----------
+  // ---------- floor plans and places ----------
+  var flo = { branch: '', data: null, view: 'active', needle: '' };
+  var KIND_TH = { header: 'หัวชั้น', glass: 'กระจกหน้าร้าน' }, TENANT_TH = { icare: 'iCare', rent: 'เช่า' };
+
+  // Minimal .xlsx reader (an .xlsx is a zip of XML files): enough for "Lock section_<branch>.xlsx".
+  function zipEntries(buf) {
+    var dv = new DataView(buf), u8 = new Uint8Array(buf), i = buf.byteLength - 22;
+    while (i >= 0 && dv.getUint32(i, true) !== 0x06054b50) i--;
+    if (i < 0) throw new Error('ไฟล์นี้ไม่ใช่ไฟล์ .xlsx');
+    var n = dv.getUint16(i + 10, true), p = dv.getUint32(i + 16, true), files = {};
+    for (var k = 0; k < n; k++) {
+      var nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
+      files[new TextDecoder().decode(u8.subarray(p + 46, p + 46 + nl))] = { method: dv.getUint16(p + 10, true), size: dv.getUint32(p + 20, true), off: dv.getUint32(p + 42, true) };
+      p += 46 + nl + xl + cl;
+    }
+    return { u8: u8, dv: dv, files: files };
+  }
+  function zipRead(z, name) {
+    var f = z.files[name]; if (!f) return Promise.resolve(null);
+    var o = f.off, start = o + 30 + z.dv.getUint16(o + 26, true) + z.dv.getUint16(o + 28, true), raw = z.u8.subarray(start, start + f.size);
+    if (f.method === 0) return Promise.resolve(raw);
+    return new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer().then(function (b) { return new Uint8Array(b); });
+  }
+  // -> { slots: [{code, category, active}], image: Blob|null }
+  function readXlsx(file, branch) {
+    return file.arrayBuffer().then(function (buf) {
+      var z = zipEntries(buf), dec = new TextDecoder();
+      var text = function (n) { return zipRead(z, n).then(function (b) { return b ? dec.decode(b) : ''; }); };
+      var xml = function (x) { return new DOMParser().parseFromString(x || '<x/>', 'application/xml'); };
+      return Promise.all([text('xl/workbook.xml'), text('xl/_rels/workbook.xml.rels'), text('xl/sharedStrings.xml')]).then(function (t) {
+        var NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+        var strings = [].map.call(xml(t[2]).getElementsByTagName('si'), function (si) { return [].map.call(si.getElementsByTagName('t'), function (x) { return x.textContent; }).join(''); });
+        var sheets = [].slice.call(xml(t[0]).getElementsByTagName('sheet'));
+        var sh = sheets.filter(function (s) { return s.getAttribute('name') === branch; })[0] || sheets[0];
+        if (!sh) throw new Error('ไม่พบชีตในไฟล์');
+        var rid = sh.getAttributeNS(NS, 'id') || sh.getAttribute('r:id');
+        var rel = [].slice.call(xml(t[1]).getElementsByTagName('Relationship')).filter(function (r) { return r.getAttribute('Id') === rid; })[0];
+        var target = rel.getAttribute('Target').replace(/^\//, ''); if (target.indexOf('xl/') !== 0) target = 'xl/' + target;
+        var media = Object.keys(z.files).filter(function (n) { return /^xl\/media\/.+\.(jpe?g|png)$/i.test(n); }).sort()[0];
+        return Promise.all([text(target), media ? zipRead(z, media) : null]).then(function (r) {
+          var rows = [].slice.call(xml(r[0]).getElementsByTagName('row')), slots = [];
+          rows.forEach(function (row, idx) {
+            if (idx === 0) return; // header row
+            var cell = {};
+            [].forEach.call(row.getElementsByTagName('c'), function (c) {
+              var col = (c.getAttribute('r') || '').replace(/\d+/g, ''), ty = c.getAttribute('t'), v = c.getElementsByTagName('v')[0], val = '';
+              if (ty === 's' && v) val = strings[Number(v.textContent)] || '';
+              else if (ty === 'inlineStr') val = [].map.call(c.getElementsByTagName('t'), function (x) { return x.textContent; }).join('');
+              else if (v) val = v.textContent;
+              cell[col] = String(val).trim();
+            });
+            if (!cell.B) return;
+            slots.push({ code: cell.B.toUpperCase(), category: cell.C || '', active: !/ไม่ใช้/.test(cell.D || '') });
+          });
+          var img = r[1] ? new Blob([r[1]], { type: /\.png$/i.test(media) ? 'image/png' : 'image/jpeg' }) : null;
+          return { slots: slots, image: img };
+        });
+      });
+    });
+  }
+
+  function floor() {
+    $('bar').hidden = true; show(''); var v = $('view'); v.textContent = '';
+    var tb = el('div', 'toolbar'), inp = el('input', 'input search'), dl = el('datalist'); dl.id = 'flo-list';
+    inp.type = 'text'; inp.setAttribute('list', 'flo-list'); inp.placeholder = 'พิมพ์รหัสหรือชื่อสาขา เช่น IC002'; inp.setAttribute('aria-label', 'เลือกสาขา'); inp.value = flo.branch;
+    units.filter(function (u) { return u.is_branch; }).forEach(function (u) { var o = el('option'); o.value = u.code; o.label = u.name; dl.appendChild(o); });
+    tb.appendChild(inp); tb.appendChild(dl); v.appendChild(tb);
+    var holder = el('div'); v.appendChild(holder);
+    function go2() { var c = inp.value.trim().toUpperCase(); if (BRANCH_RE.test(c)) { flo.branch = c; loadFloor(holder); } }
+    inp.onchange = go2; inp.onkeydown = function (e) { if (e.key === 'Enter') go2(); };
+    if (flo.branch) loadFloor(holder); else holder.appendChild(el('p', 'empty-note', 'เลือกสาขาเพื่อดูผังร้านและตำแหน่งป้าย'));
+  }
+  function loadFloor(holder) {
+    holder.textContent = ''; holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
+    api('floor_get', { branch: flo.branch }).then(function (d) { flo.data = d; renderFloor(holder); }).catch(function (e) { holder.textContent = ''; show(e.message, 'err'); });
+  }
+  function renderFloor(holder) {
+    holder.textContent = ''; var d = flo.data, lay = d.layout;
+    var card = el('section', 'card'); card.appendChild(el('h2', 'sec', 'ผังร้าน ' + flo.branch));
+    if (lay && lay.image_url) {
+      var a = el('a'); a.href = lay.image_url; a.target = '_blank'; a.rel = 'noopener'; a.setAttribute('aria-label', 'เปิดรูปผังเต็ม');
+      var im = el('img', 'floor-img'); im.src = lay.image_url; im.alt = 'ผังร้าน ' + flo.branch; a.appendChild(im); card.appendChild(a);
+    } else card.appendChild(el('p', 'empty-note', 'ยังไม่มีรูปผังของสาขานี้'));
+    var dl = el('dl', 'facts'); lay = lay || {};
+    fact(dl, 'ขนาดร้าน', lay.sqm ? lay.sqm + ' ตร.ม.' : ''); fact(dl, 'Size', lay.size_label); fact(dl, 'ชนิด POG', lay.pog_type); fact(dl, 'ชนิดร้าน', lay.store_type);
+    if (dl.children.length) card.appendChild(dl);
+    if (d.can_edit) {
+      var row = el('div', 'row');
+      row.appendChild(button('อัปโหลดผัง / ข้อมูลร้าน', 'alt', function () { layoutForm(holder); }));
+      var fi = el('input'); fi.type = 'file'; fi.accept = '.xlsx'; fi.hidden = true;
+      fi.onchange = function () { if (fi.files[0]) importXlsx(fi.files[0], holder); fi.value = ''; };
+      row.appendChild(button('นำเข้าจากไฟล์ Lock section (.xlsx)', 'alt', function () { fi.click(); })); row.appendChild(fi);
+      card.appendChild(row);
+    }
+    holder.appendChild(card);
+    holder.appendChild(slotsCard(holder));
+  }
+  function slotsCard(holder) {
+    var d = flo.data, card = el('section', 'card'), all = d.slots;
+    card.appendChild(el('h2', 'sec', 'ตำแหน่งป้าย (' + all.length + ')'));
+    var views = [['active', 'ใช้งาน', function (s) { return s.active && s.kind === 'header'; }], ['retired', 'เลิกใช้', function (s) { return !s.active; }], ['glass', 'กระจกหน้าร้าน', function (s) { return s.active && s.kind === 'glass'; }]];
+    var tb = el('div', 'toolbar'), seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'กรองตำแหน่ง');
+    views.forEach(function (t) {
+      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(flo.view === t[0]));
+      x.appendChild(el('span', 'n', String(all.filter(t[2]).length))); x.onclick = function () { flo.view = t[0]; renderFloor(holder); }; seg.appendChild(x);
+    });
+    var sb = el('input', 'input search'); sb.type = 'search'; sb.value = flo.needle; sb.placeholder = 'ค้นหารหัสหรือหมวด'; sb.setAttribute('aria-label', 'ค้นหาตำแหน่ง');
+    tb.appendChild(seg); tb.appendChild(sb); tb.appendChild(el('span', 'grow'));
+    if (d.can_edit) tb.appendChild(button('+ เพิ่มตำแหน่ง', '', function () { slotForm(holder, null); }));
+    card.appendChild(tb);
+    var list = el('div'); card.appendChild(list);
+    function paint() {
+      list.textContent = '';
+      var cur = views.filter(function (t) { return t[0] === flo.view; })[0][2], q = flo.needle.trim().toLowerCase();
+      var rows = all.filter(cur).filter(function (s) { return !q || (s.code + ' ' + (s.category || '') + ' ' + (s.name || '')).toLowerCase().indexOf(q) >= 0; });
+      if (!rows.length) list.appendChild(el('p', 'empty-note', 'ไม่มีตำแหน่งในกลุ่มนี้'));
+      rows.forEach(function (s) {
+        var r = el('div', 'trow'); r.appendChild(el('b', 'slot-code', s.code));
+        r.appendChild(el('span', 'sub grow', [s.name, s.category, s.note].filter(Boolean).join(' · ')));
+        r.appendChild(el('span', 'chip', KIND_TH[s.kind] || s.kind)); if (s.kind === 'glass' || s.tenant === 'rent') r.appendChild(el('span', 'chip', TENANT_TH[s.tenant]));
+        if (d.can_edit) {
+          r.appendChild(button('แก้ไข', 'alt', function () { slotForm(holder, s); }));
+          r.appendChild(button('ลบ', 'danger', function () {
+            if (!confirm('ลบตำแหน่ง ' + s.code + ' ?')) return;
+            api('slot_delete', { id: s.id }).then(function () { loadFloor(holder); }).catch(function (e) { show(e.message, 'err'); });
+          }));
+        }
+        list.appendChild(r);
+      });
+    }
+    sb.oninput = function () { flo.needle = sb.value; paint(); }; paint();
+    return card;
+  }
+  function slotForm(holder, s) {
+    var d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', s ? 'แก้ไขตำแหน่ง ' + s.code : 'เพิ่มตำแหน่ง'));
+    var g = el('div', 'grid');
+    function fld(text, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el('input', 'input'); i.type = 'text'; i.value = val || ''; l.appendChild(i); g.appendChild(l); return i; }
+    function sel(text, opts, val) {
+      var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var x = el('select', 'input');
+      opts.forEach(function (o) { var op = el('option', '', o[1]); op.value = o[0]; if (o[0] === val) op.selected = true; x.appendChild(op); });
+      l.appendChild(x); g.appendChild(l); return x;
+    }
+    var code = fld('รหัส (เช่น OA03 หรือ กระจกซ้าย)', s && s.code); if (s) code.readOnly = true;
+    var name = fld('ชื่อ/คำอธิบาย', s && s.name), cat = fld('หมวดสินค้า', s && s.category);
+    var kind = sel('ชนิด', [['header', 'หัวชั้น'], ['glass', 'กระจกหน้าร้าน']], s ? s.kind : 'glass');
+    var tenant = sel('ผู้ใช้ตำแหน่ง', [['icare', 'iCare ติดเอง'], ['rent', 'ให้ซัพพลายเออร์เช่า']], s ? s.tenant : 'icare');
+    var note = fld('หมายเหตุ', s && s.note); d.appendChild(g);
+    var al = el('label', 'check'), act = el('input'); act.type = 'checkbox'; act.checked = s ? s.active : true; al.appendChild(act); al.appendChild(document.createTextNode('ใช้งานอยู่ (ติ๊กออก = เลิกใช้)')); d.appendChild(al);
+    var row = el('div', 'row');
+    row.appendChild(button('บันทึก', '', function () {
+      if (!code.value.trim()) { show('ใส่รหัสตำแหน่งก่อน', 'err'); return; }
+      api('slot_save', { branch: flo.branch, code: code.value, name: name.value, category: cat.value, kind: kind.value, tenant: tenant.value, note: note.value, active: act.checked })
+        .then(function () { show('บันทึกตำแหน่งแล้ว', 'ok'); loadFloor(holder); }).catch(function (e) { show(e.message, 'err'); });
+    }));
+    row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
+    holder.textContent = ''; holder.appendChild(d);
+  }
+  function layoutForm(holder) {
+    var lay = flo.data.layout || {}, d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', 'ผังร้านและข้อมูลร้าน ' + flo.branch));
+    var g = el('div', 'grid');
+    function fld(text, type, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el('input', 'input'); i.type = type; i.value = val == null ? '' : val; l.appendChild(i); g.appendChild(l); return i; }
+    var sqm = fld('ขนาดร้าน (ตร.ม.)', 'number', lay.sqm), size = fld('Size (เช่น S)', 'text', lay.size_label), pog = fld('ชนิด POG (เช่น A)', 'text', lay.pog_type), st = fld('ชนิดร้าน (เช่น Stand Alone)', 'text', lay.store_type);
+    d.appendChild(g);
+    var il = el('label', 'f'); il.appendChild(el('span', 't', 'รูปผังร้าน (เว้นว่าง = ใช้รูปเดิม ถ้าผังเปลี่ยน ต้องย้ายหมุดเอง)'));
+    var fi = el('input', 'input'); fi.type = 'file'; fi.accept = 'image/*'; il.appendChild(fi); d.appendChild(il);
+    var row = el('div', 'row');
+    var save = button('บันทึก', '', function () {
+      save.disabled = true;
+      var pre = fi.files[0] ? toJpegBase64(fi.files[0], 2000) : Promise.resolve(null);
+      pre.then(function (img) {
+        var b = { branch: flo.branch, sqm: sqm.value, size_label: size.value, pog_type: pog.value, store_type: st.value }; if (img) b.image = img;
+        return api('floor_layout_save', b);
+      }).then(function () { show('บันทึกผังแล้ว', 'ok'); loadFloor(holder); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
+    });
+    row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
+    holder.textContent = ''; holder.appendChild(d);
+  }
+  // Import "Lock section" for this branch: show what was found first, then save places (pins stay) and the plan image.
+  function importXlsx(file, holder) {
+    show('กำลังอ่านไฟล์...');
+    readXlsx(file, flo.branch).then(function (r) {
+      show('');
+      if (!r.slots.length) throw new Error('ไม่พบรายการ Section ในไฟล์ (คอลัมน์ B)');
+      var on = r.slots.filter(function (s) { return s.active; }).length, d = el('section', 'card');
+      d.appendChild(el('h2', 'sec', 'นำเข้าจาก ' + file.name));
+      d.appendChild(el('p', '', 'พบ ' + r.slots.length + ' ตำแหน่ง (ใช้งาน ' + on + ' · เลิกใช้ ' + (r.slots.length - on) + ')' + (r.image ? ' และรูปผัง 1 รูป' : ' ไม่พบรูปผังในไฟล์')));
+      d.appendChild(el('p', 'hint', 'ตำแหน่งที่มีอยู่แล้วจะอัปเดตหมวดและสถานะ โดยหมุดเดิมไม่หาย รูปผังใหม่จะแทนรูปเดิม'));
+      if (r.image) { var im = el('img', 'floor-img'); im.src = URL.createObjectURL(r.image); im.alt = 'ผังในไฟล์'; d.appendChild(im); }
+      var row = el('div', 'row'), go2 = button('นำเข้า', '', function () {
+        go2.disabled = true; show('กำลังนำเข้า...');
+        var lay = (flo.data && flo.data.layout) || {};
+        var meta = { branch: flo.branch, sqm: lay.sqm, size_label: lay.size_label, pog_type: lay.pog_type, store_type: lay.store_type };
+        (r.image ? toJpegBase64(r.image, 2000).then(function (b64) { meta.image = b64; return api('floor_layout_save', meta); }) : Promise.resolve())
+          .then(function () { return api('floor_import', { branch: flo.branch, slots: r.slots }); })
+          .then(function (x) { show('นำเข้า ' + x.count + ' ตำแหน่งแล้ว', 'ok'); loadFloor(holder); })
+          .catch(function (e) { go2.disabled = false; show(e.message, 'err'); });
+      });
+      row.appendChild(go2); row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
+      holder.textContent = ''; holder.appendChild(d);
+    }).catch(function (e) { show(e.message, 'err'); });
+  }
+
   var setTab = 'media';
   // A collapsible block: a title row that opens and closes its body.
   function fold(title, note, open) {
@@ -1302,12 +1511,13 @@
     $('bar').hidden = true; show('');
     var v = $('view'); v.textContent = '';
     var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'หมวดการตั้งค่า');
-    [['media', 'สื่อ'], ['cashier', 'ชั้นแคชเชียร์']].forEach(function (t) {
+    [['media', 'สื่อ'], ['cashier', 'ชั้นแคชเชียร์'], ['floor', 'ผังร้าน']].forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(setTab === t[0]));
       x.onclick = function () { setTab = t[0]; settings(); }; seg.appendChild(x);
     });
     var tb = el('div', 'toolbar'); tb.appendChild(seg); v.appendChild(tb);
     if (setTab === 'cashier') { cashierSettings(v); return; }
+    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังร้าน', 'ใครอัปโหลดผัง นำเข้า และแก้ตำแหน่งได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติจัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section และเพิ่ม/แก้ตำแหน่งได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); return; }
     var fd = fold('ประเภทตำแหน่งสื่อ', 'เพดานต่อสาขา เพิ่มประเภทใหม่ได้', true), card = fd.body; v.appendChild(fd.node); card.classList.add('tset');
     card.appendChild(el('p', 'hint', 'เพดาน = จำนวนสื่อสูงสุดต่อสาขาในช่วงวันที่ชนกัน เว้นว่าง = ไม่จำกัด ประเภทที่ปิดการใช้งานจะไม่ให้เลือกตอนลงทะเบียน แต่แคมเปญเดิมยังอยู่'));
     var body = el('div'); card.appendChild(body);
@@ -1485,7 +1695,8 @@
     media: 'M4 5h16v11H4zM8 20h8M12 16v4',
     gear: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19 12l2-1-2-4-2 1-2-1-1-2h-4l-1 2-2 1-2-1-2 4 2 1v2l-2 1 2 4 2-1 2 1 1 2h4l1-2 2-1 2 1 2-4-2-1z',
     shelf: 'M4 4v16M20 4v16M4 9h16M4 15h16',
-    cashier: 'M3 8h18v10H3zM7 8V5h10v3M8 13h8'
+    cashier: 'M3 8h18v10H3zM7 8V5h10v3M8 13h8',
+    floor: 'M3 3h18v18H3zM3 9h18M9 9v12'
   };
   function icon(k) {
     var n = 'http://www.w3.org/2000/svg', sv = document.createElementNS(n, 'svg'), p = document.createElementNS(n, 'path');
@@ -1498,7 +1709,7 @@
     var r = sess.staff.role;
     if (r === 'WAREHOUSE') return [{ id: 'home', label: 'ค้นหา', icon: 'home' }];
     if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม', icon: 'home' }];
-    var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }];
+    var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }, { id: 'floor', label: 'ผังและพื้นที่', icon: 'floor' }];
     if (isApprover()) m.push({ id: 'settings', label: 'ตั้งค่า', icon: 'gear' });
     return m;
   }
@@ -1532,7 +1743,7 @@
     var id = (location.hash || '#/home').slice(2).split('/')[0];
     if (!modules().some(function (m) { return m.id === id; })) id = 'home';
     setCurrent(id); $('app').classList.remove('open'); $('bar').hidden = true; show('');
-    if (id === 'media') loadOffice(); else if (id === 'cashier') cashier(); else if (id === 'settings') settings(); else showHome();
+    if (id === 'media') loadOffice(); else if (id === 'cashier') cashier(); else if (id === 'floor') floor(); else if (id === 'settings') settings(); else showHome();
   }
 
   // ---------- start ----------
