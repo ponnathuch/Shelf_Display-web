@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261110d">
+<link rel="stylesheet" href="shd-theme.css?v=20261110e">
 <style>
   body { line-height: 1.6; }
 
@@ -214,7 +214,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261110d">
+<link rel="stylesheet" href="shd-v2.css?v=20261110e">
 </head>
 <body>
 <div class="app" id="app">
@@ -747,7 +747,10 @@
             if (!nm.value.trim()) { show('ใส่ชื่อตำแหน่งก่อน', 'err'); return; }
             if (!confirm('สร้างตำแหน่ง ' + nm.value.trim().toUpperCase() + ' (ยังไม่ปักหมุด) และผูกแคมเปญนี้ใน ' + missing.length + ' สาขา?')) return;
             api('campaign_spots', { campaign_id: id, code: nm.value }).then(function (r) { detailNote = 'สร้าง ' + r.created + ' ตำแหน่ง และผูกแล้ว ' + r.linked + ' สาขา'; detail(id); })
-              .catch(function (e) { show(e.message + (e.data && e.data.branches ? ': ' + e.data.branches.join(', ') : ''), 'err'); });
+              .catch(function (e) {
+                var d = e.data || {};
+                show(d.branches ? 'ชื่อ ' + nm.value.trim().toUpperCase() + ' ซ้ำกับหัวชั้น/กระจกที่มีอยู่แล้วใน ' + (d.count || d.branches.length) + ' สาขา: ' + d.branches.join(', ') + (d.count > d.branches.length ? ' ...' : '') + ' ให้ใช้ชื่ออื่น' : e.message, 'err');
+              });
           }));
           sc.appendChild(bulk);
         }
