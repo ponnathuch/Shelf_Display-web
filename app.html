@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261107c">
+<link rel="stylesheet" href="shd-theme.css?v=20261108a">
 <style>
   body { line-height: 1.6; }
 
@@ -155,6 +155,14 @@
   .trow > .cap { width: var(--size-cell); }
   .trow:last-child { border-bottom: 0; }
   .facts.one { grid-template-columns: minmax(0, 1fr); margin-top: var(--space-2); }
+  .pinwrap { position: relative; max-width: var(--max-page-image); margin-bottom: var(--space-3); }
+  .pinwrap .floor-img { margin-bottom: 0; }
+  .pinwrap.placing { cursor: crosshair; outline: var(--outline-w) dashed var(--c-brand); }
+  .pin { position: absolute; transform: translate(-50%, -50%); min-width: var(--space-5); padding: 0 var(--space-1); border-radius: var(--radius-pill); background: var(--c-brand); color: var(--c-on-brand);
+    border: var(--outline-w) solid var(--c-surface); font-size: var(--fs-xs); line-height: 1.4; cursor: pointer; touch-action: none; }
+  .pin.rent { background: var(--c-warn); }
+  .pin.sel { outline: var(--outline-w) solid var(--c-ink); z-index: 1; }
+  .pininfo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
   .floor-img { display: block; width: 100%; max-width: var(--max-page-image); height: auto; border: 1px solid var(--c-line); border-radius: var(--radius-s); margin-bottom: var(--space-3); }
   .slot-code { min-width: var(--size-cell); }
   .trow .grow { flex: 1 1 var(--size-cell); }
@@ -193,7 +201,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261107c">
+<link rel="stylesheet" href="shd-v2.css?v=20261108a">
 </head>
 <body>
 <div class="app" id="app">
@@ -1298,7 +1306,7 @@
 
   // ---------- settings ----------
   // ---------- floor plans and places ----------
-  var flo = { branch: '', data: null, view: 'active', needle: '' };
+  var flo = { branch: '', data: null, view: 'active', needle: '', sel: null, pinning: null };
   var KIND_TH = { header: 'หัวชั้น', glass: 'กระจกหน้าร้าน' }, TENANT_TH = { icare: 'iCare', rent: 'เช่า' };
 
   // Minimal .xlsx reader (an .xlsx is a zip of XML files): enough for "Lock section_<branch>.xlsx".
@@ -1382,8 +1390,14 @@
     holder.textContent = ''; var d = flo.data, lay = d.layout;
     var card = el('section', 'card'); card.appendChild(el('h2', 'sec', 'ผังร้าน ' + flo.branch));
     if (lay && lay.image_url) {
-      var a = el('a'); a.href = lay.image_url; a.target = '_blank'; a.rel = 'noopener'; a.setAttribute('aria-label', 'เปิดรูปผังเต็ม');
-      var im = el('img', 'floor-img'); im.src = lay.image_url; im.alt = 'ผังร้าน ' + flo.branch; a.appendChild(im); card.appendChild(a);
+      card.appendChild(planWithPins(holder, lay.image_url));
+      if (flo.pinning) {
+        var pb = el('p', 'hint pinning'), ps = d.slots.filter(function (x) { return x.id === flo.pinning; })[0];
+        pb.appendChild(document.createTextNode('กดบนผังเพื่อวางหมุดของ ' + (ps ? ps.code : '') + ' '));
+        pb.appendChild(button('ยกเลิก', 'alt', function () { flo.pinning = null; renderFloor(holder); })); card.appendChild(pb);
+      }
+      var selS = d.slots.filter(function (x) { return x.id === flo.sel; })[0];
+      if (selS) card.appendChild(pinInfo(holder, selS));
     } else card.appendChild(el('p', 'empty-note', 'ยังไม่มีรูปผังของสาขานี้'));
     var dl = el('dl', 'facts'); lay = lay || {};
     fact(dl, 'ขนาดร้าน', lay.sqm ? lay.sqm + ' ตร.ม.' : ''); fact(dl, 'Size', lay.size_label); fact(dl, 'ชนิด POG', lay.pog_type); fact(dl, 'ชนิดร้าน', lay.store_type);
@@ -1398,6 +1412,57 @@
     }
     holder.appendChild(card);
     holder.appendChild(slotsCard(holder));
+  }
+  // The plan image with one pin per placed, active place. Editors drag a pin to move it, or place a chosen place by tapping the plan.
+  function planWithPins(holder, url) {
+    var d = flo.data, wrap = el('div', 'pinwrap'), im = el('img', 'floor-img'); im.src = url; im.alt = 'ผังร้าน ' + flo.branch; im.draggable = false; wrap.appendChild(im);
+    if (flo.pinning) {
+      wrap.classList.add('placing');
+      wrap.onclick = function (e) {
+        var r = im.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * 100, y = (e.clientY - r.top) / r.height * 100, id = flo.pinning;
+        if (x < 0 || x > 100 || y < 0 || y > 100) return;
+        api('slot_pin', { id: id, x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 }).then(function () {
+          d.slots.forEach(function (sl) { if (sl.id === id) { sl.x = x; sl.y = y; } });
+          flo.pinning = null; flo.sel = id; renderFloor(holder);
+        }).catch(function (er) { show(er.message, 'err'); });
+      };
+    }
+    d.slots.filter(function (sl) { return sl.active && sl.x != null && sl.y != null; }).forEach(function (sl) {
+      var pin = el('button', 'pin' + (sl.tenant === 'rent' ? ' rent' : '') + (flo.sel === sl.id ? ' sel' : ''), sl.code); pin.type = 'button';
+      pin.style.left = sl.x + '%'; pin.style.top = sl.y + '%'; pin.setAttribute('aria-label', 'ตำแหน่ง ' + sl.code);
+      var drag = null;
+      pin.onpointerdown = function (e) {
+        if (flo.pinning) return;
+        drag = { sx: e.clientX, sy: e.clientY, moved: false }; if (d.can_edit) pin.setPointerCapture(e.pointerId);
+      };
+      pin.onpointermove = function (e) {
+        if (!drag || !d.can_edit) return;
+        if (Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 4) drag.moved = true;
+        if (!drag.moved) return;
+        var r = im.getBoundingClientRect();
+        pin.style.left = Math.max(0, Math.min(100, (e.clientX - r.left) / r.width * 100)) + '%'; pin.style.top = Math.max(0, Math.min(100, (e.clientY - r.top) / r.height * 100)) + '%';
+      };
+      pin.onpointerup = function () {
+        var dr = drag; drag = null; if (!dr) return;
+        if (!dr.moved) { flo.sel = flo.sel === sl.id ? null : sl.id; renderFloor(holder); return; }
+        var x = parseFloat(pin.style.left), y = parseFloat(pin.style.top);
+        api('slot_pin', { id: sl.id, x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 })
+          .then(function () { sl.x = x; sl.y = y; show('ย้ายหมุด ' + sl.code + ' แล้ว', 'ok'); }).catch(function (er) { show(er.message, 'err'); renderFloor(holder); });
+      };
+      wrap.appendChild(pin);
+    });
+    return wrap;
+  }
+  function pinInfo(holder, sl) {
+    var box = el('div', 'pininfo'); box.appendChild(el('b', '', sl.code));
+    box.appendChild(el('span', 'chip', KIND_TH[sl.kind] || sl.kind)); if (sl.kind === 'glass' || sl.tenant === 'rent') box.appendChild(el('span', 'chip', TENANT_TH[sl.tenant]));
+    var t = [sl.name, sl.category, sl.note].filter(Boolean).join(' · '); if (t) box.appendChild(el('span', 'sub', t));
+    if (flo.data.can_edit) {
+      box.appendChild(button('ถอดหมุด', 'danger', function () {
+        api('slot_pin', { id: sl.id, x: null, y: null }).then(function () { sl.x = null; sl.y = null; flo.sel = null; renderFloor(holder); }).catch(function (er) { show(er.message, 'err'); });
+      }));
+    }
+    return box;
   }
   function slotsCard(holder) {
     var d = flo.data, card = el('section', 'card'), all = d.slots;
@@ -1422,6 +1487,12 @@
         var r = el('div', 'trow'); r.appendChild(el('b', 'slot-code', s.code));
         r.appendChild(el('span', 'sub grow', [s.name, s.category, s.note].filter(Boolean).join(' · ')));
         r.appendChild(el('span', 'chip', KIND_TH[s.kind] || s.kind)); if (s.kind === 'glass' || s.tenant === 'rent') r.appendChild(el('span', 'chip', TENANT_TH[s.tenant]));
+        var placed = s.x != null && s.y != null;
+        if (placed && s.active) r.appendChild(button('ดูบนผัง', 'alt', function () { flo.sel = s.id; renderFloor(holder); window.scrollTo(0, 0); }));
+        else if (s.active && d.layout && d.layout.image_url) r.appendChild(el('span', 'sub', 'ยังไม่ปักหมุด'));
+        if (d.can_edit && s.active && d.layout && d.layout.image_url) {
+          r.appendChild(button(placed ? 'ย้ายหมุด' : 'ปักหมุด', 'alt', function () { flo.pinning = s.id; flo.sel = null; renderFloor(holder); window.scrollTo(0, 0); }));
+        }
         if (d.can_edit) {
           r.appendChild(button('แก้ไข', 'alt', function () { slotForm(holder, s); }));
           r.appendChild(button('ลบ', 'danger', function () {
