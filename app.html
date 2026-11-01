@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261106c">
+<link rel="stylesheet" href="shd-theme.css?v=20261106d">
 <style>
   body { line-height: 1.6; }
 
@@ -189,7 +189,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261106c">
+<link rel="stylesheet" href="shd-v2.css?v=20261106d">
 </head>
 <body>
 <div class="app" id="app">
@@ -1164,6 +1164,16 @@
       d.appendChild(dl);
       if (cash.canEdit && cash.view !== 'cancelled') {
         var row = el('div', 'row');
+        var pl = el('select', 'input sortsel'); pl.setAttribute('aria-label', 'แพ็กเกจของ ' + c.brand);
+        cash.packages.filter(function (x) { return x.active || x.id === c.package_id; }).forEach(function (x) {
+          var o = el('option', '', x.code + ' · ' + baht(x.rate) + ' บาท/เดือน'); o.value = x.id; if (x.id === c.package_id) o.selected = true; pl.appendChild(o);
+        });
+        pl.onchange = function () {
+          api('cashier_set_package', { id: c.id, package_id: Number(pl.value) })
+            .then(function () { c.package_id = Number(pl.value); show('เปลี่ยนแพ็กเกจของ ' + c.brand + ' แล้ว', 'ok'); renderCashier(); })
+            .catch(function (e) { show(e.message, 'err'); pl.value = c.package_id; });
+        };
+        row.appendChild(pl);
         row.appendChild(button('แก้ไข', '', function () { cashierForm(c); }));
         row.appendChild(button('ยกเลิกสัญญา', 'danger', function () {
           if (!confirm('ยกเลิกสัญญา ' + c.brand + ' ?')) return;
