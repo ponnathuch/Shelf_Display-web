@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261103b">
+<link rel="stylesheet" href="shd-theme.css?v=20261104a">
 <style>
   body { line-height: 1.6; }
 
@@ -175,7 +175,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261103b">
+<link rel="stylesheet" href="shd-v2.css?v=20261104a">
 </head>
 <body>
 <div class="app" id="app">
@@ -976,7 +976,7 @@
 
   // ---------- cashier shelf rental ----------
   var CASHIER_CAP = 6; // brands shown per branch counter box at one time; rented brands rotate, so contracts may exceed it
-  var cash = { packages: [], contracts: [], view: 'live' };
+  var cash = { packages: [], contracts: [], view: 'live', canEdit: false };
   var baht = function (n) { return Number(n).toLocaleString('th-TH'); };
   function cashState(c) {
     var t = today();
@@ -986,6 +986,22 @@
 
   // Settings: packages (name, rate per brand per month, which branches). Approvers only.
   function cashierSettings(v) {
+    v.appendChild(el('h2', 'sec', 'สิทธิ์แก้ไขสัญญาชั้นแคชเชียร์'));
+    var eb = el('section', 'card'); v.appendChild(eb);
+    eb.appendChild(el('p', 'hint', 'ผู้ดูแลและผู้อนุมัติแก้ได้เสมอ คนอื่นในทีมที่เลือกไว้ที่นี่จะเพิ่ม/แก้ไข/ยกเลิกสัญญาได้ คนที่ไม่ได้เลือกยังดูได้อย่างเดียว'));
+    api('cashier_editors').then(function (d) {
+      var byName = {}; people.forEach(function (x) { byName[x.username] = x.name; });
+      var pick = multiPicker(eb, {
+        title: 'ผู้มีสิทธิ์แก้ไขสัญญา', required: false, noun: 'คน', placeholder: 'เลือกคน...', searchPlaceholder: 'พิมพ์ชื่อ...', initial: d.usernames,
+        items: people.map(function (x) { return { code: x.username, name: x.name, sub: x.username, leaves: [x.username] }; }),
+        labelOf: function (code) { return byName[code] || code; }
+      });
+      var row = el('div', 'row');
+      row.appendChild(button('บันทึกสิทธิ์', '', function () {
+        api('cashier_editors_save', { usernames: pick.getCodes() }).then(function () { show('บันทึกสิทธิ์แล้ว', 'ok'); }).catch(function (e) { show(e.message, 'err'); });
+      }));
+      eb.appendChild(row);
+    }).catch(function (e) { show(e.message, 'err'); });
     v.appendChild(el('h2', 'sec', 'ตั้งค่าแพ็กเกจชั้นแคชเชียร์'));
     var holder = el('div'); v.appendChild(holder); holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
     api('cashier_packages').then(function (d) {
@@ -1028,7 +1044,7 @@
   function cashier() {
     $('bar').hidden = true; show(''); $('view').textContent = ''; loading();
     Promise.all([api('cashier_packages'), api('cashier_list')]).then(function (r) {
-      done(); show(''); cash.packages = r[0].packages; cash.contracts = r[1].contracts; renderCashier();
+      done(); show(''); cash.packages = r[0].packages; cash.contracts = r[1].contracts; cash.canEdit = r[1].can_edit; renderCashier();
     }).catch(fail);
   }
   function cashierStats() {
@@ -1055,18 +1071,32 @@
       x.appendChild(el('span', 'n', String(n))); x.onclick = view(t[0]); seg.appendChild(x);
     });
     bar.appendChild(seg); bar.appendChild(el('span', 'grow'));
-    bar.appendChild(button('+ เพิ่มสัญญา', '', function () { cashierForm(null); }));
+    if (cash.canEdit) bar.appendChild(button('+ เพิ่มสัญญา', '', function () { cashierForm(null); }));
     v.appendChild(bar);
     var list = cash.contracts.filter(function (c) { return cashState(c) === cash.view; });
     if (!list.length) v.appendChild(el('p', 'empty-note', 'ไม่มีสัญญาในกลุ่มนี้'));
     list.forEach(function (c) {
       var p = pkgOf(c.package_id), d = el('section', 'card compact');
-      d.appendChild(el('h3', '', c.brand + (c.vendor ? ' · ' + c.vendor : '')));
+      var head = el('div', 'card-head'), left = el('div');
+      left.appendChild(el('h3', '', c.brand + (c.vendor ? ' · ' + c.vendor : '')));
       var meta = el('div', 'row'); meta.appendChild(el('span', 'chip', p ? p.code : '?')); if (c.house) meta.appendChild(el('span', 'chip', 'House Brand'));
-      meta.appendChild(el('span', 'sub', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) + (p ? ' · ' + baht(p.rate) + ' บาท/เดือน · ' + p.branches.length + ' สาขา' : '')));
-      d.appendChild(meta);
-      if (c.note) d.appendChild(el('p', 'sub', c.note));
-      if (cash.view !== 'cancelled') {
+      if (c.photo_count > 1) meta.appendChild(el('span', 'chip', c.photo_count + ' รูป'));
+      left.appendChild(meta); head.appendChild(left);
+      if (c.thumb_url) {
+        var a = el('a'); a.href = c.thumb_url; a.target = '_blank'; a.rel = 'noopener'; a.setAttribute('aria-label', 'เปิดรูป');
+        var im = el('img', 'thumb'); im.src = c.thumb_url; im.alt = c.brand; im.loading = 'lazy'; a.appendChild(im); head.appendChild(a);
+      }
+      d.appendChild(head);
+      var dl = el('dl', 'facts');
+      fact(dl, 'ช่วงเวลา', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date));
+      fact(dl, 'ค่าเช่า', p ? baht(p.rate) + ' บาท/เดือน · ' + p.branches.length + ' สาขา' : '');
+      fact(dl, 'เลขที่สัญญา/TTA', c.agreement_no);
+      fact(dl, 'เลขโฆษณา', c.ad_no ? c.ad_no + (c.ad_expiry ? ' (หมดอายุ ' + thDate(c.ad_expiry) + ')' : '') : '');
+      fact(dl, 'ติดต่อ', c.supplier_contact);
+      fact(dl, 'วิธีวาง/ข้อห้าม', c.how_to_place, true);
+      fact(dl, 'หมายเหตุ', c.note, true);
+      d.appendChild(dl);
+      if (cash.canEdit && cash.view !== 'cancelled') {
         var row = el('div', 'row');
         row.appendChild(button('แก้ไข', '', function () { cashierForm(c); }));
         row.appendChild(button('ยกเลิกสัญญา', 'danger', function () {
@@ -1078,6 +1108,60 @@
       v.appendChild(d);
     });
   }
+  // Several photos at once; new files wait in a queue and are sent by flush(id) after the record is saved.
+  function photoManager(cfg) {
+    var box = el('div'), tiles = el('div', 'ptiles'), queue = [], existing = [];
+    box.appendChild(tiles);
+    function draw() {
+      tiles.textContent = '';
+      existing.forEach(function (p) {
+        var t = el('div', 'ptile'), im = el('img'); im.src = p.url; im.alt = 'รูป'; t.appendChild(im);
+        t.appendChild(button('ลบ', 'danger', function () {
+          if (!confirm('ลบรูปนี้?')) return;
+          api(cfg.removeAction, { id: p.id }).then(function () { existing = existing.filter(function (x) { return x !== p; }); draw(); }).catch(function (e) { show(e.message, 'err'); });
+        }));
+        tiles.appendChild(t);
+      });
+      queue.forEach(function (q) {
+        var t = el('div', 'ptile'), im = el('img'); im.src = q.url; im.alt = 'รอส่ง'; t.appendChild(im); t.appendChild(el('span', 'sub', 'รอส่ง'));
+        t.appendChild(button('ลบ', 'danger', function () { queue = queue.filter(function (x) { return x !== q; }); draw(); })); tiles.appendChild(t);
+      });
+    }
+    function add(files) {
+      var room = 10 - existing.length - queue.length, imgs = Array.prototype.filter.call(files, function (x) { return /^image\//.test(x.type); });
+      if (imgs.length > room) show('ใส่รูปได้ไม่เกิน 10 รูป เพิ่มให้เท่าที่ใส่ได้', 'err');
+      imgs.slice(0, Math.max(0, room)).forEach(function (file) { queue.push({ file: file, url: URL.createObjectURL(file) }); });
+      draw();
+    }
+    function hidden(camera) {
+      var i = el('input'); i.type = 'file'; i.accept = 'image/*'; i.hidden = true;
+      if (camera) i.setAttribute('capture', 'environment'); else i.multiple = true;
+      i.onchange = function () { add(i.files); i.value = ''; }; return i;
+    }
+    var fileIn = hidden(false), camIn = hidden(true), dz = el('div', 'dropzone');
+    dz.appendChild(el('strong', '', 'ลากรูปมาวางที่นี่')); dz.appendChild(el('span', 'sub', 'หรือเลือกจากเครื่อง / ถ่ายด้วยมือถือ'));
+    var row = el('div', 'row');
+    row.appendChild(button('เลือกรูปจากเครื่อง', 'alt', function () { fileIn.click(); })); row.appendChild(button('ถ่ายรูป', 'alt', function () { camIn.click(); }));
+    dz.appendChild(row); dz.appendChild(fileIn); dz.appendChild(camIn);
+    ['dragenter', 'dragover'].forEach(function (n) { dz.addEventListener(n, function (e) { e.preventDefault(); dz.classList.add('over'); }); });
+    ['dragleave', 'drop'].forEach(function (n) { dz.addEventListener(n, function (e) { e.preventDefault(); dz.classList.remove('over'); }); });
+    dz.addEventListener('drop', function (e) { add(e.dataTransfer.files); });
+    box.appendChild(dz);
+    return {
+      node: box,
+      setExisting: function (list) { existing = list; draw(); },
+      flush: function (id) {
+        var i = 0;
+        function next() {
+          if (i >= queue.length) return Promise.resolve();
+          show('กำลังส่งรูป ' + (i + 1) + '/' + queue.length + '...');
+          return toJpegBase64(queue[i].file).then(function (d) { return api(cfg.addAction, { id: id, data: d }); }).then(function () { i++; return next(); });
+        }
+        return next();
+      }
+    };
+  }
+
   function cashierForm(c) {
     var v = $('view'); v.textContent = ''; show('');
     var d = el('section', 'card'); d.appendChild(el('h2', 'sec', c ? 'แก้ไขสัญญา' : 'เพิ่มสัญญาชั้นแคชเชียร์'));
@@ -1095,7 +1179,15 @@
     pl.appendChild(ps); g.appendChild(pl);
     var from = fld('วันเริ่ม', 'date', c && c.start_date), to = fld('วันสิ้นสุด', 'date', c && c.end_date);
     d.appendChild(g);
+    var g2 = el('div', 'grid'); d.appendChild(g2);
+    function fld2(text, type, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el('input', 'input'); i.type = type; i.value = val || ''; l.appendChild(i); g2.appendChild(l); return i; }
+    var agr = fld2('เลขที่สัญญา/TTA', 'text', c && c.agreement_no), adn = fld2('เลขโฆษณา', 'text', c && c.ad_no);
+    var adx = fld2('วันหมดอายุโฆษณา', 'date', c && c.ad_expiry), sup = fld2('ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c && c.supplier_contact);
+    var how = fld('วิธีวาง/ข้อห้าม (สาขาจะเห็น)', 'textarea', c && c.how_to_place); how.rows = 2; d.appendChild(how.parentNode);
     var note = fld('หมายเหตุ', 'textarea', c && c.note); note.rows = 2; d.appendChild(note.parentNode);
+    var pm = photoManager({ addAction: 'cashier_photo_add', removeAction: 'cashier_photo_remove' });
+    d.appendChild(el('h3', '', 'รูปตัวอย่าง')); d.appendChild(el('p', 'hint', 'ใส่ได้หลายรูป ระบบย่อรูปให้อัตโนมัติ สาขาจะเห็นรูปแรกเพื่อรู้ว่าต้องวางอะไร')); d.appendChild(pm.node);
+    if (c) api('cashier_photos', { id: c.id }).then(function (r) { pm.setExisting(r.photos); }).catch(function () { /* the form works without the photos */ });
     var hl = el('label', 'f'), house = el('input'); house.type = 'checkbox'; house.checked = !!(c && c.house);
     hl.appendChild(house); hl.appendChild(document.createTextNode(' House Brand (ไม่ใช่แบรนด์เช่า ไม่นับค่าเช่า)')); d.appendChild(hl);
     var row = el('div', 'row');
@@ -1105,9 +1197,15 @@
       if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
       if (p && !p.branches.length) { show('แพ็กเกจนี้ยังไม่มีสาขา ให้ผู้ดูแลเพิ่มสาขาในหน้าตั้งค่าก่อน', 'err'); return; }
       save.disabled = true;
-      var b = { brand: brand.value, vendor: vendor.value, package_id: Number(ps.value), start_date: from.value, end_date: to.value, note: note.value, house: house.checked };
+      var b = { brand: brand.value, vendor: vendor.value, package_id: Number(ps.value), start_date: from.value, end_date: to.value, note: note.value, house: house.checked, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value, supplier_contact: sup.value, how_to_place: how.value };
       if (c) b.id = c.id;
-      api('cashier_save', b).then(cashier).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
+      api('cashier_save', b).then(function () {
+        // a new contract has no id in the reply, so find it again by brand and dates
+        return (c ? Promise.resolve(c.id) : api('cashier_list').then(function (r) {
+          var m = r.contracts.filter(function (x) { return x.brand === b.brand.trim() && x.start_date === b.start_date && x.end_date === b.end_date; });
+          return m.length ? m[m.length - 1].id : null;
+        })).then(function (id) { return id ? pm.flush(id) : null; });
+      }).then(function () { show('บันทึกแล้ว', 'ok'); cashier(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', '', renderCashier)); d.appendChild(row); v.appendChild(d);
   }
@@ -1134,7 +1232,7 @@
   }
 
   // ---------- home: the dashboard (office) or the store's own view (branch); the warehouse only searches ----------
-  var branchList = [];
+  var branchList = [], cashHome = [];
   var WEEKS = 10, FROM = -3;
   function gantt(rows, onOpen) {
     var span = WEEKS * 7, box = el('div', 'gantt'), head = el('div', 'g-row g-head');
@@ -1209,6 +1307,17 @@
       a.appendChild(el('span', 'chip ' + t[0], t[1])); a.appendChild(el('span', '', t[2].code + ' ' + (t[2].brand || '(ยังไม่มีชื่อแบรนด์)'))); todo.appendChild(a);
     });
     cols.appendChild(todo); host.appendChild(cols);
+    host.appendChild(cashierTimeline(cashHome));
+  }
+  // Cashier contracts as timeline rows; a branch only sees its own, and nothing opens for a branch.
+  function cashierTimeline(contracts) {
+    var rows = contracts.filter(function (c) { return !c.status || c.status === 'active'; }).map(function (c) {
+      return { id: c.id, brand: c.brand, code: 'ชั้นแคชเชียร์', position_types: { name: c.house ? 'House Brand' : 'เช่า' }, start_date: c.start_date, end_date: c.end_date, status: 'approved' };
+    });
+    var card = el('section', 'card'); card.appendChild(el('h2', 'sec', 'ไทม์ไลน์ชั้นแคชเชียร์ (10 สัปดาห์)'));
+    var live = rows.filter(function (r) { return r.start_date && daysTo(r.end_date) >= FROM; }).sort(function (a, b) { return String(a.start_date).localeCompare(String(b.start_date)); });
+    card.appendChild(live.length ? gantt(live, isOffice() ? function () { go('cashier'); } : null) : el('p', 'empty-note', 'ยังไม่มีแบรนด์ที่วางที่ชั้นแคชเชียร์'));
+    return card;
   }
   function branchDash(host) {
     branchList = all;
@@ -1220,6 +1329,7 @@
     k.appendChild(kpiCard('ใกล้ครบกำหนดเก็บ (7 วัน)', soon.length, soon[0] ? soon[0].brand : 'ไม่มี', soon.length ? 'warn' : '', noop));
     host.appendChild(k);
     host.appendChild(timelineCard(all.filter(function (c) { return c.status === 'approved'; }), null));
+    host.appendChild(cashierTimeline(cashHome));
     var box = el('div'); host.appendChild(box); renderBranchBox(box);
   }
 
@@ -1233,8 +1343,9 @@
     if (pendingQuery) { homeFind.run(pendingQuery); pendingQuery = ''; }
     if (sess.staff.role === 'WAREHOUSE') { homeFind.focus(); return; }
     var wait = el('p', 'sub', 'กำลังโหลด...'); dash.appendChild(wait);
-    api('list', {}).then(function (d) {
-      all = d.campaigns; dash.textContent = '';
+    // The cashier timeline is extra: if it cannot load, the rest of the home page still shows.
+    Promise.all([api('list', {}), api('cashier_list').catch(function () { return { contracts: [] }; })]).then(function (rs) {
+      var d = rs[0]; all = d.campaigns; cashHome = rs[1].contracts; dash.textContent = '';
       if (isOffice()) officeDash(dash); else branchDash(dash);
     }).catch(fail);
   }
