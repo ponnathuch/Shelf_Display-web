@@ -63,6 +63,20 @@
   .ptiles { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); }
   .ptile { width: var(--size-tile); display: grid; gap: var(--space-1); }
   .ptile img { width: 100%; height: var(--size-tile); object-fit: cover; border-radius: var(--radius-s); border: 1px solid var(--c-line); }
+  .combo-wrap { position: relative; flex: 1 1 var(--size-field); min-width: 0; }
+  .combo-wrap .input { width: 100%; }
+  .combo { position: absolute; left: 0; right: 0; top: 100%; z-index: 3; margin: var(--space-1) 0 0; padding: var(--space-1); list-style: none;
+    max-height: var(--size-photo); overflow: auto; background: var(--c-surface); border: 1px solid var(--c-line-strong);
+    border-radius: var(--radius-m); box-shadow: var(--shadow-1); }
+  .combo[hidden] { display: none; }
+  .combo li.sub { padding: var(--space-2) var(--space-3); }
+  .combo button { display: block; width: 100%; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-s); background: none;
+    color: inherit; font: inherit; text-align: left; cursor: pointer; white-space: normal; overflow-wrap: anywhere; }
+  .combo button:hover { background: var(--c-brand-soft); }
+  .dropzone { display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-5); text-align: center; background: var(--c-surface-2);
+    border: var(--outline-w) dashed var(--c-line-strong); border-radius: var(--radius-m); }
+  .dropzone.over { border-color: var(--c-brand); background: var(--c-brand-soft); }
+  .dropzone .row { justify-content: center; margin-top: var(--space-2); }
   .pick { display: flex; align-items: center; gap: var(--space-2); }
   .pick input { width: var(--size-icon); height: var(--size-icon); }
   .delbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
@@ -461,14 +475,32 @@
     function same(x) { var b = String(x.brand || '').toLowerCase().replace(/\s+/g, ''); return key.length >= 3 && b.length >= 3 && (key.indexOf(b) !== -1 || b.indexOf(key) !== -1); }
     cands.sort(function (a, b) { return (same(b) ? 1 : 0) - (same(a) ? 1 : 0) || b.id - a.id; });
     var box = el('section', 'card'); box.appendChild(el('h2', 'sec', 'ตรงกับแคมเปญที่ลงทะเบียนไว้ไหม'));
-    // type to search by code or name; the typed text must match one of the options
-    var sel = el('input', 'input'); sel.setAttribute('list', 'link-list'); sel.placeholder = 'พิมพ์ค้นหาเลขทะเบียนหรือชื่อ'; sel.setAttribute('aria-label', 'แคมเปญที่ลงทะเบียนไว้');
-    var dl = el('datalist'); dl.id = 'link-list'; var byLabel = {};
-    cands.forEach(function (x) {
+    // Type to search by code or name; the list shows each option in full (a native datalist cuts long names).
+    var sel = el('input', 'input'); sel.placeholder = 'พิมพ์ค้นหาเลขทะเบียนหรือชื่อ'; sel.setAttribute('aria-label', 'แคมเปญที่ลงทะเบียนไว้');
+    sel.setAttribute('role', 'combobox'); sel.setAttribute('aria-expanded', 'false'); sel.autocomplete = 'off';
+    var list = el('ul', 'combo'); list.hidden = true; list.setAttribute('role', 'listbox');
+    var wrapc = el('div', 'combo-wrap'); wrapc.appendChild(sel); wrapc.appendChild(list);
+    var byLabel = {}, labels = cands.map(function (x) {
       var lab = x.code + ' ' + (x.brand || '') + ' · ' + ((x.position_types || {}).name || 'ยังไม่ระบุตำแหน่ง') + ' · ' + (x.end_date ? 'ถึง ' + x.end_date : 'ไม่มีวันหมดอายุ') + (x.status === 'pending' ? ' (รออนุมัติ)' : '');
-      byLabel[lab] = x.id; var op = el('option'); op.value = lab; dl.appendChild(op);
+      byLabel[lab] = x.id; return lab;
     });
-    if (cands.length && same(cands[0])) sel.value = dl.firstChild.value; // the best brand match is pre-filled
+    function open(on) { list.hidden = !on; sel.setAttribute('aria-expanded', String(on)); }
+    function drawList() {
+      var term = sel.value.trim().toLowerCase(); list.textContent = '';
+      var hit = labels.filter(function (l) { return !term || byLabel[sel.value] || l.toLowerCase().indexOf(term) !== -1; }).slice(0, 50);
+      if (!hit.length) { list.appendChild(el('li', 'sub', 'ไม่พบแคมเปญที่ตรงกับคำค้น')); return; }
+      hit.forEach(function (l) {
+        var li = el('li'), bt = el('button', '', l); bt.type = 'button'; li.setAttribute('role', 'option');
+        bt.onmousedown = function (e) { e.preventDefault(); };
+        bt.onclick = function () { sel.value = l; open(false); };
+        li.appendChild(bt); list.appendChild(li);
+      });
+    }
+    sel.onfocus = function () { sel.select(); drawList(); open(true); };
+    sel.oninput = function () { drawList(); open(true); };
+    sel.onblur = function () { open(false); };
+    sel.onkeydown = function (e) { if (e.key === 'Escape') open(false); };
+    if (cands.length && same(cands[0])) sel.value = labels[0]; // the best brand match is pre-filled
     var go = button('ใช่ ผูกกับแคมเปญนี้', 'alt', function () {
       var target = byLabel[sel.value];
       if (!target) { show('เลือกแคมเปญจากรายการที่ขึ้นให้ (พิมพ์เลขทะเบียนหรือชื่อเพื่อค้นหา)', 'err'); sel.focus(); return; }
@@ -477,7 +509,7 @@
       api('link', { id: c.id, target: target }).then(function (r) { show('ผูกกับ ' + r.code + ' แล้ว แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
         .catch(function (e) { go.disabled = false; show(e.message, 'err'); });
     });
-    var row = el('div', 'row'); row.appendChild(sel); row.appendChild(dl); row.appendChild(go);
+    var row = el('div', 'row'); row.appendChild(wrapc); row.appendChild(go);
     box.appendChild(row); v.appendChild(box);
   }
   function detail(id) {
@@ -761,12 +793,31 @@
     s6.appendChild(el('p', 'hint', 'ใส่ได้หลายรูป เช่น ภาพตัวอย่างสื่อที่จะส่งมา ระบบย่อรูปให้อัตโนมัติ สาขาจะเห็นรูปแรกเพื่อรู้ว่าต้องวางสื่ออะไร'));
     var tiles = el('div', 'ptiles'); s6.appendChild(tiles);
     var queue = [], existing = [];
-    var fileIn = el('input'); fileIn.type = 'file'; fileIn.accept = 'image/*'; fileIn.multiple = true; fileIn.setAttribute('aria-label', 'เลือกรูปตัวอย่าง');
-    fileIn.onchange = function () {
-      Array.prototype.forEach.call(fileIn.files, function (file) { queue.push({ file: file, url: URL.createObjectURL(file) }); });
-      fileIn.value = ''; drawTiles();
-    };
-    s6.appendChild(fileIn);
+    function addFiles(files) {
+      var room = 10 - existing.filter(function (p) { return p.kind === 'example_ok'; }).length - queue.length;
+      var imgs = Array.prototype.filter.call(files, function (x) { return /^image\//.test(x.type); });
+      if (imgs.length > room) show('ใส่รูปตัวอย่างได้ไม่เกิน 10 รูปต่อแคมเปญ เพิ่มให้เท่าที่ใส่ได้', 'err');
+      imgs.slice(0, Math.max(0, room)).forEach(function (file) { queue.push({ file: file, url: URL.createObjectURL(file) }); });
+      drawTiles();
+    }
+    function hiddenInput(camera) {
+      var i = el('input'); i.type = 'file'; i.accept = 'image/*'; i.hidden = true;
+      if (camera) i.setAttribute('capture', 'environment'); else i.multiple = true;
+      i.onchange = function () { addFiles(i.files); i.value = ''; };
+      return i;
+    }
+    var fileIn = hiddenInput(false), camIn = hiddenInput(true);
+    var dropEl = el('div', 'dropzone');
+    dropEl.appendChild(el('strong', '', 'ลากรูปมาวางที่นี่'));
+    dropEl.appendChild(el('span', 'sub', 'หรือเลือกจากเครื่อง / ถ่ายด้วยมือถือ'));
+    var dzrow = el('div', 'row');
+    dzrow.appendChild(button('เลือกรูปจากเครื่อง', 'alt', function () { fileIn.click(); }));
+    dzrow.appendChild(button('ถ่ายรูป', 'alt', function () { camIn.click(); }));
+    dropEl.appendChild(dzrow); dropEl.appendChild(fileIn); dropEl.appendChild(camIn);
+    ['dragenter', 'dragover'].forEach(function (n) { dropEl.addEventListener(n, function (e) { e.preventDefault(); dropEl.classList.add('over'); }); });
+    ['dragleave', 'drop'].forEach(function (n) { dropEl.addEventListener(n, function (e) { e.preventDefault(); dropEl.classList.remove('over'); }); });
+    dropEl.addEventListener('drop', function (e) { addFiles(e.dataTransfer.files); });
+    s6.appendChild(dropEl);
     function tile(src, note, onRemove) {
       var t = el('div', 'ptile'), im = el('img'); im.src = src; im.alt = note; t.appendChild(im);
       if (note) t.appendChild(el('span', 'sub', note));
