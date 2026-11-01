@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261106d">
+<link rel="stylesheet" href="shd-theme.css?v=20261106e">
 <style>
   body { line-height: 1.6; }
 
@@ -154,6 +154,7 @@
   .trow > input[type=text] { flex: 1 1 var(--size-cell); min-width: var(--size-cell); }
   .trow > .cap { width: var(--size-cell); }
   .trow:last-child { border-bottom: 0; }
+  .facts.one { grid-template-columns: minmax(0, 1fr); margin-top: var(--space-2); }
   .fold { padding: 0; margin-bottom: var(--space-2); }
   .fold > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--size-target-lg); padding: var(--space-2) var(--space-4); cursor: pointer; list-style: none; }
   .fold > summary::-webkit-details-marker { display: none; }
@@ -189,7 +190,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261106d">
+<link rel="stylesheet" href="shd-v2.css?v=20261106e">
 </head>
 <body>
 <div class="app" id="app">
@@ -1155,13 +1156,14 @@
       fact(dl, 'ช่วงเวลา', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) + (c._raw || c.ad_expiry && c.ad_expiry === c.end_date ? ' (ตามวันหมดอายุโฆษณา)' : ''));
       fact(dl, 'ค่าเช่า', p ? baht(p.rate) + ' บาท/เดือน' : '');
       fact(dl, 'สาขา', c.branches && c.branches.length ? c.branches.length + ' สาขา' : 'ทุกสาขา');
-      fact(dl, 'หลังสิ้นสุดให้ทำอย่างไร', c.return_to, true);
       fact(dl, 'เลขที่สัญญา/TTA', c.agreement_no);
       fact(dl, 'เลขโฆษณา', c.ad_no ? c.ad_no + (c.ad_expiry ? ' (หมดอายุ ' + thDate(c.ad_expiry) + ')' : '') : '');
       fact(dl, 'ติดต่อ', c.supplier_contact);
-      fact(dl, 'วิธีวาง/ข้อห้าม', c.how_to_place, true);
-      fact(dl, 'หมายเหตุ', c.note, true);
       d.appendChild(dl);
+      // Long text goes in its own list: a full-width item in the same grid would keep every empty column and squeeze the short facts.
+      var wide = el('dl', 'facts one');
+      fact(wide, 'หลังสิ้นสุดให้ทำอย่างไร', c.return_to); fact(wide, 'วิธีวาง/ข้อห้าม', c.how_to_place); fact(wide, 'หมายเหตุ', c.note);
+      if (wide.children.length) d.appendChild(wide);
       if (cash.canEdit && cash.view !== 'cancelled') {
         var row = el('div', 'row');
         var pl = el('select', 'input sortsel'); pl.setAttribute('aria-label', 'แพ็กเกจของ ' + c.brand);
