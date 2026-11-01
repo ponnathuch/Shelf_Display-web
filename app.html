@@ -6,8 +6,6 @@
 <title>การวางสื่อในร้าน</title>
 <link rel="stylesheet" href="shd-theme.css?v=3">
 <style>
-  .wrap { max-width: var(--max-wide); margin: 0 auto; padding: var(--space-4); }
-  main.wrap { padding-bottom: var(--space-6); }
   body { line-height: 1.6; }
 
   /* ---------- status line ---------- */
@@ -173,22 +171,31 @@
 
   @media (pointer: coarse), (max-width: 640px) {
     .btn, .seg button, .linkbtn { min-height: var(--size-target-lg); }
-    .wrap { padding: var(--space-3); }
     .until { text-align: left; }
     .card-head { flex-direction: column; }
   }
 </style>
+<link rel="stylesheet" href="shd-v2.css?v=1">
 </head>
 <body>
-<header class="top"><div class="top-inner wrap">
-  <div class="title"><h1>การวางสื่อในร้าน</h1><p id="who"></p></div>
-  <span class="top-link" id="role" hidden></span>
-</div></header>
-<main class="wrap">
-  <div id="msg" class="msg" role="status" aria-live="polite" hidden></div>
-  <div id="bar" class="toolbar" hidden></div>
-  <section id="view"></section>
-</main>
+<div class="app" id="app">
+  <nav class="nav" id="nav" aria-label="เมนูหลัก"></nav>
+  <div class="scrim" id="scrim"></div>
+  <div class="main">
+    <header class="bar">
+      <button class="menu-btn" id="menu" type="button" aria-label="เปิดเมนู"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+      <h1 id="title">ภาพรวม</h1>
+      <label class="gsearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="gs" type="search" placeholder="ค้นหาสื่อ แบรนด์ หรือเลขทะเบียน" aria-label="ค้นหา"><kbd>Ctrl K</kbd></label>
+      <span class="grow"></span>
+      <span class="solo-who" id="swho"></span>
+    </header>
+    <main class="page" id="page">
+      <div id="msg" class="msg" role="status" aria-live="polite" hidden></div>
+      <div id="bar" class="toolbar" hidden></div>
+      <section id="view"></section>
+    </main>
+  </div>
+</div>
 <script>
 (function () {
   'use strict';
@@ -372,13 +379,6 @@
 
   // ---------- branch view ----------
   var branchList = [];
-  function renderBranch(list) {
-    branchList = list;
-    done(); var v = $('view'); v.textContent = '';
-    var box = el('div');
-    findPanel(v, { onActive: function (on) { box.hidden = on; } });
-    v.appendChild(box); renderBranchBox(box);
-  }
   function renderBranchBox(v) {
     v.textContent = '';
     var tb = el('div', 'toolbar'); tb.appendChild(sortBox(function () { renderBranchBox(v); })); v.appendChild(tb);
@@ -491,7 +491,7 @@
       var f = Array.prototype.filter.call((e.clipboardData && e.clipboardData.files) || [], function (x) { return /^image\//.test(x.type); })[0];
       if (f) photo(f);
     });
-    return { focus: function () { inp.focus(); } };
+    return { focus: function () { inp.focus(); }, run: function (q) { inp.value = q; text(); } };
   }
 
   // ---------- office list ----------
@@ -519,7 +519,6 @@
     lf.appendChild(el('span', 'n' + (nl ? ' hot' : ''), String(nl)));
     lf.onclick = function () { lineOnly = !lineOnly; lf.setAttribute('aria-pressed', String(lineOnly)); renderList(); };
     b.appendChild(lf); b.appendChild(el('span', 'grow'));
-    if (isApprover()) { var s = el('button', 'linkbtn', 'ตั้งค่าตำแหน่ง'); s.type = 'button'; s.onclick = settings; b.appendChild(s); }
     b.appendChild(button('+ ลงทะเบียนแคมเปญ', '', function () { form(null); }));
   }
   function loadOffice(keepMsg) {
@@ -978,7 +977,6 @@
   function settings() {
     $('bar').hidden = true; show('');
     var v = $('view'); v.textContent = '';
-    v.appendChild(button('← กลับรายการ', 'alt back', renderOffice));
     v.appendChild(el('h2', 'sec', 'ตั้งค่าประเภทตำแหน่ง'));
     types.forEach(function (t) {
       var d = el('section', 'card'); d.appendChild(el('h3', '', t.name));
@@ -995,26 +993,186 @@
     });
   }
 
+  // ---------- home: the dashboard (office) or the store's own view (branch); the warehouse only searches ----------
+  var branchList = [];
+  var WEEKS = 10, FROM = -3;
+  function gantt(rows, onOpen) {
+    var span = WEEKS * 7, box = el('div', 'gantt'), head = el('div', 'g-row g-head');
+    head.appendChild(el('div', 'g-label', ''));
+    var scale = el('div', 'g-track g-scale');
+    for (var w = 0; w < WEEKS; w++) {
+      var d = new Date(Date.parse(today() + 'T00:00:00Z') + (FROM + w * 7) * 864e5);
+      scale.appendChild(el('span', 'g-tick', d.getUTCDate() + ' ' + TH_M[d.getUTCMonth()]));
+    }
+    head.appendChild(scale); box.appendChild(head);
+    rows.forEach(function (c) {
+      var row = el(onOpen ? 'button' : 'div', 'g-row'); if (onOpen) { row.type = 'button'; row.onclick = function () { onOpen(c.id); }; }
+      var lab = el('div', 'g-label'); lab.appendChild(el('b', '', c.brand || '(ยังไม่มีชื่อแบรนด์)'));
+      lab.appendChild(el('span', 'sub', c.code + ' · ' + ((c.position_types && c.position_types.name) || 'ยังไม่ระบุตำแหน่ง')));
+      var tr = el('div', 'g-track'), open = !c.end_date;
+      var s0 = Math.max(daysTo(c.start_date), FROM), e0 = open ? FROM + span : Math.min(daysTo(c.end_date), FROM + span);
+      var kind = c.status === 'pending' ? 'pend' : daysTo(c.start_date) > 0 ? 'next' : c.end_date && daysTo(c.end_date) <= 7 ? 'soon' : 'on';
+      var bar = el('div', 'g-bar ' + kind + (open ? ' open' : ''));
+      bar.style.left = ((s0 - FROM) / span * 100) + '%'; bar.style.width = (Math.max(1, e0 - s0) / span * 100) + '%';
+      bar.title = (c.brand || '') + ' ' + thDate(c.start_date) + ' ถึง ' + (c.end_date ? thDate(c.end_date) : 'ไม่มีกำหนดสิ้นสุด');
+      bar.appendChild(el('span', '', c.end_date ? c.end_date.slice(8) + '/' + c.end_date.slice(5, 7) : 'ต่อเนื่อง'));
+      tr.appendChild(bar); row.appendChild(lab); row.appendChild(tr); box.appendChild(row);
+    });
+    var line = el('div', 'g-today'); line.style.left = 'calc(var(--size-gantt-label) + (100% - var(--size-gantt-label)) * ' + ((0 - FROM) / span) + ')';
+    line.appendChild(el('span', '', 'วันนี้')); box.appendChild(line);
+    return box;
+  }
+  function timelineRows(list) {
+    return list.filter(function (c) { return c.start_date && (c.status === 'approved' || c.status === 'pending') && (!c.end_date || daysTo(c.end_date) >= FROM); })
+      .sort(function (a, b) { return String(a.start_date).localeCompare(String(b.start_date)); }).slice(0, 14);
+  }
+  function timelineCard(list, onOpen) {
+    var card = el('section', 'card'); card.appendChild(el('h2', 'sec', 'ไทม์ไลน์การวางสื่อ (10 สัปดาห์)'));
+    var lg = el('div', 'legend');
+    [['on', 'วางอยู่'], ['soon', 'ใกล้สิ้นสุด'], ['next', 'กำลังจะเริ่ม'], ['pend', 'รออนุมัติ (ยังห้ามวาง)']].forEach(function (x) {
+      var i = el('span', 'lg'); i.appendChild(el('i', 'g-bar ' + x[0])); i.appendChild(document.createTextNode(x[1])); lg.appendChild(i);
+    });
+    card.appendChild(lg);
+    var rows = timelineRows(list);
+    card.appendChild(rows.length ? gantt(rows, onOpen) : el('p', 'empty-note', 'ยังไม่มีแคมเปญที่มีวันเริ่มวาง'));
+    return card;
+  }
+  function kpiCard(label, n, note, tone, onClick) {
+    var c = el('button', 'card kpi-card ' + (tone || '')); c.type = 'button'; c.onclick = onClick;
+    c.appendChild(el('span', 'sub', label)); c.appendChild(el('b', '', String(n))); if (note) c.appendChild(el('span', 'sub', note)); return c;
+  }
+  function isPlaced(c) { return c.status === 'approved' && c.start_date && daysTo(c.start_date) <= 0 && (c.open_ended || !c.end_date || daysTo(c.end_date) >= 0); }
+  function endsSoon(c) { return c.status === 'approved' && c.end_date && daysTo(c.end_date) >= 0 && daysTo(c.end_date) <= 7; }
+
+  function officeDash(host) {
+    var pend = all.filter(function (c) { return c.status === 'pending'; });
+    var fill = all.filter(function (c) { return fromLine(c) && incomplete(c); });
+    var soon = all.filter(endsSoon), placed = all.filter(isPlaced);
+    var jump = function (t, o) { return function () { tab = t; lineOnly = !!(o && o.line); sortMode = (o && o.sort) || 'new'; needle = ''; go('media'); }; };
+    var k = el('div', 'kpi');
+    k.appendChild(kpiCard('รออนุมัติ', pend.length, urgentCount() ? 'เร่งด่วน ' + urgentCount() : 'ไม่มีเรื่องเร่งด่วน', pend.length ? 'warn' : 'ok', jump('pending')));
+    k.appendChild(kpiCard('อนุมัติจาก LINE รอกรอกข้อมูล', fill.length, 'ให้ฝ่ายการตลาดเติมรายละเอียด', fill.length ? 'warn' : 'ok', jump('approved', { line: true })));
+    k.appendChild(kpiCard('ใกล้สิ้นสุดใน 7 วัน', soon.length, soon[0] ? (soon[0].brand || soon[0].code) + (soon.length > 1 ? ' และอีก ' + (soon.length - 1) : '') : 'ไม่มี', soon.length ? 'warn' : '', jump('approved', { sort: 'end' })));
+    k.appendChild(kpiCard('วางอยู่ตอนนี้', placed.length, 'จาก ' + countOf('approved') + ' แคมเปญที่อนุมัติ', 'ok', jump('approved')));
+    host.appendChild(k);
+    var cols = el('div', 'dash-cols');
+    cols.appendChild(timelineCard(all, openDetail));
+    var todo = el('section', 'card'); todo.appendChild(el('h2', 'sec', 'ต้องทำตอนนี้'));
+    var items = [];
+    pend.slice().sort(function (a, b) { return (b.source === 'warehouse') - (a.source === 'warehouse') || a.id - b.id; }).slice(0, 4)
+      .forEach(function (c) { items.push(['warn', c.source === 'warehouse' ? 'รออนุมัติ (จากคลัง)' : 'รออนุมัติ', c]); });
+    fill.slice(0, 3).forEach(function (c) { items.push(['warn', 'กรอกข้อมูลเพิ่ม', c]); });
+    soon.slice(0, 2).forEach(function (c) { items.push(['err', 'ใกล้สิ้นสุด', c]); });
+    if (!items.length) todo.appendChild(el('p', 'empty-note', 'ไม่มีงานค้าง'));
+    items.slice(0, 7).forEach(function (t) {
+      var a = el('button', 'todo'); a.type = 'button'; a.onclick = function () { openDetail(t[2].id); };
+      a.appendChild(el('span', 'chip ' + t[0], t[1])); a.appendChild(el('span', '', t[2].code + ' ' + (t[2].brand || '(ยังไม่มีชื่อแบรนด์)'))); todo.appendChild(a);
+    });
+    cols.appendChild(todo); host.appendChild(cols);
+  }
+  function branchDash(host) {
+    branchList = all;
+    var placed = all.filter(isPlaced), next = all.filter(function (c) { return c.status === 'approved' && c.start_date && daysTo(c.start_date) > 0 && daysTo(c.start_date) <= 14; });
+    var soon = all.filter(endsSoon);
+    var k = el('div', 'kpi'), noop = function () {};
+    k.appendChild(kpiCard('ต้องวางอยู่ตอนนี้', placed.length, 'ในสาขาของคุณ', 'ok', noop));
+    k.appendChild(kpiCard('กำลังจะเริ่มใน 14 วัน', next.length, next[0] ? next[0].brand : 'ไม่มี', '', noop));
+    k.appendChild(kpiCard('ใกล้ครบกำหนดเก็บ (7 วัน)', soon.length, soon[0] ? soon[0].brand : 'ไม่มี', soon.length ? 'warn' : '', noop));
+    host.appendChild(k);
+    host.appendChild(timelineCard(all.filter(function (c) { return c.status === 'approved'; }), null));
+    var box = el('div'); host.appendChild(box); renderBranchBox(box);
+  }
+
+  var homeFind = null, pendingQuery = '';
+  function showHome() {
+    $('bar').hidden = true; show('');
+    var v = $('view'); v.textContent = '';
+    var dash = el('div');
+    homeFind = findPanel(v, { onActive: function (on) { dash.hidden = on; }, onOpen: isOffice() ? openDetail : null });
+    v.appendChild(dash);
+    if (pendingQuery) { homeFind.run(pendingQuery); pendingQuery = ''; }
+    if (sess.staff.role === 'WAREHOUSE') { homeFind.focus(); return; }
+    var wait = el('p', 'sub', 'กำลังโหลด...'); dash.appendChild(wait);
+    api('list', {}).then(function (d) {
+      all = d.campaigns; dash.textContent = '';
+      if (isOffice()) officeDash(dash); else branchDash(dash);
+    }).catch(fail);
+  }
+  function openDetail(id) { setCurrent('media'); detail(id); }
+
+  // ---------- shell: modules, sidebar, routing ----------
+  var IC = {
+    home: 'M3 11l9-8 9 8M5 10v10h14V10',
+    media: 'M4 5h16v11H4zM8 20h8M12 16v4',
+    gear: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19 12l2-1-2-4-2 1-2-1-1-2h-4l-1 2-2 1-2-1-2 4 2 1v2l-2 1 2 4 2-1 2 1 1 2h4l1-2 2-1 2 1 2-4-2-1z',
+    shelf: 'M4 4v16M20 4v16M4 9h16M4 15h16'
+  };
+  function icon(k) {
+    var n = 'http://www.w3.org/2000/svg', sv = document.createElementNS(n, 'svg'), p = document.createElementNS(n, 'path');
+    sv.setAttribute('viewBox', '0 0 24 24'); sv.setAttribute('fill', 'none'); sv.setAttribute('stroke', 'currentColor'); sv.setAttribute('stroke-width', '2');
+    sv.setAttribute('stroke-linecap', 'round'); sv.setAttribute('stroke-linejoin', 'round'); sv.setAttribute('aria-hidden', 'true');
+    p.setAttribute('d', IC[k]); sv.appendChild(p); return sv;
+  }
+  // The modules this person sees. More modules (cashier shelves, header signs) join this list when they exist.
+  function modules() {
+    var r = sess.staff.role;
+    if (r === 'WAREHOUSE') return [{ id: 'home', label: 'ค้นหา', icon: 'home' }];
+    if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม', icon: 'home' }];
+    var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }];
+    if (isApprover()) m.push({ id: 'settings', label: 'ตั้งค่า', icon: 'gear' });
+    return m;
+  }
+  var whoText = '', roleText = '', current = 'home';
+  function setCurrent(id) { current = id; renderNav(); var m = modules().filter(function (x) { return x.id === id; })[0]; $('title').textContent = m ? m.label : 'การวางสื่อในร้าน'; }
+  function renderNav() {
+    var mods = modules(), nav = $('nav'); nav.textContent = '';
+    $('app').classList.toggle('solo', mods.length < 2);
+    $('swho').textContent = whoText + (roleText ? ' · ' + roleText : '');
+    var b = el('div', 'brand'), mk = el('div', 'mark'); mk.appendChild(icon('shelf')); b.appendChild(mk);
+    var t = el('div'); t.appendChild(el('b', '', 'การวางสื่อในร้าน')); t.appendChild(el('small', '', 'iCare · Pharmax · Super Drug')); b.appendChild(t); nav.appendChild(b);
+    var ul = el('ul', 'nav-list');
+    mods.filter(function (m) { return m.id !== 'settings'; }).forEach(function (m) {
+      var li = el('li'), a = el('a'); a.href = '#/' + m.id; a.appendChild(icon(m.icon)); a.appendChild(document.createTextNode(m.label));
+      if (m.id === current) a.setAttribute('aria-current', 'page'); li.appendChild(a); ul.appendChild(li);
+    });
+    nav.appendChild(ul);
+    var f = el('div', 'nav-foot'), uc = el('div', 'usercard'); uc.appendChild(el('span', 'avatar', (whoText.trim()[0] || '?')));
+    var ut = el('div'); ut.appendChild(el('b', '', whoText)); ut.appendChild(el('small', 'rolechip', roleText)); uc.appendChild(ut); f.appendChild(uc);
+    mods.filter(function (m) { return m.id === 'settings'; }).forEach(function (m) {
+      var a = el('a'); a.href = '#/settings'; a.appendChild(icon('gear')); a.appendChild(document.createTextNode(m.label));
+      if (current === 'settings') a.setAttribute('aria-current', 'page'); f.appendChild(a);
+    });
+    nav.appendChild(f);
+  }
+  function go(id) { if (location.hash === '#/' + id) route(); else location.hash = '#/' + id; }
+  function route() {
+    if (!sess) return;
+    var id = (location.hash || '#/home').slice(2).split('/')[0];
+    if (!modules().some(function (m) { return m.id === id; })) id = 'home';
+    setCurrent(id); $('app').classList.remove('open'); $('bar').hidden = true; show('');
+    if (id === 'media') loadOffice(); else if (id === 'settings') settings(); else showHome();
+  }
+
   // ---------- start ----------
   function start(s) {
     sess = s;
-    $('who').textContent = (s.staff.n || '') + ' · ' + (s.staff.un || '');
-    var role = $('role'); role.textContent = ROLE_TH[s.staff.role] || s.staff.role || ''; role.hidden = !role.textContent;
+    whoText = (s.staff.n || '') + (s.staff.un ? ' · ' + s.staff.un : ''); roleText = ROLE_TH[s.staff.role] || s.staff.role || '';
     show('');
-    if (s.staff.role === 'WAREHOUSE') {
-      // the warehouse only looks things up: type or send a photo
-      done(); var wv = $('view'); wv.textContent = ''; $('bar').hidden = true;
-      findPanel(wv, {}).focus();
-    } else if (isOffice()) {
+    if (isOffice()) {
       var unitsReq = api('units').then(function (d) { units = d.units || []; people = d.people || []; }).catch(function () { units = []; people = []; });
       api('types_list').then(function (d) { types = d.types.filter(function (t) { return t.active; }); return unitsReq; })
-        .then(function () { loadOffice(); }).catch(fail);
-    } else {
-      loading();
-      api('list').then(function (d) { show(''); renderBranch(d.campaigns); }).catch(fail);
-    }
+        .then(route).catch(fail);
+    } else route();
   }
   if (SUPABASE_URL.indexOf('__') === 0) { show('หน้านี้ยังไม่ได้ตั้งค่า (SUPABASE_URL)', 'err'); return; }
+  window.addEventListener('hashchange', route);
+  $('menu').onclick = function () { $('app').classList.toggle('open'); };
+  $('scrim').onclick = function () { $('app').classList.remove('open'); };
+  $('gs').onkeydown = function (e) {
+    if (e.key !== 'Enter' || !$('gs').value.trim() || !sess) return;
+    pendingQuery = $('gs').value.trim(); $('gs').value = ''; go('home');
+  };
+  window.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('gs').focus(); } });
   var q = new URLSearchParams(location.search), sso = q.get('sso');
   if (sso) {
     q.delete('sso'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : ''));

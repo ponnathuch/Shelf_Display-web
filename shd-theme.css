@@ -76,6 +76,10 @@
   --size-thumb: 120px;
   --size-thumb-s: 80px;
   --size-fact: 140px;
+  --size-gantt-label: 210px;
+  --size-gantt-bar: 24px;
+  --size-gantt-row: 40px;
+  --size-today-line: 2px;
   --size-nav: 244px;
   --size-row-thumb: 44px;
   --size-cell: 132px;
