@@ -209,7 +209,7 @@ body { line-height: 1.45; }
 button.g-row { width: 100%; text-align: left; font: inherit; color: inherit; background: none; border-width: 0 0 1px; cursor: pointer; }
 button.g-row:hover { background: var(--c-brand-soft); }
 .g-head { border-bottom: 1px solid var(--c-line-strong); }
-.g-label { display: grid; line-height: 1.25; padding-right: var(--space-2); min-width: 0; }
+.g-label { display: grid; line-height: 1.25; padding-right: var(--space-3); min-width: 0; }
 .g-label b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .g-track { position: relative; height: var(--size-gantt-bar); }
 .g-scale { display: grid; grid-template-columns: repeat(10, 1fr); height: auto; }
@@ -221,7 +221,7 @@ button.g-row:hover { background: var(--c-brand-soft); }
 .g-bar.next { background: var(--c-brand); }
 .g-bar.open { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .g-bar.pend { background: var(--c-warn-soft); color: var(--c-warn); border: var(--outline-w) dashed var(--c-warn-line); }
-.g-today { position: absolute; top: 0; bottom: 0; width: var(--size-today-line); pointer-events: none; }
+.g-today { position: absolute; top: var(--size-gantt-row); bottom: 0; width: var(--size-today-line); pointer-events: none; }
 .g-today span { position: absolute; bottom: 0; left: var(--space-1); font-size: var(--fs-xs); white-space: nowrap; background: var(--c-surface); padding: 0 var(--space-1); }
 .gantt { padding-bottom: var(--space-5); }
 .legend { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0 0 var(--space-3); font-size: var(--fs-xs); color: var(--c-ink-3); }

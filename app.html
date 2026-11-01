@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261101b">
+<link rel="stylesheet" href="shd-theme.css?v=20261101c">
 <style>
   body { line-height: 1.6; }
 
@@ -175,7 +175,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261101b">
+<link rel="stylesheet" href="shd-v2.css?v=20261101c">
 </head>
 <body>
 <div class="app" id="app">
@@ -1132,18 +1132,20 @@
     var t = el('div'); t.appendChild(el('b', '', 'การวางสื่อในร้าน')); t.appendChild(el('small', '', 'iCare · Pharmax · Super Drug')); b.appendChild(t); nav.appendChild(b);
     var ul = el('ul', 'nav-list');
     mods.filter(function (m) { return m.id !== 'settings'; }).forEach(function (m) {
-      var li = el('li'), a = el('a'); a.href = '#/' + m.id; a.appendChild(icon(m.icon)); a.appendChild(document.createTextNode(m.label));
+      var li = el('li'), a = el('a'); a.href = '#/' + m.id; a.onclick = navClick(m.id); a.appendChild(icon(m.icon)); a.appendChild(document.createTextNode(m.label));
       if (m.id === current) a.setAttribute('aria-current', 'page'); li.appendChild(a); ul.appendChild(li);
     });
     nav.appendChild(ul);
     var f = el('div', 'nav-foot'), uc = el('div', 'usercard'); uc.appendChild(el('span', 'avatar', (whoText.trim()[0] || '?')));
     var ut = el('div'); ut.appendChild(el('b', '', whoText)); ut.appendChild(el('small', 'rolechip', roleText)); uc.appendChild(ut); f.appendChild(uc);
     mods.filter(function (m) { return m.id === 'settings'; }).forEach(function (m) {
-      var a = el('a'); a.href = '#/settings'; a.appendChild(icon('gear')); a.appendChild(document.createTextNode(m.label));
+      var a = el('a'); a.href = '#/settings'; a.onclick = navClick('settings'); a.appendChild(icon('gear')); a.appendChild(document.createTextNode(m.label));
       if (current === 'settings') a.setAttribute('aria-current', 'page'); f.appendChild(a);
     });
     nav.appendChild(f);
   }
+  // A detail view keeps the old hash, so a plain link to that same hash would do nothing: always route.
+  function navClick(id) { return function (e) { e.preventDefault(); go(id); }; }
   function go(id) { if (location.hash === '#/' + id) route(); else location.hash = '#/' + id; }
   function route() {
     if (!sess) return;
