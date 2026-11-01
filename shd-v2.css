@@ -160,7 +160,6 @@ body { line-height: 1.45; }
 .input { min-height: var(--size-target-lg); }
 
 :root {
-  --max-page: 1200px;
   --size-kpi-min: 160px;
   --size-gantt-label: 190px;
   --size-gantt-label-s: 110px;
@@ -188,7 +187,7 @@ body { line-height: 1.45; }
 .bar .grow { flex: 1; }
 .menu-btn { display: none; align-items: center; justify-content: center; width: var(--size-target-lg); height: var(--size-target-lg); border: 1px solid var(--c-line-strong);
   background: var(--c-surface); color: var(--c-ink); border-radius: var(--radius-s); cursor: pointer; }
-.page { width: 100%; max-width: var(--max-page); }
+.page { width: 100%; }
 .scrim { display: none; }
 .rolechip { display: block; color: var(--c-ink-3); font-size: var(--fs-xs); }
 .usercard > div { min-width: 0; }
