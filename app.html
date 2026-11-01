@@ -56,6 +56,13 @@
   .chip.ok { background: var(--c-ok-soft); color: var(--c-ok); border-color: var(--c-ok-line); }
   .chip.warn { background: var(--c-warn-soft); color: var(--c-warn); border-color: var(--c-warn-line); }
   .chip.err { background: var(--c-err-soft); color: var(--c-err); border-color: var(--c-err-line); }
+  .card.compact { padding: var(--space-3); margin-bottom: var(--space-2); }
+  .card.compact .thumb { width: var(--size-thumb-s); height: var(--size-thumb-s); }
+  .card.compact .facts { margin-top: var(--space-2); gap: var(--space-2) var(--space-4); grid-template-columns: repeat(auto-fit, minmax(var(--size-fact), 1fr)); }
+  .card.compact .row { margin-top: var(--space-2); }
+  .pick { display: flex; align-items: center; gap: var(--space-2); }
+  .pick input { width: var(--size-icon); height: var(--size-icon); }
+  .delbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
   .chip.code { font-family: var(--font-code); }
   .seg-solo { min-height: var(--size-target-lg); padding: 0 var(--space-3); border: 1px solid var(--c-line-strong); border-radius: var(--radius-s); background: var(--c-surface); color: var(--c-ink-2); cursor: pointer; }
   .seg-solo[aria-pressed="true"] { background: var(--c-brand-soft); border-color: var(--c-brand); color: var(--c-brand-strong); font-weight: bold; }
@@ -263,8 +270,9 @@
   }
   function card(c, opts) {
     opts = opts || {};
-    var d = el('article', 'card ' + toneOf(c));
+    var d = el('article', 'card ' + toneOf(c) + (opts.office ? ' compact' : ''));
     var head = el('div', 'card-head'), left = el('div');
+    if (opts.pick) { var pk = el('label', 'pick'); var cb = el('input'); cb.type = 'checkbox'; cb.checked = !!opts.pick.checked; cb.setAttribute('aria-label', 'เลือก ' + (c.code || '')); cb.onchange = function () { opts.pick.onChange(cb.checked); }; pk.appendChild(cb); head.appendChild(pk); }
     left.appendChild(el('h3', '', c.brand || '(ยังไม่มีชื่อแบรนด์)'));
     var chips = el('div', 'chips');
     if (c.code) chips.appendChild(el('span', 'chip code', c.code));
@@ -407,7 +415,7 @@
     if (!keepMsg) loading();
     api('list', {}).then(function (d) { all = d.campaigns; done(); show(m, m ? 'ok' : ''); renderOffice(); }).catch(fail);
   }
-  var needle = '', lineOnly = false;
+  var needle = '', lineOnly = false, picked = {};
   function renderOffice() { renderBar(); renderList(); }
   function renderList() {
     var v = $('view'); v.textContent = '';
@@ -418,10 +426,24 @@
       return term ? ((c.code || '') + ' ' + (c.brand || '') + ' ' + (c.registrant_name || '')).toLowerCase().indexOf(term) !== -1 : (lineOnly || c.status === tab);
     });
     sortRows(rows);
+    var canDelete = isApprover() && !term && !lineOnly && tab === 'cancelled' && rows.length > 0;
+    if (canDelete) {
+      var bar = el('div', 'delbar'), all2 = el('label', 'pick'), cball = el('input'); cball.type = 'checkbox'; all2.appendChild(cball); all2.appendChild(document.createTextNode('เลือกทั้งหมด'));
+      var del = button('ลบถาวร', 'danger', function () {
+        var ids = Object.keys(picked).map(Number);
+        if (!ids.length || !confirm('ลบถาวร ' + ids.length + ' เคสที่ยกเลิก? รูปและประวัติจะหายและกู้คืนไม่ได้')) return;
+        del.disabled = true;
+        api('delete', { ids: ids }).then(function (r) { picked = {}; show('ลบถาวรแล้ว ' + r.deleted + ' เคส', 'ok'); loadOffice(true); })
+          .catch(function (e) { del.disabled = false; show(e.message, 'err'); });
+      });
+      var sync = function () { var n = Object.keys(picked).length; del.textContent = 'ลบถาวร' + (n ? ' (' + n + ')' : ''); del.disabled = !n; cball.checked = n === rows.length; };
+      cball.onchange = function () { picked = {}; if (cball.checked) rows.forEach(function (c) { picked[c.id] = true; }); renderList(); };
+      bar.appendChild(all2); bar.appendChild(del); v.appendChild(bar); sync();
+    }
     if (!rows.length) { v.appendChild(el('p', 'empty', term ? 'ไม่พบแคมเปญที่ตรงกับคำค้น' : tab === 'pending' ? 'ไม่มีแคมเปญรออนุมัติ' : 'ไม่มีรายการ')); return; }
     rows.forEach(function (c) {
       var primary = tab === 'pending' && isApprover();
-      v.appendChild(card(c, { office: true, actions: [button(primary ? 'ตรวจและอนุมัติ' : 'เปิดดู', primary ? '' : 'alt', function () { detail(c.id); })] }));
+      v.appendChild(card(c, { office: true, pick: canDelete ? { checked: !!picked[c.id], onChange: function (on) { if (on) picked[c.id] = true; else delete picked[c.id]; renderList(); } } : null, actions: [button(primary ? 'ตรวจและอนุมัติ' : 'เปิดดู', primary ? '' : 'alt', function () { detail(c.id); })] }));
     });
   }
 
@@ -443,7 +465,7 @@
     var go = button('ใช่ ผูกกับแคมเปญนี้', 'alt', function () {
       if (!confirm('ย้ายรูปไปแคมเปญที่เลือก และยกเลิกเคสร่างนี้?')) return;
       go.disabled = true;
-      api('link', { id: c.id, target: Number(sel.value) }).then(function (r) { tab = 'approved'; show('ผูกกับ ' + r.code + ' แล้ว แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
+      api('link', { id: c.id, target: Number(sel.value) }).then(function (r) { show('ผูกกับ ' + r.code + ' แล้ว แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
         .catch(function (e) { go.disabled = false; show(e.message, 'err'); });
     });
     var row = el('div', 'row'); row.appendChild(sel); row.appendChild(go);
@@ -460,7 +482,7 @@
       if (isApprover() && c.status === 'pending') {
         var ok = button('อนุมัติ', '', function () {
           ok.disabled = true;
-          api('approve', { id: id }).then(function () { tab = 'approved'; show('อนุมัติแล้ว แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
+          api('approve', { id: id }).then(function () { show('อนุมัติแล้ว แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
             .catch(function (e) { ok.disabled = false; show(e.message, 'err'); });
         });
         actions.push(ok);
@@ -469,7 +491,7 @@
       if (c.status !== 'cancelled') {
         actions.push(button('ยกเลิกแคมเปญ', 'danger', function () {
           if (!confirm('ยกเลิกแคมเปญนี้?')) return;
-          api('cancel', { id: id }).then(function () { tab = 'cancelled'; loadOffice(); }).catch(function (e) { show(e.message, 'err'); });
+          api('cancel', { id: id }).then(function () { show('ยกเลิกแล้ว', 'ok'); loadOffice(true); }).catch(function (e) { show(e.message, 'err'); });
         }));
       }
       v.appendChild(card(c, { office: true, actions: actions }));
