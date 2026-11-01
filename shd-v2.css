@@ -176,7 +176,7 @@ body { line-height: 1.45; }
 .app.solo .nav, .app.solo .menu-btn { display: none; }
 .solo-who { display: none; color: var(--c-ink-3); font-size: var(--fs-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app.solo .solo-who { display: block; }
-.nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; }
+.nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; }
 .nav-list { list-style: none; margin: 0; display: grid; }
 .nav a { display: flex; align-items: center; padding: 0 var(--space-3); text-decoration: none; }
 .nav a svg { width: var(--size-icon); height: var(--size-icon); flex: none; }
@@ -191,6 +191,8 @@ body { line-height: 1.45; }
 .page { width: 100%; max-width: var(--max-page); }
 .scrim { display: none; }
 .rolechip { display: block; color: var(--c-ink-3); font-size: var(--fs-xs); }
+.usercard > div { min-width: 0; }
+.usercard small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .usercard b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- dashboard: numbers, to-do, timeline ---------- */
@@ -220,7 +222,8 @@ button.g-row:hover { background: var(--c-brand-soft); }
 .g-bar.open { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .g-bar.pend { background: var(--c-warn-soft); color: var(--c-warn); border: var(--outline-w) dashed var(--c-warn-line); }
 .g-today { position: absolute; top: 0; bottom: 0; width: var(--size-today-line); pointer-events: none; }
-.g-today span { position: absolute; top: 0; left: var(--space-1); font-size: var(--fs-xs); }
+.g-today span { position: absolute; bottom: 0; left: var(--space-1); font-size: var(--fs-xs); white-space: nowrap; background: var(--c-surface); padding: 0 var(--space-1); }
+.gantt { padding-bottom: var(--space-5); }
 .legend { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0 0 var(--space-3); font-size: var(--fs-xs); color: var(--c-ink-3); }
 .lg { display: inline-flex; align-items: center; gap: var(--space-1); }
 .lg .g-bar { position: static; display: inline-block; width: var(--size-icon-s); height: var(--size-icon-s); padding: 0; }
