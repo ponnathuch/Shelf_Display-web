@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261103a">
+<link rel="stylesheet" href="shd-theme.css?v=20261103b">
 <style>
   body { line-height: 1.6; }
 
@@ -175,7 +175,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261103a">
+<link rel="stylesheet" href="shd-v2.css?v=20261103b">
 </head>
 <body>
 <div class="app" id="app">
@@ -975,7 +975,7 @@
 
 
   // ---------- cashier shelf rental ----------
-  var CASHIER_CAP = 6; // brands per branch counter box
+  var CASHIER_CAP = 6; // brands shown per branch counter box at one time; rented brands rotate, so contracts may exceed it
   var cash = { packages: [], contracts: [], view: 'live' };
   var baht = function (n) { return Number(n).toLocaleString('th-TH'); };
   function cashState(c) {
@@ -1032,24 +1032,21 @@
     }).catch(fail);
   }
   function cashierStats() {
-    var live = cash.contracts.filter(function (c) { return cashState(c) === 'live'; }), per = {}, income = 0;
-    live.forEach(function (c) {
+    var live = cash.contracts.filter(function (c) { return cashState(c) === 'live'; }), rented = live.filter(function (c) { return !c.house; }), branches = {}, income = 0;
+    rented.forEach(function (c) {
       var p = pkgOf(c.package_id); if (!p) return;
-      income += Number(p.rate); p.branches.forEach(function (b) { per[b] = (per[b] || 0) + 1; });
+      income += Number(p.rate); p.branches.forEach(function (b) { branches[b] = true; });
     });
-    return {
-      live: live, income: income, soon: live.filter(function (c) { return daysTo(c.end_date) <= 30; }),
-      full: Object.keys(per).filter(function (b) { return per[b] >= CASHIER_CAP; }).length, branches: Object.keys(per).length
-    };
+    return { live: live, rented: rented, income: income, soon: live.filter(function (c) { return daysTo(c.end_date) <= 30; }), branches: Object.keys(branches).length };
   }
   function renderCashier() {
     var v = $('view'); v.textContent = '';
     var st = cashierStats(), k = el('div', 'kpi');
     var view = function (x) { return function () { cash.view = x; renderCashier(); }; };
-    k.appendChild(kpiCard('สัญญาที่ใช้งานอยู่', st.live.length, st.branches + ' สาขามีเวนเดอร์', 'ok', view('live')));
+    k.appendChild(kpiCard('สัญญาที่ใช้งานอยู่', st.live.length, st.branches + ' สาขามีแบรนด์เช่า', 'ok', view('live')));
     k.appendChild(kpiCard('ใกล้หมดใน 30 วัน', st.soon.length, st.soon[0] ? st.soon[0].brand : 'ไม่มี', st.soon.length ? 'warn' : '', view('live')));
     k.appendChild(kpiCard('ค่าเช่าต่อเดือน', baht(st.income), 'รวมสัญญาที่ใช้งานอยู่ (บาท)', '', view('live')));
-    k.appendChild(kpiCard('สาขาเต็ม ' + CASHIER_CAP + ' แบรนด์', st.full, 'เพิ่มแบรนด์ในสาขาเหล่านี้ไม่ได้', st.full ? 'warn' : '', view('live')));
+    k.appendChild(kpiCard('แบรนด์เช่าหมุนเวียน', st.rented.length, 'วางจริงไม่เกิน ' + CASHIER_CAP + ' แบรนด์ต่อสาขา ไม่นับ House Brand', '', view('live')));
     v.appendChild(k);
     var bar = el('div', 'toolbar'), seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'กรองตามสถานะ');
     [['live', 'ใช้งานอยู่'], ['next', 'ยังไม่เริ่ม'], ['ended', 'หมดอายุ'], ['cancelled', 'ยกเลิก']].forEach(function (t) {
@@ -1065,7 +1062,7 @@
     list.forEach(function (c) {
       var p = pkgOf(c.package_id), d = el('section', 'card compact');
       d.appendChild(el('h3', '', c.brand + (c.vendor ? ' · ' + c.vendor : '')));
-      var meta = el('div', 'row'); meta.appendChild(el('span', 'chip', p ? p.code : '?'));
+      var meta = el('div', 'row'); meta.appendChild(el('span', 'chip', p ? p.code : '?')); if (c.house) meta.appendChild(el('span', 'chip', 'House Brand'));
       meta.appendChild(el('span', 'sub', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) + (p ? ' · ' + baht(p.rate) + ' บาท/เดือน · ' + p.branches.length + ' สาขา' : '')));
       d.appendChild(meta);
       if (c.note) d.appendChild(el('p', 'sub', c.note));
@@ -1099,6 +1096,8 @@
     var from = fld('วันเริ่ม', 'date', c && c.start_date), to = fld('วันสิ้นสุด', 'date', c && c.end_date);
     d.appendChild(g);
     var note = fld('หมายเหตุ', 'textarea', c && c.note); note.rows = 2; d.appendChild(note.parentNode);
+    var hl = el('label', 'f'), house = el('input'); house.type = 'checkbox'; house.checked = !!(c && c.house);
+    hl.appendChild(house); hl.appendChild(document.createTextNode(' House Brand (ไม่ใช่แบรนด์เช่า ไม่นับค่าเช่า)')); d.appendChild(hl);
     var row = el('div', 'row');
     var save = button('บันทึก', '', function () {
       var p = pkgOf(Number(ps.value));
@@ -1106,13 +1105,9 @@
       if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
       if (p && !p.branches.length) { show('แพ็กเกจนี้ยังไม่มีสาขา ให้ผู้ดูแลเพิ่มสาขาในหน้าตั้งค่าก่อน', 'err'); return; }
       save.disabled = true;
-      var b = { brand: brand.value, vendor: vendor.value, package_id: Number(ps.value), start_date: from.value, end_date: to.value, note: note.value };
+      var b = { brand: brand.value, vendor: vendor.value, package_id: Number(ps.value), start_date: from.value, end_date: to.value, note: note.value, house: house.checked };
       if (c) b.id = c.id;
-      api('cashier_save', b).then(cashier).catch(function (e) {
-        save.disabled = false;
-        show(e.code === 'branch_full' ? 'สาขา ' + e.data.branches.join(', ') + (e.data.count > e.data.branches.length ? ' และอีก ' + (e.data.count - e.data.branches.length) : '') +
-          ' มีครบ ' + CASHIER_CAP + ' แบรนด์ในช่วงวันที่ชนกัน' : e.message, 'err');
-      });
+      api('cashier_save', b).then(cashier).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', '', renderCashier)); d.appendChild(row); v.appendChild(d);
   }
