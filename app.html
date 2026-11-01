@@ -77,6 +77,13 @@
     border: var(--outline-w) dashed var(--c-line-strong); border-radius: var(--radius-m); }
   .dropzone.over { border-color: var(--c-brand); background: var(--c-brand-soft); }
   .dropzone .row { justify-content: center; margin-top: var(--space-2); }
+  .find { padding: var(--space-4); }
+  .find.over { border-color: var(--c-brand); background: var(--c-brand-soft); }
+  .find-input { width: 100%; min-height: var(--size-target-lg); font-size: var(--fs-l); }
+  .find .row { align-items: center; margin-top: var(--space-3); }
+  .find-out { margin-bottom: var(--space-4); }
+  .find-out .chips { align-items: center; margin-bottom: var(--space-2); }
+  .find-out button.chip { cursor: pointer; }
   .pick { display: flex; align-items: center; gap: var(--space-2); }
   .pick input { width: var(--size-icon); height: var(--size-icon); }
   .delbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
@@ -192,10 +199,11 @@
   var $ = function (id) { return document.getElementById(id); };
   var sess = null, tab = 'pending', types = [], all = [], units = [], people = [];
 
-  var ROLE_TH = { ADMIN: 'ผู้ดูแลระบบ', APPROVER: 'ผู้อนุมัติ', REGISTRANT: 'ผู้ลงทะเบียน', STAFF: 'สาขา' };
+  var ROLE_TH = { ADMIN: 'ผู้ดูแลระบบ', APPROVER: 'ผู้อนุมัติ', REGISTRANT: 'ผู้ลงทะเบียน', STAFF: 'สาขา', WAREHOUSE: 'คลัง' };
   var ERR = {
     'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
     'missing:dates': 'ยังไม่ได้ใส่วันเริ่ม และวันสิ้นสุด (หรือติ๊ก "ไม่มีวันหมดอายุ")', 'missing:agreement_no': 'ยังไม่ได้ใส่เลขที่สัญญา/TTA',
+    bad_query: 'พิมพ์คำค้นก่อน', ai_down: 'AI อ่านรูปไม่ได้ในตอนนี้ ลองพิมพ์ค้นหาแทน', search_limit: 'ค้นด้วยรูปครบจำนวนต่อวันแล้ว ลองพิมพ์ค้นหาแทน',
     bad_photo: 'รูปนี้ใช้ไม่ได้ (ต้องเป็นรูปที่เปิดได้ และไม่ใหญ่เกินไป)', too_many_photos: 'ใส่รูปตัวอย่างได้ไม่เกิน 10 รูปต่อแคมเปญ',
     bad_target: 'แคมเปญที่เลือกผูกไม่ได้ (ยกเลิกแล้วหรือเป็นเคสจากคลัง)',
     'missing:ad': 'ยังไม่ได้ใส่เลขโฆษณาและวันหมดอายุ', 'missing:branches': 'ยังไม่ได้เลือกสาขา',
@@ -367,30 +375,24 @@
   function renderBranch(list) {
     branchList = list;
     done(); var v = $('view'); v.textContent = '';
-    var tb = el('div', 'toolbar');
-    var sb = el('input', 'input search'); sb.type = 'search'; sb.value = needle;
-    sb.placeholder = 'ค้นหาชื่อหรือเลขทะเบียน'; sb.setAttribute('aria-label', 'ค้นหาสื่อจากชื่อหรือเลขทะเบียน');
     var box = el('div');
-    sb.oninput = function () { needle = sb.value; renderBranchBox(box); };
-    tb.appendChild(sb); tb.appendChild(sortBox(function () { renderBranchBox(box); }));
-    v.appendChild(tb); v.appendChild(box); renderBranchBox(box);
+    findPanel(v, { onActive: function (on) { box.hidden = on; } });
+    v.appendChild(box); renderBranchBox(box);
   }
   function renderBranchBox(v) {
     v.textContent = '';
-    var term = needle.trim().toLowerCase();
-    var g = { soon: [], on: [], next: [] }, any = false;
+    var tb = el('div', 'toolbar'); tb.appendChild(sortBox(function () { renderBranchBox(v); })); v.appendChild(tb);
+    var g = { soon: [], on: [], next: [] };
     branchList.forEach(function (c) {
       if (!c.start_date || (!c.end_date && !c.open_ended)) return;
       if (c.end_date && daysTo(c.end_date) < 0) return;
-      any = true;
-      if (term && ((c.code || '') + ' ' + (c.brand || '')).toLowerCase().indexOf(term) === -1) return;
       if (daysTo(c.start_date) > 0) g.next.push(c);
       else if (c.end_date && daysTo(c.end_date) <= 7) g.soon.push(c);
       else g.on.push(c);
     });
     ['soon', 'on', 'next'].forEach(function (k) { sortRows(g[k]); });
     if (!g.soon.length && !g.on.length && !g.next.length) {
-      v.appendChild(el('p', 'empty', any ? 'ไม่พบสื่อที่ตรงกับคำค้น' : 'ตอนนี้ยังไม่มีสื่อที่ต้องวางในสาขานี้'));
+      v.appendChild(el('p', 'empty', 'ตอนนี้ยังไม่มีสื่อที่ต้องวางในสาขานี้'));
       return;
     }
     [['soon', 'ใกล้สิ้นสุด (ภายใน 7 วัน)'], ['on', 'วางอยู่ตอนนี้'], ['next', 'กำลังจะเริ่ม']].forEach(function (s) {
@@ -398,6 +400,98 @@
       var h = el('h2', 'sec', s[1]); h.appendChild(el('span', 'count', String(g[s[0]].length))); v.appendChild(h);
       g[s[0]].forEach(function (c) { v.appendChild(card(c)); });
     });
+  }
+
+  // ---------- find: type, or send a photo (drop, pick, take, paste); every status is searched and tagged ----------
+  function tagOf(r) {
+    if (r.status === 'cancelled') return ['err', 'ยกเลิกแล้ว'];
+    if (r.status === 'pending') return ['warn', 'รออนุมัติ ห้ามวางหรือกระจาย'];
+    if (r.expired) return ['warn', 'หมดอายุแล้ว'];
+    if (r.status === 'approved') return ['ok', 'อนุมัติแล้ว'];
+    return ['', r.status];
+  }
+  function resultRow(r, onOpen) {
+    var t = tagOf(r);
+    var d = el('article', 'card compact tone-' + (t[0] || 'warn'));
+    var head = el('div', 'card-head'), left = el('div');
+    var h = el('h3', '', r.brand || '(ยังไม่มีชื่อแบรนด์)'); left.appendChild(h);
+    var chips = el('div', 'chips');
+    chips.appendChild(el('span', 'chip code', r.code));
+    chips.appendChild(el('span', 'chip ' + t[0], t[1]));
+    if (r.mine === false) chips.appendChild(el('span', 'chip', 'ไม่ใช่สาขาของคุณ'));
+    if (r.source === 'warehouse') chips.appendChild(el('span', 'chip', 'จากคลัง'));
+    left.appendChild(chips);
+    var period = r.open_ended ? 'วางต่อเนื่อง ไม่มีกำหนดสิ้นสุด' : (r.start_date || r.end_date) ? thDate(r.start_date) + ' ถึง ' + thDate(r.end_date) : 'ยังไม่ระบุช่วงวาง';
+    left.appendChild(el('p', 'sub', [r.position || 'ยังไม่ระบุตำแหน่ง', period, r.branch_count ? r.branch_count + ' สาขา' : 'ทุกสาขา'].join(' · ')));
+    head.appendChild(left);
+    if (r.thumb_url) {
+      var a = el('a'); a.href = r.thumb_url; a.target = '_blank'; a.rel = 'noopener'; a.setAttribute('aria-label', 'เปิดรูป');
+      var im = el('img', 'thumb'); im.src = r.thumb_url; im.alt = 'รูป ' + r.code; im.loading = 'lazy'; a.appendChild(im); head.appendChild(a);
+    }
+    d.appendChild(head);
+    if (onOpen) { var row = el('div', 'row'); row.appendChild(button('เปิดดู', 'alt', function () { onOpen(r.id); })); d.appendChild(row); }
+    return d;
+  }
+  function findPanel(host, opts) {
+    opts = opts || {};
+    var box = el('section', 'card find');
+    var inp = el('input', 'input find-input'); inp.type = 'search'; inp.autocomplete = 'off';
+    inp.placeholder = 'พิมพ์ชื่อสื่อ แบรนด์ หรือเลขทะเบียน'; inp.setAttribute('aria-label', 'ค้นหาสื่อ');
+    box.appendChild(inp);
+    var acts = el('div', 'row');
+    function pickInput(camera) {
+      var i = el('input'); i.type = 'file'; i.accept = 'image/*'; i.hidden = true; if (camera) i.setAttribute('capture', 'environment');
+      i.onchange = function () { if (i.files[0]) photo(i.files[0]); i.value = ''; };
+      acts.appendChild(i); return i;
+    }
+    var camIn = pickInput(true), fileIn = pickInput(false);
+    acts.appendChild(button('ถ่ายรูป', 'alt', function () { camIn.click(); }));
+    acts.appendChild(button('เลือกรูป', 'alt', function () { fileIn.click(); }));
+    acts.appendChild(el('span', 'sub', 'หรือลากรูปมาวาง / วางรูปที่คัดลอกมาตรงนี้ AI จะอ่านชื่อสื่อจากรูปให้'));
+    box.appendChild(acts);
+    var out = el('div', 'find-out'); out.setAttribute('aria-live', 'polite');
+    host.appendChild(box); host.appendChild(out);
+
+    var seq = 0, timer = null;
+    function paint(rs, brands) {
+      out.textContent = '';
+      if (brands) {
+        var br = el('div', 'chips');
+        br.appendChild(el('span', 'sub', brands.length ? 'AI อ่านได้ (กดเพื่อค้นด้วยคำนั้น):' : 'AI อ่านชื่อจากรูปไม่ได้ ลองพิมพ์ค้นหาแทน'));
+        brands.forEach(function (b) { var c = el('button', 'chip', b); c.type = 'button'; c.onclick = function () { inp.value = b; text(); }; br.appendChild(c); });
+        out.appendChild(br);
+      }
+      if (!rs.length) { out.appendChild(el('p', 'empty', 'ไม่พบสื่อที่ตรงกัน (ถ้ายังไม่มีในระบบ แปลว่าอาจยังไม่ได้ลงทะเบียน)')); return; }
+      out.appendChild(el('p', 'sub', 'พบ ' + rs.length + ' รายการ (รวมทุกสถานะ ดูป้ายสถานะที่การ์ด)'));
+      rs.forEach(function (r) { out.appendChild(resultRow(r, opts.onOpen)); });
+    }
+    function active(on) { if (opts.onActive) opts.onActive(on); }
+    function run(p) {
+      var my = ++seq; out.textContent = ''; out.appendChild(el('p', 'sub', 'กำลังค้นหา...'));
+      return p.then(function (d) { if (my === seq) paint(d.results, d.brands); }, function (e) { if (my === seq) { out.textContent = ''; show(e.message, 'err'); } });
+    }
+    function text() {
+      var q = inp.value.trim();
+      if (!q) { seq++; out.textContent = ''; active(false); return; }
+      active(true); run(api('search', { q: q }));
+    }
+    function photo(file) {
+      inp.value = ''; active(true);
+      out.textContent = ''; out.appendChild(el('p', 'sub', 'AI กำลังอ่านรูป...'));
+      var im = el('img', 'thumb'); im.alt = 'รูปที่ใช้ค้นหา'; im.src = URL.createObjectURL(file); out.appendChild(im);
+      toJpegBase64(file).then(function (d) { run(api('search_photo', { data: d })); }, function (e) { show(e.message, 'err'); });
+    }
+    inp.oninput = function () { clearTimeout(timer); timer = setTimeout(text, 300); };
+    inp.onkeydown = function (e) { if (e.key === 'Enter') { clearTimeout(timer); text(); } };
+    ['dragenter', 'dragover'].forEach(function (n) { box.addEventListener(n, function (e) { e.preventDefault(); box.classList.add('over'); }); });
+    ['dragleave', 'drop'].forEach(function (n) { box.addEventListener(n, function (e) { e.preventDefault(); box.classList.remove('over'); }); });
+    box.addEventListener('drop', function (e) { var f = Array.prototype.filter.call(e.dataTransfer.files, function (x) { return /^image\//.test(x.type); })[0]; if (f) photo(f); });
+    document.addEventListener('paste', function onPaste(e) {
+      if (!document.body.contains(box)) { document.removeEventListener('paste', onPaste); return; }
+      var f = Array.prototype.filter.call((e.clipboardData && e.clipboardData.files) || [], function (x) { return /^image\//.test(x.type); })[0];
+      if (f) photo(f);
+    });
+    return { focus: function () { inp.focus(); } };
   }
 
   // ---------- office list ----------
@@ -907,7 +1001,11 @@
     $('who').textContent = (s.staff.n || '') + ' · ' + (s.staff.un || '');
     var role = $('role'); role.textContent = ROLE_TH[s.staff.role] || s.staff.role || ''; role.hidden = !role.textContent;
     show('');
-    if (isOffice()) {
+    if (s.staff.role === 'WAREHOUSE') {
+      // the warehouse only looks things up: type or send a photo
+      done(); var wv = $('view'); wv.textContent = ''; $('bar').hidden = true;
+      findPanel(wv, {}).focus();
+    } else if (isOffice()) {
       var unitsReq = api('units').then(function (d) { units = d.units || []; people = d.people || []; }).catch(function () { units = []; people = []; });
       api('types_list').then(function (d) { types = d.types.filter(function (t) { return t.active; }); return unitsReq; })
         .then(function () { loadOffice(); }).catch(fail);
