@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261109b">
+<link rel="stylesheet" href="shd-theme.css?v=20261110a">
 <style>
   body { line-height: 1.6; }
 
@@ -213,7 +213,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261109b">
+<link rel="stylesheet" href="shd-v2.css?v=20261110a">
 </head>
 <body>
 <div class="app" id="app">
@@ -255,7 +255,7 @@
     self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
     expired: 'เซสชันหมดอายุ กรุณาเข้าใหม่จากเมนู Job Tracker', bad_signature: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker',
     malformed: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker', reused: 'ลิงก์ถูกใช้แล้ว กรุณาเข้าใหม่จากเมนู Job Tracker',
-    forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', bad_slots: 'ตำแหน่งที่เลือกใช้ไม่ได้ (ถูกลบหรือเลิกใช้แล้ว)', bad_slot: 'รหัสตำแหน่งในไฟล์ไม่ถูกต้อง', bad_branches: 'รหัสสาขาไม่ถูกต้อง (รูปแบบ เช่น IC008)'
+    forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', branch_not_in_campaign: 'แคมเปญนี้ไม่ได้ระบุสาขานี้ ผูกได้เฉพาะสาขาที่อยู่ในแคมเปญ', bad_slots: 'ตำแหน่งที่เลือกใช้ไม่ได้ (ถูกลบหรือเลิกใช้แล้ว)', bad_slot: 'รหัสตำแหน่งในไฟล์ไม่ถูกต้อง', bad_branches: 'รหัสสาขาไม่ถูกต้อง (รูปแบบ เช่น IC008)'
   };
   function errText(code) {
     if (ERR[code]) return ERR[code];
@@ -720,13 +720,26 @@
       v.appendChild(card(c, { office: true, actions: actions }));
       linkBox(v, c);
       var spots = rs[0].spots || [];
-      if (spots.length) {
-        var sc = el('section', 'card'); sc.appendChild(el('h2', 'sec', 'ตำแหน่งในร้าน'));
-        var sr = el('div', 'row');
-        spots.forEach(function (sp) {
-          sr.appendChild(button(sp.branch_code + ' · ' + sp.code, 'alt', function () { flo.branch = sp.branch_code; flo.sel = sp.slot_id; flo.mode = 'branch'; go('floor'); }));
-        });
-        sc.appendChild(sr); v.appendChild(sc);
+      if (c.status !== 'cancelled') {
+        // Temporary signs are set up branch by branch: show how many of the campaign's branches have their place tied yet, and which are missing.
+        var sc = el('section', 'card'), want = (c.campaign_branches || []).map(function (b) { return b.branch_code; });
+        var tied = {}; spots.forEach(function (sp) { tied[sp.branch_code] = true; });
+        var missing = want.filter(function (b) { return !tied[b]; });
+        sc.appendChild(el('h2', 'sec', 'ตำแหน่งในร้าน'));
+        sc.appendChild(el('p', 'sub', want.length ? 'ผูกแล้ว ' + (want.length - missing.length) + ' จาก ' + want.length + ' สาขา' : spots.length ? 'ผูกแล้ว ' + spots.length + ' ตำแหน่ง (แคมเปญนี้ใช้ทุกสาขา)' : 'ยังไม่ได้ผูกกับตำแหน่งในร้าน (ใช้กับป้ายสื่อชั่วคราว)'));
+        var goFloor = function (code, sel) { flo.branch = code; flo.sel = sel; flo.mode = 'branch'; flo.view = 'temp'; go('floor'); };
+        if (spots.length) {
+          var sr = el('div', 'row'); sr.appendChild(el('span', 'sub', 'ผูกแล้ว:'));
+          spots.forEach(function (sp) { sr.appendChild(button(sp.branch_code + ' · ' + sp.code, 'alt', function () { goFloor(sp.branch_code, sp.slot_id); })); });
+          sc.appendChild(sr);
+        }
+        if (want.length && missing.length) {
+          var mr = el('div', 'row'); mr.appendChild(el('span', 'sub', 'ยังไม่ผูก (กดไปสร้างตำแหน่งและผูกในสาขานั้น):'));
+          missing.slice(0, 40).forEach(function (b) { mr.appendChild(button(b, 'alt', function () { goFloor(b, null); })); });
+          if (missing.length > 40) mr.appendChild(el('span', 'sub', 'และอีก ' + (missing.length - 40) + ' สาขา'));
+          sc.appendChild(mr);
+        }
+        v.appendChild(sc);
       }
       [['example_ok', 'รูปตัวอย่างสื่อ'], ['warehouse', 'รูปจากคลัง']].forEach(function (g) {
         var ps = rs[1].photos.filter(function (p) { return (p.kind === 'example_ok') === (g[0] === 'example_ok'); });
