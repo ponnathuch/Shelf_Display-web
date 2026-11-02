@@ -2630,7 +2630,9 @@
   window.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('gs').focus(); } });
   var q = new URLSearchParams(location.search), sso = q.get('sso');
   if (sso) {
-    q.delete('sso'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : ''));
+    // q = a case the LINE card's "open" button asked for (via Job Tracker): shown as a search on the home page
+    pendingQuery = (q.get('q') || '').trim().slice(0, 60);
+    q.delete('sso'); q.delete('q'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : ''));
     show('กำลังเข้าสู่ระบบ...');
     post('shd-session', { link: sso }).then(function (r) {
       if (r.status === 200 && r.data && r.data.session) {
