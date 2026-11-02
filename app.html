@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261110j">
+<link rel="stylesheet" href="shd-theme.css?v=20261110k">
 <style>
   body { line-height: 1.6; }
 
@@ -222,7 +222,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261110j">
+<link rel="stylesheet" href="shd-v2.css?v=20261110k">
 </head>
 <body>
 <div class="app" id="app">
@@ -264,7 +264,7 @@
     self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
     expired: 'เซสชันหมดอายุ กรุณาเข้าใหม่จากเมนู Job Tracker', bad_signature: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker',
     malformed: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker', reused: 'ลิงก์ถูกใช้แล้ว กรุณาเข้าใหม่จากเมนู Job Tracker',
-    forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', code_in_use: 'ชื่อนี้เป็นตำแหน่งอื่น (หัวชั้น/กระจก) อยู่แล้วในสาขา ให้ใช้ชื่ออื่น', no_branches: 'ไม่พบรายชื่อสาขาให้สร้างตำแหน่ง', branch_not_in_campaign: 'แคมเปญนี้ไม่ได้ระบุสาขานี้ ผูกได้เฉพาะสาขาที่อยู่ในแคมเปญ', bad_slots: 'ตำแหน่งที่เลือกใช้ไม่ได้ (ถูกลบหรือเลิกใช้แล้ว)', bad_slot: 'รหัสตำแหน่งในไฟล์ไม่ถูกต้อง', bad_branches: 'รหัสสาขาไม่ถูกต้อง (รูปแบบ เช่น IC008)'
+    forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', line_down: 'ส่งข้อความเข้ากลุ่มคลังไม่สำเร็จ ลองใหม่อีกครั้ง', code_in_use: 'ชื่อนี้เป็นตำแหน่งอื่น (หัวชั้น/กระจก) อยู่แล้วในสาขา ให้ใช้ชื่ออื่น', no_branches: 'ไม่พบรายชื่อสาขาให้สร้างตำแหน่ง', branch_not_in_campaign: 'แคมเปญนี้ไม่ได้ระบุสาขานี้ ผูกได้เฉพาะสาขาที่อยู่ในแคมเปญ', bad_slots: 'ตำแหน่งที่เลือกใช้ไม่ได้ (ถูกลบหรือเลิกใช้แล้ว)', bad_slot: 'รหัสตำแหน่งในไฟล์ไม่ถูกต้อง', bad_branches: 'รหัสสาขาไม่ถูกต้อง (รูปแบบ เช่น IC008)'
   };
   function errText(code) {
     if (ERR[code]) return ERR[code];
@@ -1268,6 +1268,7 @@
         };
         row.appendChild(pl);
         row.appendChild(button('แก้ไข', '', function () { cashierForm(c); }));
+        row.appendChild(button('แจ้งคลังอีกครั้ง', 'alt', function () { notifyCashier(c); }));
         row.appendChild(button('ยกเลิกสัญญา', 'danger', function () {
           if (!confirm('ยกเลิกสัญญา ' + c.brand + ' ?')) return;
           api('cashier_cancel', { id: c.id }).then(cashier).catch(function (e) { show(e.message, 'err'); });
@@ -1331,6 +1332,10 @@
     };
   }
 
+  function notifyCashier(c) {
+    if (!confirm('แจ้งกลุ่มคลังทางไลน์ว่า ' + c.brand + ' กระจายได้?')) return;
+    api('cashier_notify', { id: c.id }).then(function () { show('แจ้งกลุ่มคลังแล้ว', 'ok'); }).catch(function (e) { show(e.message, 'err'); });
+  }
   function cashierForm(c) {
     var v = $('view'); v.textContent = ''; show('');
     var d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', c ? 'แก้ไขสัญญา' : 'เพิ่มสัญญาชั้นแคชเชียร์'));
@@ -1364,6 +1369,8 @@
     if (c) api('cashier_photos', { id: c.id }).then(function (r) { pm.setExisting(r.photos); }).catch(function () { /* the form works without the photos */ });
     var hl = el('label', 'f'), house = el('input'); house.type = 'checkbox'; house.checked = !!(c && c.house);
     hl.appendChild(house); hl.appendChild(document.createTextNode(' House Brand (ไม่ใช่แบรนด์เช่า ไม่นับค่าเช่า)')); d.appendChild(hl);
+    var nl = el('label', 'f'), notify = el('input'); notify.type = 'checkbox'; notify.checked = !c;
+    nl.appendChild(notify); nl.appendChild(document.createTextNode(' แจ้งกลุ่มคลังทางไลน์ว่ากระจายได้ (ไม่มีค่าเช่า ไม่มีชื่อเวนเดอร์)')); d.appendChild(nl);
     var row = el('div', 'row');
     var save = button('บันทึก', '', function () {
       var p = pkgOf(Number(ps.value));
@@ -1371,11 +1378,12 @@
       if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
       if (p && !p.branches.length) { show('แพ็กเกจนี้ยังไม่มีสาขา ให้ผู้ดูแลเพิ่มสาขาในหน้าตั้งค่าก่อน', 'err'); return; }
       save.disabled = true;
-      var b = { brand: brand.value, vendor: vendor.value, package_id: Number(ps.value), start_date: from.value, end_date: to.value, note: note.value, house: house.checked, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value, supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, branches: bpick ? bpick.getCodes() : [] };
+      var b = { brand: brand.value, vendor: vendor.value, package_id: Number(ps.value), start_date: from.value, end_date: to.value, note: note.value, house: house.checked, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value, supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, branches: bpick ? bpick.getCodes() : [], notify: notify.checked };
       if (c) b.id = c.id;
+      var told = false;
       api('cashier_save', b).then(function (r) {
-        return pm.flush(r.id);
-      }).then(function () { show('บันทึกแล้ว', 'ok'); (formBack || cashier)(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
+        told = r.notified; return pm.flush(r.id);
+      }).then(function () { show(notify.checked && !told ? 'บันทึกแล้ว แต่แจ้งกลุ่มคลังไม่สำเร็จ กด "แจ้งคลังอีกครั้ง" ที่สัญญา' : notify.checked ? 'บันทึกแล้ว และแจ้งกลุ่มคลังแล้ว' : 'บันทึกแล้ว', notify.checked && !told ? 'err' : 'ok'); (formBack || cashier)(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', '', function () { (formBack || renderCashier)(); })); d.appendChild(row); v.appendChild(d);
   }
@@ -1481,6 +1489,7 @@
     if (con.edit[r.kind] && st !== 'cancelled') {
       var row = el('div', 'row');
       row.appendChild(button('แก้ไข', '', function () { if (r.kind === 'cashier') { formBack = contracts; cashierForm(c); } else openSignFromContracts(c); }));
+      if (r.kind === 'cashier') row.appendChild(button('แจ้งคลังอีกครั้ง', 'alt', function () { notifyCashier(c); }));
       row.appendChild(button('ยกเลิกสัญญา', 'danger', function () {
         if (!confirm('ยกเลิกสัญญา ' + c.brand + ' ?')) return;
         api(r.kind === 'cashier' ? 'cashier_cancel' : 'sign_cancel', { id: c.id }).then(contracts).catch(function (e) { show(e.message, 'err'); });
