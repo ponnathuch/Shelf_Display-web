@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261114a">
+<link rel="stylesheet" href="shd-theme.css?v=20261114b">
 <style>
   body { line-height: 1.6; }
 
@@ -228,7 +228,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261114a">
+<link rel="stylesheet" href="shd-v2.css?v=20261114b">
 </head>
 <body>
 <div class="app" id="app">
@@ -293,6 +293,7 @@
     m.hidden = !text; m.textContent = text || '';
     m.className = 'msg' + (kind ? ' ' + kind : '');
     m.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+    if (kind === 'err' && text && m.scrollIntoView) m.scrollIntoView({ block: 'nearest' });
   }
   // every page load bumps navSeq; guard(f) runs f only if no newer page load started since
   var navSeq = 0;
@@ -590,7 +591,7 @@
       inp.value = ''; active(true);
       out.textContent = ''; out.appendChild(el('p', 'sub', 'AI กำลังอ่านรูป...'));
       var im = el('img', 'thumb'); im.alt = 'รูปที่ใช้ค้นหา'; im.src = URL.createObjectURL(file); out.appendChild(im);
-      toJpegBase64(file).then(function (d) { run(api('search_photo', { data: d })); }, function (e) { show(e.message, 'err'); });
+      toJpegBase64(file).then(function (d) { run(api('search_photo', { data: d })); }, function (e) { out.textContent = ''; URL.revokeObjectURL(im.src); show(e.message, 'err'); });
     }
     inp.oninput = function () { clearTimeout(timer); timer = setTimeout(text, 300); };
     inp.onkeydown = function (e) { if (e.key === 'Enter') { clearTimeout(timer); text(); } };
@@ -1001,7 +1002,9 @@
     var g1 = set('ข้อมูลหลัก');
     field(g1, 'brand', 'แบรนด์/ผู้ส่ง', 'text', c.brand, true);
     var tl = label('ประเภทตำแหน่ง', true), ts = el('select', 'input');
-    types.forEach(function (t) { var o = el('option', '', t.name); o.value = t.id; if (c.position_type_id === t.id) o.selected = true; ts.appendChild(o); });
+    var tlist = types.slice();
+    if (c.position_type_id && !tlist.some(function (t) { return t.id === c.position_type_id; })) tlist.unshift({ id: c.position_type_id, name: ((c.position_types || {}).name || 'ประเภทเดิม') + ' (ปิดใช้แล้ว)' });
+    tlist.forEach(function (t) { var o = el('option', '', t.name); o.value = t.id; if (c.position_type_id === t.id) o.selected = true; ts.appendChild(o); });
     tl.appendChild(ts); g1.appendChild(tl);
     field(g1, 'package', 'แพ็กเกจ (A/B)', 'text', c.package);
     field(g1, 'supplier_contact', 'ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c.supplier_contact);
@@ -1719,7 +1722,7 @@
   }
 
   function floor() {
-    formBack = null; $('bar').hidden = true; show(''); var v = $('view'); v.textContent = '';
+    flo.signsReq = null; formBack = null; $('bar').hidden = true; show(''); var v = $('view'); v.textContent = '';
     if (!isOffice()) { // a branch sees only its own plan
       flo.branch = sess.staff.unit; var mine = el('div'); v.appendChild(mine);
       if (BRANCH_RE.test(flo.branch)) loadFloor(mine); else mine.appendChild(el('p', 'empty-note', 'ไม่พบรหัสสาขาของคุณ'));
@@ -1776,7 +1779,8 @@
   }
   function loadFloor(holder) {
     navSeq++; holder.textContent = ''; holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
-    Promise.all([api('floor_get', { branch: flo.branch }), isOffice() ? api('sign_list').catch(function () { return { contracts: [] }; }) : Promise.resolve({ contracts: [] })])
+    if (!flo.signsReq) flo.signsReq = isOffice() ? api('sign_list').catch(function () { flo.signsReq = null; return { contracts: [] }; }) : Promise.resolve({ contracts: [] });
+    Promise.all([api('floor_get', { branch: flo.branch }), flo.signsReq])
       .then(guard(function (rs) { flo.data = rs[0]; flo.signs = rs[1].contracts.map(normEnd); renderFloor(holder); })).catch(function (e) { holder.textContent = ''; show(e.message, 'err'); });
   }
   // A form opened from a long list remembers the scroll position, so cancel/save return to the same spot.
@@ -2113,7 +2117,7 @@
       var b = { brand: brand.value, vendor: vendor.value, start_date: from.value, end_date: to.value, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value,
         supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, note: note.value, slots: slots };
       if (savedId) b.id = savedId; else if (renew) b.renewed_from = c.id;
-      api('sign_save', b).then(function (r) { savedId = r.id; return pm.flush(r.id); }).then(function () { show('บันทึกแล้ว', 'ok'); if (formBack) formBack(); else loadFloor(holder); })
+      api('sign_save', b).then(function (r) { savedId = r.id; flo.signsReq = null; return pm.flush(r.id); }).then(function () { show('บันทึกแล้ว', 'ok'); if (formBack) formBack(); else loadFloor(holder); })
         .catch(function (e) { save.disabled = false; show(e.code === 'slot_taken' ? 'ตำแหน่งเหล่านี้มีสัญญาอื่นอยู่ในช่วงวันที่ชนกัน: ' + e.data.slots.join(', ') + ' (เอาออกหรือเปลี่ยนวันที่)' : e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', function () { if (formBack) formBack(); else renderFloor(holder); })); d.appendChild(row);
