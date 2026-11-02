@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261112a">
+<link rel="stylesheet" href="shd-theme.css?v=20261112b">
 <style>
   body { line-height: 1.6; }
 
@@ -222,7 +222,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261112a">
+<link rel="stylesheet" href="shd-v2.css?v=20261112b">
 </head>
 <body>
 <div class="app" id="app">
@@ -2087,7 +2087,8 @@
       if (!rows.length) list.appendChild(el('p', 'empty-note', 'ไม่มีตำแหน่งในกลุ่มนี้'));
       rows.forEach(function (s) {
         var r = el('div', 'trow'); r.appendChild(el('b', 'slot-code', s.code));
-        r.appendChild(el('span', 'sub grow', [s.name, s.category, s.note].filter(Boolean).join(' · ')));
+        var sp = (s.specs || []).map(function (x) { return (x.width_cm != null && x.height_cm != null ? x.width_cm + ' x ' + x.height_cm + ' cm' : x.size_text || '') + (x.qty != null && x.qty !== 1 ? ' x' + x.qty : ''); }).filter(Boolean);
+        r.appendChild(el('span', 'sub grow', [s.name, s.category, s.note, sp.length ? 'ขนาด ' + sp.slice(0, 3).join(', ') + (sp.length > 3 ? ' +' + (sp.length - 3) : '') : ''].filter(Boolean).join(' · ')));
         r.appendChild(el('span', 'chip', KIND_TH[s.kind] || s.kind)); if (s.kind === 'glass' || s.tenant === 'rent') r.appendChild(el('span', 'chip', TENANT_TH[s.tenant]));
         var placed = s.x != null && s.y != null, rentNow = signNow(s);
         if (s.specs && s.specs.length) r.appendChild(el('span', 'chip', s.specs.length + ' รายการป้าย'));
