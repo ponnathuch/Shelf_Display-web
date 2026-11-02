@@ -84,6 +84,8 @@
   --size-row-thumb: 44px;
   --size-cell: 132px;
   --size-pane: 320px;
+  --size-cell-wide: 200px;
+  --size-scroll: 280px;
   --size-plan: 520px;
   --size-bar: 56px;
   --size-card-min: 260px;

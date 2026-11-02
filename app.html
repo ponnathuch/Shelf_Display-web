@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261110g">
+<link rel="stylesheet" href="shd-theme.css?v=20261110h">
 <style>
   body { line-height: 1.6; }
 
@@ -163,6 +163,9 @@
   .pin.rent { background: var(--c-warn); }
   .pin.taken { background: var(--c-err); }
   .backbtn { margin-bottom: var(--space-3); }
+  .missgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--size-cell-wide), 1fr)); gap: var(--space-2); max-height: var(--size-scroll); overflow-y: auto; margin-top: var(--space-3); }
+  .missgrid .tile { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--c-line); border-radius: var(--radius-l); background: var(--c-surface); font: inherit; color: inherit; text-align: left; cursor: pointer; }
+  .missgrid .tile:hover { background: var(--c-brand-soft); }
   .linker { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
   .linker input { flex: 1 1 var(--size-cell); }
   .pin.tmp { background: var(--c-ok); }
@@ -214,7 +217,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261110g">
+<link rel="stylesheet" href="shd-v2.css?v=20261110h">
 </head>
 <body>
 <div class="app" id="app">
@@ -731,16 +734,32 @@
         sc.appendChild(el('h2', 'sec', 'ตำแหน่งในร้าน'));
         sc.appendChild(el('p', 'sub', want.length ? 'ผูกแล้ว ' + (want.length - missing.length) + ' จาก ' + want.length + ' สาขา' + (everyBranch ? ' (แคมเปญนี้ใช้ทุกสาขา)' : '') : 'ยังไม่ได้ผูกกับตำแหน่งในร้าน (ใช้กับป้ายสื่อชั่วคราว)'));
         var goFloor = function (code, sel) { flo.branch = code; flo.sel = sel; flo.mode = 'branch'; flo.view = 'temp'; flo.backTo = { id: id, code: c.code }; go('floor'); };
-        if (spots.length) {
-          var sr = el('div', 'row'); sr.appendChild(el('span', 'sub', 'ผูกแล้ว:'));
-          spots.forEach(function (sp) { sr.appendChild(button(sp.branch_code + ' · ' + sp.code, 'alt', function () { goFloor(sp.branch_code, sp.slot_id); })); });
-          sc.appendChild(sr);
+        // One board for every branch of the campaign: tied (with its place) or not yet, filter + search, scrolls inside the card.
+        // The floor page has a button back to this campaign, so a tap there and back loses nothing.
+        if (want.length) {
+          var spotOf = {}; spots.forEach(function (sp) { spotOf[sp.branch_code] = sp; });
+          var nameOf = function (code) { var u = units.filter(function (x) { return x.code === code; })[0]; return u ? u.name : ''; };
+          var bf = missing.length ? 'miss' : 'all', bar = el('div', 'toolbar'), seg = el('div', 'seg'), ms = el('input', 'input search'), ml = el('div', 'missgrid');
+          seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'กรองสาขา');
+          ms.type = 'search'; ms.placeholder = 'ค้นหาสาขา (รหัสหรือชื่อ)'; ms.setAttribute('aria-label', 'ค้นหาสาขา');
+          var paintBoard = function () {
+            ml.textContent = ''; var q = ms.value.trim().toLowerCase();
+            var rows = want.filter(function (b) { return (bf === 'all' || (bf === 'miss') === !spotOf[b]) && (!q || (b + ' ' + nameOf(b)).toLowerCase().indexOf(q) >= 0); });
+            if (!rows.length) ml.appendChild(el('p', 'empty-note', 'ไม่พบสาขา'));
+            rows.forEach(function (b) {
+              var sp = spotOf[b], x = el('button', 'tile'); x.type = 'button'; x.onclick = function () { goFloor(b, sp ? sp.slot_id : null); };
+              x.appendChild(el('b', '', b)); x.appendChild(el('span', 'sub', nameOf(b)));
+              x.appendChild(el('span', 'chip ' + (sp ? 'ok' : 'warn'), sp ? 'ผูกแล้ว · ' + sp.code : 'ยังไม่ผูก')); ml.appendChild(x);
+            });
+          };
+          [['miss', 'ยังไม่ผูก (' + missing.length + ')'], ['done', 'ผูกแล้ว (' + (want.length - missing.length) + ')'], ['all', 'ทั้งหมด (' + want.length + ')']].forEach(function (t) {
+            var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(bf === t[0]));
+            x.onclick = function () { bf = t[0]; [].forEach.call(seg.children, function (k) { k.setAttribute('aria-pressed', String(k === x)); }); paintBoard(); }; seg.appendChild(x);
+          });
+          bar.appendChild(seg); bar.appendChild(ms); sc.appendChild(bar); sc.appendChild(ml);
+          ms.oninput = paintBoard; paintBoard();
         }
         if (want.length && missing.length) {
-          var mr = el('div', 'row'); mr.appendChild(el('span', 'sub', 'ยังไม่ผูก (กดไปสร้างตำแหน่งและผูกในสาขานั้น):'));
-          missing.slice(0, 40).forEach(function (b) { mr.appendChild(button(b, 'alt', function () { goFloor(b, null); })); });
-          if (missing.length > 40) mr.appendChild(el('span', 'sub', 'และอีก ' + (missing.length - 40) + ' สาขา'));
-          sc.appendChild(mr);
           // all at once: the same place name in every missing branch, no pin yet
           var bulk = el('div', 'linker'), nm = el('input', 'input'); nm.type = 'text'; nm.maxLength = 30; nm.value = 'TMP1'; nm.setAttribute('aria-label', 'ชื่อตำแหน่งที่จะสร้างในทุกสาขา');
           bulk.appendChild(nm);
