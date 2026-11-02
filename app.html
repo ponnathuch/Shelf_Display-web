@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261113a">
+<link rel="stylesheet" href="shd-theme.css?v=20261113b">
 <style>
   body { line-height: 1.6; }
 
@@ -228,7 +228,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261113a">
+<link rel="stylesheet" href="shd-v2.css?v=20261113b">
 </head>
 <body>
 <div class="app" id="app">
@@ -331,7 +331,9 @@
     }
     return c;
   }
-  function ageDays(c) { return c.created_at ? Math.max(0, -daysTo(c.created_at.slice(0, 10))) : 0; }
+  // a UTC timestamp from the server as a Bangkok 'YYYY-MM-DDTHH:MM' string
+  function bkk(ts) { return new Date(Date.parse(ts) + 7 * 3600 * 1000).toISOString(); }
+  function ageDays(c) { return c.created_at ? Math.max(0, -daysTo(bkk(c.created_at).slice(0, 10))) : 0; }
 
   // ---------- campaign card (shared by branch list, office list, detail) ----------
   function fact(dl, label, value, wide) {
@@ -398,7 +400,7 @@
     fact(dl, 'วิธีวาง/ข้อห้าม', c.how_to_place, true);
     fact(dl, 'หลังสิ้นสุด', c.return_to, true);
     // everyone sees who approved it (a branch gets the name and date, not the LINE user id)
-    if (c.approved_by_name) fact(dl, 'อนุมัติโดย', c.approved_by_name + (String(c.approved_by || '').indexOf('line:') === 0 ? ' (ผ่าน LINE)' : '') + (c.approved_at ? ' · ' + thDate(String(c.approved_at).slice(0, 10)) : ''));
+    if (c.approved_by_name) fact(dl, 'อนุมัติโดย', c.approved_by_name + (String(c.approved_by || '').indexOf('line:') === 0 ? ' (ผ่าน LINE)' : '') + (c.approved_at ? ' · ' + thDate(bkk(c.approved_at).slice(0, 10)) : ''));
     if (opts.office) {
       var br = (c.campaign_branches || []).length;
       fact(dl, 'สาขา', br ? br + ' สาขา' : 'ทุกสาขา');
@@ -650,7 +652,9 @@
         var ids = Object.keys(picked).map(Number);
         if (!ids.length || !confirm('ลบถาวร ' + ids.length + ' เคสที่ยกเลิก? รูปและประวัติจะหายและกู้คืนไม่ได้')) return;
         del.disabled = true;
-        api('delete', { ids: ids }).then(function (r) { picked = {}; show('ลบถาวรแล้ว ' + r.deleted + ' เคส', 'ok'); loadOffice(true); })
+        var gone = 0, parts = []; for (var k = 0; k < ids.length; k += 50) parts.push(ids.slice(k, k + 50));
+        parts.reduce(function (p, part) { return p.then(function () { return api('delete', { ids: part }).then(function (r) { gone += r.deleted; }); }); }, Promise.resolve())
+          .then(function () { picked = {}; show('ลบถาวรแล้ว ' + gone + ' เคส', 'ok'); loadOffice(true); })
           .catch(function (e) { del.disabled = false; show(e.message, 'err'); });
       });
       var sync = function () { var n = Object.keys(picked).length; del.textContent = 'ลบถาวร' + (n ? ' (' + n + ')' : ''); del.disabled = !n; cball.checked = n === rows.length; };
@@ -691,14 +695,24 @@
       hit.forEach(function (l) {
         var li = el('li'), bt = el('button', '', l); bt.type = 'button'; li.setAttribute('role', 'option');
         bt.onmousedown = function (e) { e.preventDefault(); };
-        bt.onclick = function () { sel.value = l; open(false); };
+        bt.onclick = function () { sel.value = l; open(false); go.focus(); };
         li.appendChild(bt); list.appendChild(li);
       });
     }
     sel.onfocus = function () { sel.select(); drawList(); open(true); };
     sel.oninput = function () { drawList(); open(true); };
-    sel.onblur = function () { open(false); };
-    sel.onkeydown = function (e) { if (e.key === 'Escape') open(false); };
+    // close only when focus leaves the field and its list, so Tab/arrow keys can reach an option
+    wrapc.addEventListener('focusout', function (e) { if (!wrapc.contains(e.relatedTarget)) open(false); });
+    sel.onkeydown = function (e) {
+      if (e.key === 'Escape') open(false);
+      if (e.key === 'ArrowDown') { var first = list.querySelector('button'); if (first) { e.preventDefault(); open(true); first.focus(); } }
+    };
+    list.onkeydown = function (e) {
+      var bs = [].slice.call(list.querySelectorAll('button')), i = bs.indexOf(document.activeElement);
+      if (e.key === 'Escape') { open(false); sel.focus(); }
+      else if (e.key === 'ArrowDown' && i < bs.length - 1) { e.preventDefault(); bs[i + 1].focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); if (i > 0) bs[i - 1].focus(); else sel.focus(); }
+    };
     if (cands.length && same(cands[0])) sel.value = labels[0]; // the best brand match is pre-filled
     var go = button('ใช่ ผูกกับแคมเปญนี้', 'alt', function () {
       var target = byLabel[sel.value];
@@ -797,7 +811,7 @@
       var ev = rs[0].events || [];
       if (ev.length) {
         var det = el('details', 'hist'); det.appendChild(el('summary', '', 'ประวัติการเปลี่ยนแปลง (' + ev.length + ')'));
-        ev.forEach(function (e) { det.appendChild(el('div', '', e.at.slice(0, 16).replace('T', ' ') + ' · ' + e.actor + ' · ' + e.action)); });
+        ev.forEach(function (e) { det.appendChild(el('div', '', bkk(e.at).slice(0, 16).replace('T', ' ') + ' · ' + e.actor + ' · ' + e.action)); });
         v.appendChild(det);
       }
     }).catch(fail);
@@ -1332,11 +1346,11 @@
       node: box,
       setExisting: function (list) { existing = list; draw(); },
       flush: function (id) {
-        var i = 0;
+        var total = queue.length, n = 0;
         function next() {
-          if (i >= queue.length) return Promise.resolve();
-          show('กำลังส่งรูป ' + (i + 1) + '/' + queue.length + '...');
-          return toJpegBase64(queue[i].file).then(function (d) { return api(cfg.addAction, { id: id, data: d }); }).then(function () { i++; return next(); });
+          if (!queue.length) return Promise.resolve();
+          n++; show('กำลังส่งรูป ' + n + '/' + total + '...');
+          return toJpegBase64(queue[0].file).then(function (d) { return api(cfg.addAction, { id: id, data: d }); }).then(function () { queue.shift(); return next(); });
         }
         return next();
       }
@@ -1349,6 +1363,7 @@
   }
   function cashierForm(c) {
     rememberScroll();
+    var savedId = c ? c.id : null, toldOnce = false;
     var v = $('view'); v.textContent = ''; show('');
     var d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', c ? 'แก้ไขสัญญา' : 'เพิ่มสัญญาชั้นแคชเชียร์'));
     var g = el('div', 'grid');
@@ -1391,10 +1406,11 @@
       if (p && !p.branches.length) { show('แพ็กเกจนี้ยังไม่มีสาขา ให้ผู้ดูแลเพิ่มสาขาในหน้าตั้งค่าก่อน', 'err'); return; }
       save.disabled = true;
       var b = { brand: brand.value, vendor: vendor.value, package_id: Number(ps.value), start_date: from.value, end_date: to.value, note: note.value, house: house.checked, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value, supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, branches: bpick ? bpick.getCodes() : [], notify: notify.checked };
-      if (c) b.id = c.id;
-      var told = false;
+      if (savedId) b.id = savedId;
+      if (toldOnce) b.notify = false; // the warehouse group was told on the first try
+      var told = toldOnce;
       api('cashier_save', b).then(function (r) {
-        told = r.notified; return pm.flush(r.id);
+        savedId = r.id; told = told || r.notified; toldOnce = told; return pm.flush(r.id);
       }).then(function () { afterNote = [notify.checked && !told ? 'บันทึกแล้ว แต่แจ้งกลุ่มคลังไม่สำเร็จ กด "แจ้งคลังอีกครั้ง" ที่สัญญา' : notify.checked ? 'บันทึกแล้ว และแจ้งกลุ่มคลังแล้ว' : 'บันทึกแล้ว', notify.checked && !told ? 'err' : 'ok']; (formBack || cashier)(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', '', function () { (formBack || renderCashier)(); })); d.appendChild(row); v.appendChild(d);
@@ -1822,6 +1838,7 @@
         var r = im.getBoundingClientRect();
         pin.style.left = Math.max(0, Math.min(100, (e.clientX - r.left) / r.width * 100)) + '%'; pin.style.top = Math.max(0, Math.min(100, (e.clientY - r.top) / r.height * 100)) + '%';
       };
+      pin.onclick = function (e) { if (e.detail === 0) { flo.sel = flo.sel === sl.id ? null : sl.id; renderFloor(holder); } }; // keyboard (no pointer)
       pin.onpointerup = function () {
         var dr = drag; drag = null; if (!dr) return;
         if (!dr.moved) { flo.sel = flo.sel === sl.id ? null : sl.id; renderFloor(holder); return; }
@@ -1942,6 +1959,7 @@
   }
   function signForm(holder, c, presetSlot, renew) {
     rememberScroll();
+    var savedId = c && !renew ? c.id : null;
     var edit = c && !renew, d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', renew ? 'ต่อสัญญาป้าย ' + c.brand + ' (จาก ' + (c.sys_no || '') + ')' : c ? 'แก้ไขสัญญาป้าย' : 'เพิ่มสัญญาป้าย'));
     if (renew) d.appendChild(el('p', 'sub', 'คัดลอกสาขา ตำแหน่ง และค่าเช่ามาให้แล้ว ใส่วันที่ใหม่และเลขที่เอกสารใหม่ สัญญาเดิมยังอยู่เป็นประวัติ'));
     var g = el('div', 'grid');
@@ -2091,8 +2109,8 @@
       save.disabled = true;
       var b = { brand: brand.value, vendor: vendor.value, start_date: from.value, end_date: to.value, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value,
         supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, note: note.value, slots: slots };
-      if (edit) b.id = c.id; else if (renew) b.renewed_from = c.id;
-      api('sign_save', b).then(function (r) { return pm.flush(r.id); }).then(function () { show('บันทึกแล้ว', 'ok'); if (formBack) formBack(); else loadFloor(holder); })
+      if (savedId) b.id = savedId; else if (renew) b.renewed_from = c.id;
+      api('sign_save', b).then(function (r) { savedId = r.id; return pm.flush(r.id); }).then(function () { show('บันทึกแล้ว', 'ok'); if (formBack) formBack(); else loadFloor(holder); })
         .catch(function (e) { save.disabled = false; show(e.code === 'slot_taken' ? 'ตำแหน่งเหล่านี้มีสัญญาอื่นอยู่ในช่วงวันที่ชนกัน: ' + e.data.slots.join(', ') + ' (เอาออกหรือเปลี่ยนวันที่)' : e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', function () { if (formBack) formBack(); else renderFloor(holder); })); d.appendChild(row);
