@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261113c">
+<link rel="stylesheet" href="shd-theme.css?v=20261114a">
 <style>
   body { line-height: 1.6; }
 
@@ -228,7 +228,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261113c">
+<link rel="stylesheet" href="shd-v2.css?v=20261114a">
 </head>
 <body>
 <div class="app" id="app">
@@ -1423,16 +1423,16 @@
   // ---------- contracts: one ledger of cashier-shelf and sign contracts (office only) ----------
   // Reading, searching and the money view live here; editing opens the same forms the other modules use and comes back.
   var con = { rows: [], edit: {}, view: 'live', type: 'all', pay: 'all', needle: '', sel: null, limit: 30, canPay: false };
-  var PAY_TH = { pending: 'ยังไม่ได้รับเงิน', partial: 'รับบางส่วน', paid: 'รับเงินแล้ว' };
+  var PAY_TH = { pending: 'ยังไม่ได้รับเงิน', partial: 'รับบางส่วน', paid: 'รับเงินแล้ว', none: 'ไม่เก็บเงิน' };
   var CON_KIND = { cashier: 'ชั้นแคชเชียร์', sign: 'ป้ายหัวชั้น/กระจก' };
   function contracts() {
     $('bar').hidden = true; show(''); $('view').textContent = ''; loading(); formBack = null;
     Promise.all([api('cashier_packages'), api('cashier_list'), api('sign_list')]).then(guard(function (r) {
       done(); noteAfterLoad(); cash.packages = r[0].packages; cash.contracts = r[1].contracts.map(normEnd); cash.canEdit = r[1].can_edit;
-      con.edit = { cashier: r[1].can_edit, sign: r[2].can_edit }; con.rows = []; con.canPay = r[2].can_pay === true;
+      con.edit = { cashier: r[1].can_edit, sign: r[2].can_edit }; con.rows = []; con.canPay = r[2].can_pay === true || r[1].can_pay === true;
       cash.contracts.forEach(function (c) {
         var p = pkgOf(c.package_id);
-        con.rows.push({ kind: 'cashier', key: 'c' + c.id, c: c, rent: c.house || !p ? null : Number(p.rate), scope: c.branches && c.branches.length ? c.branches.length + ' สาขา' : 'ทุกสาขา' });
+        con.rows.push({ kind: 'cashier', key: 'c' + c.id, c: c, pay: c.pay_status || null, rent: c.house || !p ? null : Number(p.rate), scope: c.branches && c.branches.length ? c.branches.length + ' สาขา' : 'ทุกสาขา' });
       });
       r[2].contracts.map(normEnd).forEach(function (c) {
         var bs = {}, rent = 0, has = false;
@@ -1448,7 +1448,7 @@
     return con.rows.filter(function (r) {
       var st = cashState(r.c);
       if (con.type !== 'all' && r.kind !== con.type) return false;
-      if (con.pay !== 'all' && (r.kind !== 'sign' || (r.pay || 'pending') !== con.pay)) return false;
+      if (con.pay !== 'all' && (r.pay || 'pending') !== con.pay) return false;
       if (con.view === 'soon' ? !(st === 'live' && daysTo(r.c.end_date) <= 30) : st !== con.view) return false;
       return !q || (r.c.brand + ' ' + (r.c.vendor || '') + ' ' + (r.c.agreement_no || '') + ' ' + (r.c.sys_no || '') + ' ' + (r.c.ad_no || '')).toLowerCase().indexOf(q) >= 0;
     }).sort(function (a, b) { return String(a.c.end_date).localeCompare(String(b.c.end_date)); });
@@ -1456,12 +1456,12 @@
   function renderContracts() {
     restoreScroll(); var v = $('view'); v.textContent = '';
     var live = con.rows.filter(function (r) { return cashState(r.c) === 'live'; }), soon = live.filter(function (r) { return daysTo(r.c.end_date) <= 30; });
-    var income = live.reduce(function (n, r) { return n + (r.rent || 0); }, 0), brands = {}; live.forEach(function (r) { brands[String(r.c.brand).toLowerCase()] = true; });
+    var income = live.reduce(function (n, r) { return n + (r.pay === 'none' ? 0 : r.rent || 0); }, 0), brands = {}; live.forEach(function (r) { brands[String(r.c.brand).toLowerCase()] = true; });
     var go2 = function (x) { return function () { con.view = x; con.limit = 30; renderContracts(); }; };
     var k = el('div', 'kpi');
     k.appendChild(kpiCard('สัญญาที่ใช้งานอยู่', live.length, 'ชั้นแคชเชียร์และป้าย', 'ok', go2('live')));
     k.appendChild(kpiCard('ใกล้หมดใน 30 วัน', soon.length, soon[0] ? soon[0].c.brand : 'ไม่มี', soon.length ? 'warn' : '', go2('soon')));
-    k.appendChild(kpiCard('ค่าเช่าต่อเดือนรวม', baht(income), 'บาท (สัญญาที่ใช้งานอยู่ ไม่นับ House Brand)', '', go2('live')));
+    k.appendChild(kpiCard('ค่าเช่าต่อเดือนรวม', baht(income), 'บาท (สัญญาที่ใช้งานอยู่ ไม่นับที่ไม่เก็บเงิน)', '', go2('live')));
     k.appendChild(kpiCard('แบรนด์ที่มีสัญญา', Object.keys(brands).length, 'ที่ใช้งานอยู่ตอนนี้', '', go2('live')));
     v.appendChild(k);
     var bar = el('div', 'toolbar'), seg = el('div', 'seg'), tseg = el('div', 'seg');
@@ -1473,7 +1473,7 @@
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.type === t[0])); x.onclick = function () { con.type = t[0]; con.limit = 30; renderContracts(); }; tseg.appendChild(x);
     });
     var pseg = el('div', 'seg'); pseg.setAttribute('role', 'group'); pseg.setAttribute('aria-label', 'กรองตามการรับเงินจากเวนเดอร์');
-    if (con.canPay) [['all', 'ทั้งหมด'], ['pending', PAY_TH.pending], ['partial', PAY_TH.partial], ['paid', PAY_TH.paid]].forEach(function (t) {
+    if (con.canPay) [['all', 'ทั้งหมด'], ['pending', PAY_TH.pending], ['partial', PAY_TH.partial], ['paid', PAY_TH.paid], ['none', PAY_TH.none]].forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.pay === t[0])); x.onclick = function () { con.pay = t[0]; con.limit = 30; renderContracts(); }; pseg.appendChild(x);
     });
     var sb = el('input', 'input search'); sb.type = 'search'; sb.value = con.needle; sb.placeholder = 'ค้นหาแบรนด์ เวนเดอร์ เลขสัญญา หรือเลขโฆษณา'; sb.setAttribute('aria-label', 'ค้นหาสัญญา');
@@ -1483,7 +1483,7 @@
     v.appendChild(bar);
     var fr = el('div', 'filterrow');
     function fgroup(label, sg) { var g = el('div', 'fgroup'); g.appendChild(el('span', 'cap', label)); g.appendChild(sg); fr.appendChild(g); }
-    fgroup('สถานะสัญญา', seg); fgroup('ประเภทสัญญา', tseg); if (con.canPay) fgroup('การรับเงินจากเวนเดอร์ (ป้ายหัวชั้น/กระจก)', pseg);
+    fgroup('สถานะสัญญา', seg); fgroup('ประเภทสัญญา', tseg); if (con.canPay) fgroup('การรับเงินจากเวนเดอร์', pseg);
     v.appendChild(fr);
     var grid = el('div', 'floorgrid'), card = el('section', 'card floorplan'), list = el('div'), more = el('div', 'row'), side = el('aside', 'card floorpanel');
     card.appendChild(list); card.appendChild(more); grid.appendChild(card); grid.appendChild(side); v.appendChild(grid);
@@ -1494,7 +1494,7 @@
         var b = el('button', 'trow signline'); b.type = 'button'; if (r.key === con.sel) b.setAttribute('aria-current', 'true');
         b.appendChild(el('b', 'slot-code', r.c.brand)); b.appendChild(el('span', 'chip', CON_KIND[r.kind])); b.appendChild(el('span', 'sub grow', [r.c.vendor, r.scope].filter(Boolean).join(' · ')));
         if (r.rent != null) b.appendChild(el('span', 'sub', baht(r.rent) + ' บาท/เดือน'));
-        if (r.kind === 'sign' && con.canPay) { var pk = r.pay || 'pending'; b.appendChild(el('span', 'chip ' + (pk === 'paid' ? 'ok' : pk === 'partial' ? 'warn' : ''), PAY_TH[pk])); }
+        if (con.canPay) { var pk = r.pay || 'pending'; b.appendChild(el('span', 'chip ' + (pk === 'paid' ? 'ok' : pk === 'partial' ? 'warn' : ''), PAY_TH[pk])); }
         var st = cashState(r.c), left = daysTo(r.c.end_date);
         b.appendChild(el('span', 'chip ' + (st === 'live' ? (left <= 30 ? 'warn' : 'ok') : st === 'cancelled' ? 'err' : ''), st === 'next' ? 'เริ่ม ' + thDate(r.c.start_date) : thDate(r.c.end_date)));
         b.onclick = function () { con.sel = r.key; paint(); conPanel(side); };
@@ -1507,8 +1507,8 @@
   // Open the sign form with no floor plan loaded: it fetches the places of the branches it needs.
   function openSignFromContracts(c, renew) { flo.branch = ''; flo.data = null; formBack = contracts; signForm($('view'), c, undefined, renew); }
   // Vendor payment record: approvers only (the server never sends it to anyone else)
-  function payPanel(p, c) {
-    var box = el('section', 'boxscroll'), list = (c.sign_payments || []).map(function (x) { return { dp_no: x.dp_no || '', received_on: x.received_on || '', amount: x.amount == null ? '' : x.amount, memo_no: x.memo_no || '', note: x.note || '' }; });
+  function payPanel(p, c, kind) {
+    var box = el('section', 'boxscroll'), list = (c.payments || []).map(function (x) { return { dp_no: x.dp_no || '', received_on: x.received_on || '', amount: x.amount == null ? '' : x.amount, memo_no: x.memo_no || '', note: x.note || '' }; });
     var stSel = el('select', 'input'); Object.keys(PAY_TH).forEach(function (k) { var o = el('option', '', PAY_TH[k]); o.value = k; if (k === (c.pay_status || 'pending')) o.selected = true; stSel.appendChild(o); });
     box.appendChild(el('h3', '', 'การรับเงินจากเวนเดอร์ (เฉพาะผู้อนุมัติ)')); var sl = el('label', 'f'); sl.appendChild(el('span', 't', 'สถานะ')); sl.appendChild(stSel); box.appendChild(sl);
     var rowsEl = el('div');
@@ -1530,7 +1530,7 @@
     row.appendChild(button('+ เพิ่มรายการรับเงิน', 'alt', function () { list.push({ dp_no: '', received_on: '', amount: '', memo_no: '', note: '' }); paint(); }));
     row.appendChild(button('บันทึกการรับเงิน', '', function () {
       var body = list.map(function (x) { return { dp_no: x.dp_no, received_on: x.received_on, amount: x.amount === '' ? null : Number(x.amount), memo_no: x.memo_no, note: x.note }; });
-      api('sign_pay_save', { id: c.id, pay_status: stSel.value, payments: body }).then(function () { show('บันทึกการรับเงินแล้ว', 'ok'); contracts(); }).catch(function (e) { show(e.message, 'err'); });
+      api('pay_save', { kind: kind, id: c.id, pay_status: stSel.value, payments: body }).then(function () { show('บันทึกการรับเงินแล้ว', 'ok'); contracts(); }).catch(function (e) { show(e.message, 'err'); });
     }));
     box.appendChild(row); p.appendChild(box);
   }
@@ -1549,7 +1549,7 @@
     fact(dl, 'เลขที่สัญญา/TTA', c.agreement_no); fact(dl, 'เลขโฆษณา', c.ad_no ? c.ad_no + (c.ad_expiry ? ' (หมดอายุ ' + thDate(c.ad_expiry) + ')' : '') : '');
     fact(dl, 'ติดต่อ', c.supplier_contact); fact(dl, 'วิธีวาง/ข้อห้าม', c.how_to_place); fact(dl, 'หลังสิ้นสุดให้ทำอย่างไร', c.return_to); fact(dl, 'หมายเหตุ', c.note);
     p.appendChild(dl);
-    if (r.kind === 'sign' && con.canPay) payPanel(p, c);
+    if (con.canPay) payPanel(p, c, r.kind);
     if (r.kind === 'sign') {
       var by = {}; c.slots.forEach(function (x) { (by[x.branch_code] = by[x.branch_code] || []).push(x.code); });
       var pl = el('div', 'boxscroll'); pl.appendChild(el('h3', '', 'ตำแหน่งที่เช่า'));
