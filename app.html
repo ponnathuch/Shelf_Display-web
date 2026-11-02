@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261115a">
+<link rel="stylesheet" href="shd-theme.css?v=20261115b">
 <style>
   body { line-height: 1.6; }
 
@@ -228,7 +228,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261115a">
+<link rel="stylesheet" href="shd-v2.css?v=20261115b">
 </head>
 <body>
 <div class="app" id="app">
@@ -729,6 +729,32 @@
     var row = el('div', 'row'); row.appendChild(wrapc); row.appendChild(go);
     box.appendChild(row); v.appendChild(box);
   }
+  // A warehouse photo that is really a cashier-shelf tray: move it to the contract by hand (when the LINE card offered no button).
+  function cashierLinkBox(v, c) {
+    if (c.source !== 'warehouse' || c.status !== 'pending') return;
+    var box = el('section', 'card'); box.appendChild(el('h2', 'sec', 'เป็นถาดชั้นแคชเชียร์หรือไม่'));
+    box.appendChild(el('p', 'hint', 'ถ้ารูปนี้เป็นสื่อของสัญญาชั้นแคชเชียร์ เลือกสัญญาแล้วกดย้าย รูปจะไปอยู่ในสัญญานั้น เคสนี้จะถูกปิด และแจ้งกลุ่มคลังว่ากระจายได้'));
+    var sel = el('select', 'input'); sel.setAttribute('aria-label', 'สัญญาชั้นแคชเชียร์');
+    var row = el('div', 'row'); row.appendChild(sel); box.appendChild(row); v.appendChild(box);
+    api('cashier_list').then(function (d) {
+      var td = today(), key = String(c.brand || '').toLowerCase().replace(/\s+/g, '');
+      var same = function (k) { var b = String(k.brand || '').toLowerCase().replace(/\s+/g, ''); return key.length >= 3 && b.length >= 3 && (key.indexOf(b) !== -1 || b.indexOf(key) !== -1); };
+      var list = d.contracts.filter(function (k) { return k.status === 'active' && k.end_date >= td; })
+        .sort(function (a, b) { return (same(b) ? 1 : 0) - (same(a) ? 1 : 0) || String(a.brand).localeCompare(String(b.brand)); });
+      if (!list.length) { box.remove(); return; }
+      list.forEach(function (k) {
+        var o = el('option', '', k.brand + ' · ' + (k.branches && k.branches.length ? k.branches.length + ' สาขา' : 'ทุกสาขา') + ' · ถึง ' + thDate(k.end_date)); o.value = k.id; sel.appendChild(o);
+      });
+      var go = button('ย้ายรูปไปสัญญานี้', 'alt', function () {
+        var k = list.filter(function (x) { return String(x.id) === sel.value; })[0];
+        if (!k || !confirm('ย้ายรูปของ ' + c.code + ' ไปสัญญาชั้นแคชเชียร์ ' + k.brand + ' และปิดเคสนี้?')) return;
+        go.disabled = true;
+        api('draft_to_cashier', { id: c.id, contract_id: k.id }).then(function () { show('ย้ายรูปไปสัญญาชั้นแคชเชียร์ ' + k.brand + ' แล้ว แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
+          .catch(function (e) { go.disabled = false; show(e.message, 'err'); });
+      });
+      row.appendChild(go);
+    }).catch(function () { box.remove(); });
+  }
   var detailNote = ''; // a message to show once the detail page has been redrawn
   function detail(id) {
     loading();
@@ -755,6 +781,7 @@
       }
       v.appendChild(card(c, { office: true, actions: actions }));
       linkBox(v, c);
+      if (isOffice()) cashierLinkBox(v, c);
       var spots = rs[0].spots || [];
       if (c.status !== 'cancelled') {
         // Temporary signs are set up branch by branch: show how many of the campaign's branches have their place tied yet, and which are missing.
