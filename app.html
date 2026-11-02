@@ -274,7 +274,7 @@
   };
   function errText(code) {
     if (ERR[code]) return ERR[code];
-    if (/^cap:/.test(code)) return 'สาขา ' + code.slice(4) + ' วางตำแหน่งนี้เต็มเพดานในช่วงวันที่ชนกัน อนุมัติไม่ได้';
+    if (/^cap:/.test(code)) return (code.slice(4) === 'ALL' ? 'ทุกสาขา' : 'สาขา ' + code.slice(4)) + ' วางตำแหน่งนี้เต็มเพดานในช่วงวันที่ชนกัน อนุมัติไม่ได้';
     return 'ทำรายการไม่สำเร็จ (' + code + ')';
   }
 
