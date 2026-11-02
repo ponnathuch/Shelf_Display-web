@@ -267,7 +267,7 @@
     bad_photo: 'รูปนี้ใช้ไม่ได้ (ต้องเป็นรูปที่เปิดได้ และไม่ใหญ่เกินไป)', too_many_photos: 'ใส่รูปตัวอย่างได้ไม่เกิน 10 รูปต่อแคมเปญ',
     bad_target: 'แคมเปญที่เลือกผูกไม่ได้ (ยกเลิกแล้วหรือเป็นเคสจากคลัง)',
     'missing:ad': 'ยังไม่ได้ใส่เลขโฆษณาและวันหมดอายุ', 'missing:branches': 'ยังไม่ได้เลือกสาขา',
-    self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
+    self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', bad_reason: 'ใส่เหตุผลก่อน', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
     expired: 'เซสชันหมดอายุ กรุณาเข้าใหม่จากเมนู Job Tracker', bad_signature: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker',
     malformed: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker', reused: 'ลิงก์ถูกใช้แล้ว กรุณาเข้าใหม่จากเมนู Job Tracker',
     forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', line_down: 'ส่งข้อความเข้ากลุ่มคลังไม่สำเร็จ ลองใหม่อีกครั้ง', slot_rented: 'ตำแหน่งนี้มีสัญญาป้ายที่ยังใช้งานอยู่ ยกเลิกหรือย้ายสัญญาก่อนจึงจะลบได้ (หรือแก้เป็นเลิกใช้)', code_in_use: 'ชื่อนี้เป็นตำแหน่งอื่น (หัวชั้น/กระจก) อยู่แล้วในสาขา ให้ใช้ชื่ออื่น', no_branches: 'ไม่พบรายชื่อสาขาให้สร้างตำแหน่ง', branch_not_in_campaign: 'แคมเปญนี้ไม่ได้ระบุสาขานี้ ผูกได้เฉพาะสาขาที่อยู่ในแคมเปญ', bad_slots: 'ตำแหน่งที่เลือกใช้ไม่ได้ (ถูกลบหรือเลิกใช้แล้ว)', bad_slot: 'รหัสตำแหน่งในไฟล์ไม่ถูกต้อง', bad_branches: 'รหัสสาขาไม่ถูกต้อง (รูปแบบ เช่น IC008)'
@@ -732,7 +732,7 @@
   // A warehouse photo that is really a cashier-shelf tray: move it to the contract by hand (when the LINE card offered no button).
   function cashierLinkBox(v, c) {
     if (c.source !== 'warehouse' || c.status !== 'pending') return;
-    var box = el('section', 'card'); box.appendChild(el('h2', 'sec', 'เป็นถาดชั้นแคชเชียร์หรือไม่'));
+    var box = el('section', 'card'); box.appendChild(el('h2', 'sec', 'เป็นสื่อติดตั้งบริเวณแคชเชียร์หรือไม่'));
     box.appendChild(el('p', 'hint', 'ถ้ารูปนี้เป็นสื่อของสัญญาชั้นแคชเชียร์ เลือกสัญญาแล้วกดย้าย รูปจะไปอยู่ในสัญญานั้น เคสนี้จะถูกปิด และแจ้งกลุ่มคลังว่ากระจายได้'));
     var sel = el('select', 'input'); sel.setAttribute('aria-label', 'สัญญาชั้นแคชเชียร์');
     var row = el('div', 'row'); row.appendChild(sel); box.appendChild(row); v.appendChild(box);
@@ -777,9 +777,19 @@
         actions.push(ok);
       }
       actions.push(button('แก้ไข', 'alt', function () { form(c); }));
+      if (isApprover() && c.status === 'approved') {
+        var back = button('ถอนอนุมัติ', 'alt', function () {
+          var why = (prompt('ถอนอนุมัติ ' + c.code + ' กลับเป็นรออนุมัติ\nระบบจะแจ้งกลุ่มคลังว่าห้ามกระจาย\n\nเหตุผล:') || '').trim();
+          if (!why) return;
+          back.disabled = true;
+          api('unapprove', { id: id, reason: why }).then(function () { show('ถอนอนุมัติแล้ว กลับเป็นรออนุมัติ แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
+            .catch(function (e) { back.disabled = false; show(e.message, 'err'); });
+        });
+        actions.push(back);
+      }
       if (c.status !== 'cancelled') {
         actions.push(button('ยกเลิกแคมเปญ', 'danger', function () {
-          if (!confirm('ยกเลิกแคมเปญนี้?')) return;
+          if (!confirm(c.status === 'approved' ? 'ยกเลิกแคมเปญนี้? ระบบจะแจ้งกลุ่มคลังว่าห้ามกระจาย' : 'ยกเลิกแคมเปญนี้?')) return;
           api('cancel', { id: id }).then(function () { show('ยกเลิกแล้ว', 'ok'); loadOffice(true); }).catch(function (e) { show(e.message, 'err'); });
         }));
       }
