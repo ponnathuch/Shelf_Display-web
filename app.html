@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261114b">
+<link rel="stylesheet" href="shd-theme.css?v=20261114c">
 <style>
   body { line-height: 1.6; }
 
@@ -228,7 +228,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261114b">
+<link rel="stylesheet" href="shd-v2.css?v=20261114c">
 </head>
 <body>
 <div class="app" id="app">
@@ -275,7 +275,7 @@
   function errText(code) {
     if (ERR[code]) return ERR[code];
     if (/^cap:/.test(code)) return (code.slice(4) === 'ALL' ? 'ทุกสาขา' : 'สาขา ' + code.slice(4)) + ' วางตำแหน่งนี้เต็มเพดานในช่วงวันที่ชนกัน อนุมัติไม่ได้';
-    return 'ทำรายการไม่สำเร็จ (' + code + ')';
+    return code ? 'ทำรายการไม่สำเร็จ (' + code + ')' : 'ทำรายการไม่สำเร็จ กรุณาลองใหม่';
   }
 
   function el(tag, cls, text) {
@@ -419,7 +419,7 @@
   // Photos the warehouse sent; opens full size in a new tab so brand text on the box can be read.
   function photoGrid(photos) {
     var strip = el('div', 'photos');
-    photos.forEach(function (p) {
+    photos.filter(function (p) { return p.url; }).forEach(function (p) { // a photo the server could not sign is left out
       var a = el('a'); a.href = p.url; a.target = '_blank'; a.rel = 'noopener';
       var i = el('img'); i.src = p.url; i.alt = 'รูปจากคลัง'; i.loading = 'lazy'; a.appendChild(i); strip.appendChild(a);
     });
@@ -634,9 +634,9 @@
     b.appendChild(button('+ ลงทะเบียนแคมเปญ', '', function () { form(null); }));
   }
   function loadOffice(keepMsg) {
-    var m = keepMsg ? $('msg').textContent : '';
+    var m = keepMsg ? $('msg').textContent : '', mk = keepMsg && / err\b/.test($('msg').className) ? 'err' : 'ok';
     if (!keepMsg) loading(); else navSeq++;
-    api('list', {}).then(guard(function (d) { all = d.campaigns.map(normEnd); done(); show(m, m ? 'ok' : ''); renderOffice(); })).catch(guard(fail));
+    api('list', {}).then(guard(function (d) { all = d.campaigns.map(normEnd); done(); show(m, m ? mk : ''); renderOffice(); })).catch(guard(fail));
   }
   var needle = '', lineOnly = false, picked = {};
   function renderOffice() { renderBar(); renderList(); }
@@ -1133,6 +1133,7 @@
     f.onsubmit = function (ev) {
       ev.preventDefault();
       if (!bf.valid()) { show(ERR.bad_branches, 'err'); bf.focus(); return; }
+      if (inputs.start_date && inputs.end_date && inputs.start_date.value && inputs.end_date.value && inputs.end_date.value < inputs.start_date.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); inputs.end_date.focus(); return; }
       var b = { position_type_id: Number(ts.value), how_to_place: how.value, open_ended: oe.checked,
         branches: bf.getCodes(), designated: dz.getCodes() };
       for (var k in inputs) b[k] = inputs[k].value;
@@ -2379,8 +2380,8 @@
   }
   function timelineRows(list) {
     // open-ended cases (approved from LINE with no end date) stay off the timeline; they are still listed and searchable
-    return list.filter(function (c) { return c.start_date && !c.open_ended && (c.status === 'approved' || c.status === 'pending') && (!c.end_date || daysTo(c.end_date) >= FROM); })
-      .sort(function (a, b) { return String(a.start_date).localeCompare(String(b.start_date)); }).slice(0, 14);
+    return list.filter(function (c) { return c.start_date && !c.open_ended && (c.status === 'approved' || c.status === 'pending') && (!c.end_date || daysTo(c.end_date) >= FROM) && daysTo(c.start_date) < FROM + WEEKS * 7; })
+      .sort(function (a, b) { return String(a.start_date).localeCompare(String(b.start_date)); });
   }
   function timelineCard(list, onOpen) {
     var card = el('section', 'card'); card.appendChild(el('h2', 'sec', 'ไทม์ไลน์การวางสื่อ (10 สัปดาห์)'));
@@ -2389,8 +2390,14 @@
       var i = el('span', 'lg'); i.appendChild(el('i', 'g-bar ' + x[0])); i.appendChild(document.createTextNode(x[1])); lg.appendChild(i);
     });
     card.appendChild(lg);
-    var rows = timelineRows(list);
-    card.appendChild(rows.length ? gantt(rows, onOpen) : el('p', 'empty-note', 'ยังไม่มีแคมเปญที่มีวันเริ่มวาง'));
+    var rows = timelineRows(list), shown = el('div');
+    function paint(n) {
+      shown.textContent = '';
+      if (!rows.length) { shown.appendChild(el('p', 'empty-note', 'ยังไม่มีแคมเปญที่มีวันเริ่มวาง')); return; }
+      shown.appendChild(gantt(rows.slice(0, n), onOpen));
+      if (rows.length > n) shown.appendChild(button('แสดงทั้งหมด (' + rows.length + ' รายการ แสดงอยู่ ' + n + ')', 'alt', function () { paint(rows.length); }));
+    }
+    paint(14); card.appendChild(shown);
     return card;
   }
   function kpiCard(label, n, note, tone, onClick) {
@@ -2603,7 +2610,7 @@
         var s = { session: r.data.session, staff: r.data.staff || {} };
         try { sessionStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) { /* storage blocked */ }
         start(s);
-      } else show(errText(r.data && r.data.error), 'err');
+      } else show(r.status === 0 ? 'เชื่อมต่อไม่ได้ กรุณาตรวจอินเทอร์เน็ตแล้วเปิดลิงก์จาก Job Tracker อีกครั้ง' : errText(r.data && r.data.error), 'err');
     });
   } else {
     var raw = null; try { raw = JSON.parse(sessionStorage.getItem(STORE_KEY)); } catch (e) { /* ignore */ }
