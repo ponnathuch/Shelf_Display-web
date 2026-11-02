@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261112e">
+<link rel="stylesheet" href="shd-theme.css?v=20261112f">
 <style>
   body { line-height: 1.6; }
 
@@ -228,7 +228,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261112e">
+<link rel="stylesheet" href="shd-v2.css?v=20261112f">
 </head>
 <body>
 <div class="app" id="app">
@@ -1426,7 +1426,7 @@
     return con.rows.filter(function (r) {
       var st = cashState(r.c);
       if (con.type !== 'all' && r.kind !== con.type) return false;
-      if (con.pay !== 'all' && (r.pay || 'pending') !== con.pay) return false;
+      if (con.pay !== 'all' && (r.kind !== 'sign' || (r.pay || 'pending') !== con.pay)) return false;
       if (con.view === 'soon' ? !(st === 'live' && daysTo(r.c.end_date) <= 30) : st !== con.view) return false;
       return !q || (r.c.brand + ' ' + (r.c.vendor || '') + ' ' + (r.c.agreement_no || '') + ' ' + (r.c.sys_no || '') + ' ' + (r.c.ad_no || '')).toLowerCase().indexOf(q) >= 0;
     }).sort(function (a, b) { return String(a.c.end_date).localeCompare(String(b.c.end_date)); });
@@ -1538,7 +1538,9 @@
     }
     if (con.edit[r.kind] && st !== 'cancelled') {
       var row = el('div', 'row');
-      if (r.kind === 'sign' && (st === 'ended' || (st === 'live' && daysTo(c.end_date) <= 60))) row.appendChild(button('ต่อสัญญา', '', function () { openSignFromContracts(c, true); }));
+      var next = r.kind === 'sign' ? con.rows.filter(function (x) { return x.kind === 'sign' && x.c.renewed_from === c.id && x.c.status !== 'cancelled'; })[0] : null;
+      if (next) row.appendChild(button('ต่อแล้วเป็น ' + (next.c.sys_no || next.c.brand), 'alt', function () { con.sel = next.key; renderContracts(); }));
+      else if (r.kind === 'sign' && (st === 'ended' || (st === 'live' && daysTo(c.end_date) <= 60))) row.appendChild(button('ต่อสัญญา', '', function () { openSignFromContracts(c, true); }));
       row.appendChild(button('แก้ไข', '', function () { if (r.kind === 'cashier') { formBack = contracts; cashierForm(c); } else openSignFromContracts(c); }));
       if (r.kind === 'cashier') row.appendChild(button('แจ้งคลังอีกครั้ง', 'alt', function () { notifyCashier(c); }));
       row.appendChild(button('ยกเลิกสัญญา', 'danger', function () {
@@ -2029,24 +2031,33 @@
     }
     function toCsv(rowsIn) { return '\ufeff' + rowsIn.map(function (r) { return r.map(function (v) { v = String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','); }).join('\r\n'); }
     function parseTable(text) {
-      return text.split(/\r?\n/).map(function (ln) { return ln.split(ln.indexOf('\t') >= 0 ? '\t' : ',').map(function (x) { return x.replace(/^"|"$/g, '').trim(); }); })
-        .filter(function (r) { return BRANCH_RE.test((r[0] || '').toUpperCase()); });
+      return text.replace(/^\ufeff/, '').split(/\r?\n/).map(function (ln) {
+        if (ln.indexOf('\t') >= 0) return ln.split('\t').map(function (x) { return x.trim(); });
+        var out = [], cur = '', q = false;
+        for (var i = 0; i < ln.length; i++) {
+          var ch = ln[i];
+          if (q) { if (ch === '"' && ln[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+          else if (ch === '"') q = true; else if (ch === ',') { out.push(cur.trim()); cur = ''; } else cur += ch;
+        }
+        out.push(cur.trim()); return out;
+      }).filter(function (r) { return BRANCH_RE.test((r[0] || '').toUpperCase()); })
+        .map(function (r) { return r.length >= 4 ? { b: r[0], code: r[2], rent: r[3] } : { b: r[0], code: r[1], rent: r[2] }; });
     }
     function runImport(text) {
       var tbl = parseTable(text);
       if (!tbl.length) { show('ไม่พบแถวที่ขึ้นต้นด้วยรหัสสาขา (เช่น IC002)', 'err'); return; }
-      var bs = tbl.map(function (r) { return r[0].toUpperCase(); }).filter(function (v, i, a) { return a.indexOf(v) === i; });
+      var bs = tbl.map(function (r) { return r.b.toUpperCase(); }).filter(function (v, i, a) { return a.indexOf(v) === i; });
       var known = {}; units.forEach(function (u) { known[u.code] = true; });
       var unknown = bs.filter(function (b) { return !known[b]; }); bs = bs.filter(function (b) { return known[b]; });
       picker.setCodes(chosenB.concat(bs).filter(function (v, i, a) { return a.indexOf(v) === i; }));
       need(bs).then(function () {
         var lack = [], n = 0;
         tbl.forEach(function (r) {
-          var b = r[0].toUpperCase(); if (!known[b]) return;
-          var codeIn = (r[2] || r[1] || '').toUpperCase(), m = slotsOf(b).filter(function (x) { return x.code.toUpperCase() === codeIn; })[0];
+          var b = r.b.toUpperCase(); if (!known[b]) return;
+          var codeIn = (r.code || '').replace(/\s+/g, '').toUpperCase(), m = slotsOf(b).filter(function (x) { return x.code.toUpperCase() === codeIn; })[0];
           if (!m) { lack.push(b + ' ' + codeIn); return; }
           sel[m.id] = true; n++;
-          if (/^[\d.,]+$/.test(r[3] || '')) rents[m.id] = Number(r[3].replace(/,/g, ''));
+          if (/^[\d.,]+$/.test(r.rent || '')) rents[m.id] = Number(r.rent.replace(/,/g, ''));
         });
         paintRows();
         var bad = unknown.map(function (b) { return b + ' (ไม่พบสาขา)'; }).concat(lack);
@@ -2222,7 +2233,7 @@
 
   // Import the sign specs of one branch from its Template file: read, show what was found, then save.
   function importSpecs(file, holder) {
-    var m = file.name.match(/\b([A-Z]{2}\d{3})\b/);
+    var m = file.name.match(/(?:^|[^A-Z0-9])([A-Z]{2}\d{3})(?![0-9])/);
     if (m && m[1] !== flo.branch) { show('ไฟล์นี้เป็นของสาขา ' + m[1] + ' แต่ตอนนี้เลือกสาขา ' + flo.branch + ' เลือกสาขาให้ตรงก่อน', 'err'); return; }
     show('กำลังอ่านไฟล์...');
     xlsxSheets(file).then(function (sheets) {
