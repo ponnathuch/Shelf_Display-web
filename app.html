@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261111a">
+<link rel="stylesheet" href="shd-theme.css?v=20261112a">
 <style>
   body { line-height: 1.6; }
 
@@ -222,7 +222,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261111a">
+<link rel="stylesheet" href="shd-v2.css?v=20261112a">
 </head>
 <body>
 <div class="app" id="app">
@@ -1598,6 +1598,90 @@
     });
   }
 
+  // Every sheet of an .xlsx as grids: [{ name, rows: [{ A: 'text', ... }] }], row i of the array is sheet row i + 1. Images are never read.
+  function xlsxSheets(file) {
+    return file.arrayBuffer().then(function (buf) {
+      var z = zipEntries(buf), dec = new TextDecoder();
+      var text = function (n) { return zipRead(z, n).then(function (b) { return b ? dec.decode(b) : ''; }); };
+      var xml = function (x) { return new DOMParser().parseFromString(x || '<x/>', 'application/xml'); };
+      return Promise.all([text('xl/workbook.xml'), text('xl/_rels/workbook.xml.rels'), text('xl/sharedStrings.xml')]).then(function (t) {
+        var NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+        var strings = [].map.call(xml(t[2]).getElementsByTagName('si'), function (si) { return [].map.call(si.getElementsByTagName('t'), function (x) { return x.textContent; }).join(''); });
+        var rels = [].slice.call(xml(t[1]).getElementsByTagName('Relationship'));
+        var sheets = [].slice.call(xml(t[0]).getElementsByTagName('sheet'));
+        return sheets.reduce(function (chain, sh) {
+          return chain.then(function (acc) {
+            var rid = sh.getAttributeNS(NS, 'id') || sh.getAttribute('r:id'), rel = rels.filter(function (r) { return r.getAttribute('Id') === rid; })[0];
+            if (!rel) return acc;
+            var target = rel.getAttribute('Target').replace(/^\//, ''); if (target.indexOf('xl/') !== 0) target = 'xl/' + target;
+            return text(target).then(function (x) {
+              var rows = [];
+              [].forEach.call(xml(x).getElementsByTagName('row'), function (row) {
+                var cell = {}, rn = Number(row.getAttribute('r')) || rows.length + 1;
+                [].forEach.call(row.getElementsByTagName('c'), function (c) {
+                  var col = (c.getAttribute('r') || '').replace(/\d+/g, ''), ty = c.getAttribute('t'), v = c.getElementsByTagName('v')[0], val = '';
+                  if (ty === 's' && v) val = strings[Number(v.textContent)] || '';
+                  else if (ty === 'inlineStr') val = [].map.call(c.getElementsByTagName('t'), function (q) { return q.textContent; }).join('');
+                  else if (v) val = v.textContent;
+                  val = String(val).trim(); if (val !== '') cell[col] = val;
+                });
+                while (rows.length < rn - 1) rows.push({});
+                rows[rn - 1] = cell;
+              });
+              acc.push({ name: sh.getAttribute('name') || '', rows: rows }); return acc;
+            });
+          });
+        }, Promise.resolve([]));
+      });
+    });
+  }
+  // ---------- sign specs from the branch Template files ----------
+  // Input: sheets = [{ name, rows: [{ A: 'text', B: ... }] }] (every sheet, every row). Output: { items, blocks, skipped }.
+  // Header columns are found by keyword, not by position: the Templates differ in order and spelling between branches.
+  var SPEC_COL = [['code', /^(section|ลำดับ)$/i], ['no', /^no\.?$/i], ['material', /^วัสดุ/], ['qty', /จำนวน/], ['size', /^ขนาด/], ['note', /หมายเหตุ/]];
+  var SPEC_CODE = /^[A-Z]{1,4}\d{1,3}[A-Z]?$/i;
+  function parseSpecSheets(sheets) {
+    var items = [], blocks = [], skipped = [];
+    sheets.forEach(function (sh) {
+      if (/^layout/i.test(sh.name.trim())) return;
+      var cols = null, type = sh.name.trim(), last = '', n0 = items.length, sizeCols = null, heads = 0;
+      sh.rows.forEach(function (row, i) {
+        var keys = Object.keys(row).filter(function (k) { return row[k] !== ''; });
+        if (keys.some(function (k) { return /^วัสดุ/.test(row[k]); })) { // a header row: map the columns, widths/heights may sit on the row below
+          cols = {}; sizeCols = null;
+          keys.forEach(function (k) { SPEC_COL.forEach(function (c) { if (!cols[c[0]] && c[1].test(row[k].replace(/\s+/g, ' ').trim())) cols[c[0]] = k; }); });
+          var nx = (sh.rows[i + 1] || {}), w, h;
+          Object.keys(nx).forEach(function (k) { if (/กว้าง/.test(nx[k])) w = k; if (/สูง/.test(nx[k])) h = k; });
+          if (w && h) sizeCols = { w: w, h: h };
+          var above = (sh.rows[i - 1] || {}), ak = Object.keys(above).filter(function (k) { return above[k] !== ''; });
+          if (heads > 0 && ak.length === 1 && !SPEC_CODE.test(above[ak[0]])) type = above[ak[0]].replace(/\s+/g, ' ').trim(); // title row of a second block
+          last = ''; heads++;
+          return;
+        }
+        if (!cols || !cols.material) return;
+        if (sizeCols && keys.some(function (k) { return /กว้าง/.test(row[k]); })) return; // the width/height sub-header
+        var code = (row[cols.code] || '').replace(/\s+/g, '').toUpperCase(), material = (row[cols.material] || '').replace(/\s+/g, ' ').trim();
+        if (cols.no && /^[A-Z]+$/.test(code) && row[cols.no]) code += row[cols.no].replace(/\s+/g, ''); // the Template splits OA | 01 into two columns
+        var qty = row[cols.qty] || '', note = (row[cols.note] || '').replace(/\s+/g, ' ').trim(), sizeText = '', w2 = null, h2 = null;
+        if (sizeCols) { w2 = row[sizeCols.w] === undefined || row[sizeCols.w] === '' ? null : Number(row[sizeCols.w]); h2 = row[sizeCols.h] === undefined || row[sizeCols.h] === '' ? null : Number(row[sizeCols.h]); }
+        else if (cols.size) {
+          sizeText = (row[cols.size] || '').replace(/\s+/g, ' ').trim();
+          var m = sizeText.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)/i);
+          if (m) { w2 = Number(m[1]); h2 = Number(m[2]); sizeText = ''; }
+        }
+        if (w2 !== null && isNaN(w2)) w2 = null; if (h2 !== null && isNaN(h2)) h2 = null;
+        if (!material && qty === '' && w2 === null && !sizeText) return; // an empty row
+        if (code && !SPEC_CODE.test(code)) { if (material || qty !== '') skipped.push(sh.name.trim() + ' แถว ' + (i + 1) + ': รหัส "' + code + '" ไม่ใช่รหัสตำแหน่ง'); return; }
+        if (code) last = code; else code = last; // a second line under the same place (several sizes)
+        if (!code) return;
+        var q = qty === '' ? null : Math.round(Number(qty));
+        items.push({ code: code, sign_type: type, material: material, qty: isNaN(q) ? null : q, width_cm: w2, height_cm: h2, size_text: sizeText, note: note });
+      });
+      if (items.length > n0) blocks.push({ sheet: sh.name.trim(), count: items.length - n0 });
+    });
+    return { items: items, blocks: blocks, skipped: skipped };
+  }
+
   function floor() {
     formBack = null; $('bar').hidden = true; show(''); var v = $('view'); v.textContent = '';
     if (!isOffice()) { // a branch sees only its own plan
@@ -1679,6 +1763,9 @@
       var fi = el('input'); fi.type = 'file'; fi.accept = '.xlsx'; fi.hidden = true;
       fi.onchange = function () { if (fi.files[0]) importXlsx(fi.files[0], holder); fi.value = ''; };
       row.appendChild(button('นำเข้าจากไฟล์ Lock section (.xlsx)', 'alt', function () { fi.click(); })); row.appendChild(fi);
+      var fs2 = el('input'); fs2.type = 'file'; fs2.accept = '.xlsx'; fs2.hidden = true;
+      fs2.onchange = function () { if (fs2.files[0]) importSpecs(fs2.files[0], holder); fs2.value = ''; };
+      row.appendChild(button('นำเข้ารายการป้ายจาก Template (.xlsx)', 'alt', function () { fs2.click(); })); row.appendChild(fs2);
       card.appendChild(row);
     }
     grid.appendChild(card); grid.appendChild(detailPanel(holder)); holder.appendChild(grid);
@@ -1749,6 +1836,11 @@
     if (!sl.active) chips.appendChild(el('span', 'chip err', 'เลิกใช้')); else if (!(sl.signs || []).length) chips.appendChild(el('span', 'chip ok', 'ว่าง'));
     left.appendChild(chips); head.appendChild(left); head.appendChild(button('ปิด', 'alt', function () { flo.sel = null; renderFloor(holder); })); p.appendChild(head);
     var t = [sl.name, sl.category, sl.note].filter(Boolean).join(' · '); if (t) p.appendChild(el('p', 'sub', t));
+    if ((sl.specs || []).length) { // what is printed here and how big (from the Template)
+      var sp = el('div', 'boxscroll'); sp.appendChild(el('h3', '', 'ป้ายที่ใช้ตำแหน่งนี้'));
+      sl.specs.forEach(function (x) { sp.appendChild(el('p', 'sub', specLine(x))); });
+      p.appendChild(sp);
+    }
     var td = today();
     (sl.campaigns || []).forEach(function (c) {
       var b = el('div', 'signrow'), hh = el('div', 'card-head'), l2 = el('div'); l2.appendChild(el('h3', '', c.code + ' ' + (c.brand || '')));
@@ -1998,6 +2090,7 @@
         r.appendChild(el('span', 'sub grow', [s.name, s.category, s.note].filter(Boolean).join(' · ')));
         r.appendChild(el('span', 'chip', KIND_TH[s.kind] || s.kind)); if (s.kind === 'glass' || s.tenant === 'rent') r.appendChild(el('span', 'chip', TENANT_TH[s.tenant]));
         var placed = s.x != null && s.y != null, rentNow = signNow(s);
+        if (s.specs && s.specs.length) r.appendChild(el('span', 'chip', s.specs.length + ' รายการป้าย'));
         if (rentNow) r.appendChild(el('span', 'chip warn', 'เช่า: ' + rentNow.brand));
         if (placed && s.active) r.appendChild(button('ดูบนผัง', 'alt', function () { flo.sel = s.id; renderFloor(holder); window.scrollTo(0, 0); }));
         else if (s.active && d.layout && d.layout.image_url) r.appendChild(el('span', 'sub', 'ยังไม่ปักหมุด'));
@@ -2084,6 +2177,42 @@
       row.appendChild(go2); row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
       holder.textContent = ''; holder.appendChild(d);
     }).catch(function (e) { show(e.message, 'err'); });
+  }
+
+  // Import the sign specs of one branch from its Template file: read, show what was found, then save.
+  function importSpecs(file, holder) {
+    var m = file.name.match(/\b([A-Z]{2}\d{3})\b/);
+    if (m && m[1] !== flo.branch) { show('ไฟล์นี้เป็นของสาขา ' + m[1] + ' แต่ตอนนี้เลือกสาขา ' + flo.branch + ' เลือกสาขาให้ตรงก่อน', 'err'); return; }
+    show('กำลังอ่านไฟล์...');
+    xlsxSheets(file).then(function (sheets) {
+      show(''); var r = parseSpecSheets(sheets);
+      if (!r.items.length) throw new Error('ไม่พบรายการป้าย (ต้องมีหัวตารางที่มีคำว่า "วัสดุ")');
+      var have = {}; (flo.data.slots || []).forEach(function (x) { have[x.code.toUpperCase()] = true; });
+      var codes = r.items.map(function (x) { return x.code; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
+      var missing = codes.filter(function (c) { return !have[c]; });
+      var d = el('section', 'card'); d.appendChild(el('h2', 'sec', 'นำเข้ารายการป้ายจาก ' + file.name));
+      d.appendChild(el('p', '', 'พบ ' + r.items.length + ' รายการป้ายใน ' + codes.length + ' ตำแหน่ง · ' + r.blocks.map(function (b) { return b.sheet + ' ' + b.count; }).join(' · ')));
+      d.appendChild(el('p', 'hint', 'ตำแหน่งที่นำเข้าจะถูกแทนที่รายการป้ายเดิมทั้งหมดของตำแหน่งนั้น ตำแหน่งที่ยังไม่มีในผังจะถูกข้าม (นำเข้า Lock section ก่อน)'));
+      if (missing.length) d.appendChild(el('p', 'hint', 'ข้าม ' + missing.length + ' ตำแหน่งที่ยังไม่มีในผังของสาขานี้: ' + missing.slice(0, 20).join(', ') + (missing.length > 20 ? ' ...' : '')));
+      if (r.skipped.length) d.appendChild(el('p', 'sub', 'ข้าม ' + r.skipped.length + ' แถวที่ไม่ใช่ตำแหน่ง (เช่น ชุดเปิดสาขา โปสเตอร์ standee) เช่น ' + r.skipped.slice(0, 3).join(' / ')));
+      var box = el('div', 'boxscroll');
+      r.items.slice(0, 60).forEach(function (x) { var row = el('div', 'trow'); row.appendChild(el('b', 'slot-code', x.code)); row.appendChild(el('span', 'sub grow', specLine(x))); if (!have[x.code]) row.appendChild(el('span', 'chip err', 'ไม่มีในผัง')); box.appendChild(row); });
+      if (r.items.length > 60) box.appendChild(el('p', 'sub', '... และอีก ' + (r.items.length - 60) + ' รายการ'));
+      d.appendChild(box);
+      var row = el('div', 'row'), go2 = button('นำเข้า', '', function () {
+        go2.disabled = true; show('กำลังนำเข้า...');
+        api('slot_specs_save', { branch: flo.branch, items: r.items.map(function (x) { return { code: x.code, sign_type: x.sign_type, material: x.material, qty: x.qty, width_cm: x.width_cm, height_cm: x.height_cm, size_text: x.size_text, note: x.note }; }) })
+          .then(function (x) { show('นำเข้ารายการป้ายของ ' + x.places + ' ตำแหน่งแล้ว', 'ok'); loadFloor(holder); })
+          .catch(function (e) { go2.disabled = false; show(e.message, 'err'); });
+      });
+      row.appendChild(go2); row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
+      holder.textContent = ''; holder.appendChild(d);
+    }).catch(function (e) { show(e.message, 'err'); });
+  }
+  // "Sticker โปร่งแสง · 78 x 49 cm · 1 ชิ้น" for one spec
+  function specLine(p) {
+    var size = p.width_cm != null && p.height_cm != null ? p.width_cm + ' x ' + p.height_cm + ' cm' : p.size_text || '';
+    return [p.material, size, p.qty != null ? p.qty + ' ชิ้น' : '', p.note].filter(Boolean).join(' · ');
   }
 
   var setTab = 'media';
