@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261112f">
+<link rel="stylesheet" href="shd-theme.css?v=20261113a">
 <style>
   body { line-height: 1.6; }
 
@@ -228,7 +228,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261112f">
+<link rel="stylesheet" href="shd-v2.css?v=20261113a">
 </head>
 <body>
 <div class="app" id="app">
@@ -270,7 +270,7 @@
     self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
     expired: 'เซสชันหมดอายุ กรุณาเข้าใหม่จากเมนู Job Tracker', bad_signature: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker',
     malformed: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker', reused: 'ลิงก์ถูกใช้แล้ว กรุณาเข้าใหม่จากเมนู Job Tracker',
-    forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', line_down: 'ส่งข้อความเข้ากลุ่มคลังไม่สำเร็จ ลองใหม่อีกครั้ง', code_in_use: 'ชื่อนี้เป็นตำแหน่งอื่น (หัวชั้น/กระจก) อยู่แล้วในสาขา ให้ใช้ชื่ออื่น', no_branches: 'ไม่พบรายชื่อสาขาให้สร้างตำแหน่ง', branch_not_in_campaign: 'แคมเปญนี้ไม่ได้ระบุสาขานี้ ผูกได้เฉพาะสาขาที่อยู่ในแคมเปญ', bad_slots: 'ตำแหน่งที่เลือกใช้ไม่ได้ (ถูกลบหรือเลิกใช้แล้ว)', bad_slot: 'รหัสตำแหน่งในไฟล์ไม่ถูกต้อง', bad_branches: 'รหัสสาขาไม่ถูกต้อง (รูปแบบ เช่น IC008)'
+    forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', line_down: 'ส่งข้อความเข้ากลุ่มคลังไม่สำเร็จ ลองใหม่อีกครั้ง', slot_rented: 'ตำแหน่งนี้มีสัญญาป้ายที่ยังใช้งานอยู่ ยกเลิกหรือย้ายสัญญาก่อนจึงจะลบได้ (หรือแก้เป็นเลิกใช้)', code_in_use: 'ชื่อนี้เป็นตำแหน่งอื่น (หัวชั้น/กระจก) อยู่แล้วในสาขา ให้ใช้ชื่ออื่น', no_branches: 'ไม่พบรายชื่อสาขาให้สร้างตำแหน่ง', branch_not_in_campaign: 'แคมเปญนี้ไม่ได้ระบุสาขานี้ ผูกได้เฉพาะสาขาที่อยู่ในแคมเปญ', bad_slots: 'ตำแหน่งที่เลือกใช้ไม่ได้ (ถูกลบหรือเลิกใช้แล้ว)', bad_slot: 'รหัสตำแหน่งในไฟล์ไม่ถูกต้อง', bad_branches: 'รหัสสาขาไม่ถูกต้อง (รูปแบบ เช่น IC008)'
   };
   function errText(code) {
     if (ERR[code]) return ERR[code];
@@ -1204,10 +1204,13 @@
     d.appendChild(row); return fd.node;
   }
 
+  // a note to show once the next list has loaded (a save result that the reload would otherwise wipe)
+  var afterNote = null;
+  function noteAfterLoad() { show(afterNote ? afterNote[0] : '', afterNote ? afterNote[1] : ''); afterNote = null; }
   function cashier() {
     $('bar').hidden = true; show(''); $('view').textContent = ''; loading(); cashAll = null; formBack = null;
     Promise.all([api('cashier_packages'), api('cashier_list')]).then(function (r) {
-      done(); show(''); cash.packages = r[0].packages; cash.contracts = r[1].contracts.map(normEnd); cash.canEdit = r[1].can_edit; renderCashier();
+      done(); noteAfterLoad(); cash.packages = r[0].packages; cash.contracts = r[1].contracts.map(normEnd); cash.canEdit = r[1].can_edit; renderCashier();
     }).catch(fail);
   }
   function cashierStats() {
@@ -1360,7 +1363,7 @@
       if (c && c.package_id === p.id) o.selected = true; ps.appendChild(o);
     });
     pl.appendChild(ps); g.appendChild(pl);
-    var from = fld('วันเริ่ม', 'date', c && c.start_date), to = fld('วันสิ้นสุด', 'date', c && c.end_date);
+    var from = fld('วันเริ่ม', 'date', c && c.start_date), to = fld('วันสิ้นสุด', 'date', c && (c._raw || c).end_date);
     d.appendChild(g);
     var g2 = el('div', 'grid'); d.appendChild(g2);
     function fld2(text, type, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el('input', 'input'); i.type = type; i.value = val || ''; l.appendChild(i); g2.appendChild(l); return i; }
@@ -1392,7 +1395,7 @@
       var told = false;
       api('cashier_save', b).then(function (r) {
         told = r.notified; return pm.flush(r.id);
-      }).then(function () { show(notify.checked && !told ? 'บันทึกแล้ว แต่แจ้งกลุ่มคลังไม่สำเร็จ กด "แจ้งคลังอีกครั้ง" ที่สัญญา' : notify.checked ? 'บันทึกแล้ว และแจ้งกลุ่มคลังแล้ว' : 'บันทึกแล้ว', notify.checked && !told ? 'err' : 'ok'); (formBack || cashier)(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
+      }).then(function () { afterNote = [notify.checked && !told ? 'บันทึกแล้ว แต่แจ้งกลุ่มคลังไม่สำเร็จ กด "แจ้งคลังอีกครั้ง" ที่สัญญา' : notify.checked ? 'บันทึกแล้ว และแจ้งกลุ่มคลังแล้ว' : 'บันทึกแล้ว', notify.checked && !told ? 'err' : 'ok']; (formBack || cashier)(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', '', function () { (formBack || renderCashier)(); })); d.appendChild(row); v.appendChild(d);
   }
@@ -1406,7 +1409,7 @@
   function contracts() {
     $('bar').hidden = true; show(''); $('view').textContent = ''; loading(); formBack = null;
     Promise.all([api('cashier_packages'), api('cashier_list'), api('sign_list')]).then(function (r) {
-      done(); show(''); cash.packages = r[0].packages; cash.contracts = r[1].contracts.map(normEnd); cash.canEdit = r[1].can_edit;
+      done(); noteAfterLoad(); cash.packages = r[0].packages; cash.contracts = r[1].contracts.map(normEnd); cash.canEdit = r[1].can_edit;
       con.edit = { cashier: r[1].can_edit, sign: r[2].can_edit }; con.rows = []; con.canPay = r[2].can_pay === true;
       cash.contracts.forEach(function (c) {
         var p = pkgOf(c.package_id);
@@ -1452,7 +1455,7 @@
     });
     var pseg = el('div', 'seg'); pseg.setAttribute('role', 'group'); pseg.setAttribute('aria-label', 'กรองตามการรับเงินจากเวนเดอร์');
     if (con.canPay) [['all', 'ทั้งหมด'], ['pending', PAY_TH.pending], ['partial', PAY_TH.partial], ['paid', PAY_TH.paid]].forEach(function (t) {
-      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.pay === t[0])); x.onclick = function () { con.pay = t[0]; con.limit = 30; if (t[0] !== 'all') con.type = 'sign'; renderContracts(); }; pseg.appendChild(x);
+      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.pay === t[0])); x.onclick = function () { con.pay = t[0]; con.limit = 30; renderContracts(); }; pseg.appendChild(x);
     });
     var sb = el('input', 'input search'); sb.type = 'search'; sb.value = con.needle; sb.placeholder = 'ค้นหาแบรนด์ เวนเดอร์ เลขสัญญา หรือเลขโฆษณา'; sb.setAttribute('aria-label', 'ค้นหาสัญญา');
     bar.appendChild(sb); bar.appendChild(el('span', 'grow'));
@@ -1716,7 +1719,7 @@
     tb.appendChild(mseg); if (flo.mode === 'free') inp.hidden = true; tb.appendChild(inp); tb.appendChild(dl); v.appendChild(tb);
     var holder = el('div'); v.appendChild(holder);
     if (flo.mode === 'free') { freeView(holder); return; }
-    function go2() { var c = inp.value.trim().toUpperCase(); if (BRANCH_RE.test(c)) { flo.branch = c; loadFloor(holder); } }
+    function go2() { var c = inp.value.trim().toUpperCase(); if (BRANCH_RE.test(c)) { if (c !== flo.branch) { flo.pinning = null; flo.sel = null; } flo.branch = c; loadFloor(holder); } }
     inp.onchange = go2; inp.onkeydown = function (e) { if (e.key === 'Enter') go2(); };
     if (flo.branch) loadFloor(holder); else holder.appendChild(el('p', 'empty-note', 'เลือกสาขาเพื่อดูผังร้านและตำแหน่งป้าย'));
   }
@@ -2041,7 +2044,7 @@
         }
         out.push(cur.trim()); return out;
       }).filter(function (r) { return BRANCH_RE.test((r[0] || '').toUpperCase()); })
-        .map(function (r) { return r.length >= 4 ? { b: r[0], code: r[2], rent: r[3] } : { b: r[0], code: r[1], rent: r[2] }; });
+        .map(function (r) { return r.length >= 4 && !/^[\d.,]*$/.test(r[2]) ? { b: r[0], code: r[2], rent: r[3] } : { b: r[0], code: r[1], rent: r[2] }; });
     }
     function runImport(text) {
       var tbl = parseTable(text);
@@ -2208,6 +2211,8 @@
   }
   // Import "Lock section" for this branch: show what was found first, then save places (pins stay) and the plan image.
   function importXlsx(file, holder) {
+    var fb = file.name.match(/(?:^|[^A-Z0-9])([A-Z]{2}\d{3})(?![0-9])/);
+    if (fb && fb[1] !== flo.branch) { show('ไฟล์นี้เป็นของสาขา ' + fb[1] + ' แต่ตอนนี้เลือกสาขา ' + flo.branch + ' เลือกสาขาให้ตรงก่อน', 'err'); return; }
     show('กำลังอ่านไฟล์...');
     readXlsx(file, flo.branch).then(function (r) {
       show('');
