@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261113b">
+<link rel="stylesheet" href="shd-theme.css?v=20261113c">
 <style>
   body { line-height: 1.6; }
 
@@ -228,7 +228,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261113b">
+<link rel="stylesheet" href="shd-v2.css?v=20261113c">
 </head>
 <body>
 <div class="app" id="app">
@@ -294,7 +294,10 @@
     m.className = 'msg' + (kind ? ' ' + kind : '');
     m.setAttribute('role', kind === 'err' ? 'alert' : 'status');
   }
-  function loading(text) { show(text || 'กำลังโหลด...'); $('view').setAttribute('aria-busy', 'true'); }
+  // every page load bumps navSeq; guard(f) runs f only if no newer page load started since
+  var navSeq = 0;
+  function guard(f) { var seq = navSeq; return function () { if (seq === navSeq) return f.apply(null, arguments); }; }
+  function loading(text) { navSeq++; show(text || 'กำลังโหลด...'); $('view').setAttribute('aria-busy', 'true'); }
   function done() { $('view').removeAttribute('aria-busy'); }
 
   function post(path, body, headers) {
@@ -620,7 +623,7 @@
     b.appendChild(seg);
     var sb = el('input', 'input search'); sb.type = 'search'; sb.value = needle;
     sb.placeholder = 'ค้นหาชื่อหรือเลขทะเบียน'; sb.setAttribute('aria-label', 'ค้นหาแคมเปญจากชื่อหรือเลขทะเบียน');
-    sb.oninput = function () { needle = sb.value; renderList(); };
+    var typing; sb.oninput = function () { needle = sb.value; clearTimeout(typing); typing = setTimeout(renderList, 200); };
     b.appendChild(sb); b.appendChild(sortBox(renderList));
     var nl = all.filter(fromLine).length;
     var lf = el('button', 'seg-solo', 'อนุมัติจาก LINE'); lf.type = 'button'; lf.setAttribute('aria-pressed', String(lineOnly));
@@ -631,8 +634,8 @@
   }
   function loadOffice(keepMsg) {
     var m = keepMsg ? $('msg').textContent : '';
-    if (!keepMsg) loading();
-    api('list', {}).then(function (d) { all = d.campaigns.map(normEnd); done(); show(m, m ? 'ok' : ''); renderOffice(); }).catch(fail);
+    if (!keepMsg) loading(); else navSeq++;
+    api('list', {}).then(guard(function (d) { all = d.campaigns.map(normEnd); done(); show(m, m ? 'ok' : ''); renderOffice(); })).catch(guard(fail));
   }
   var needle = '', lineOnly = false, picked = {};
   function renderOffice() { renderBar(); renderList(); }
@@ -728,7 +731,7 @@
   var detailNote = ''; // a message to show once the detail page has been redrawn
   function detail(id) {
     loading();
-    Promise.all([api('get', { id: id }), api('photos', { id: id })]).then(function (rs) {
+    Promise.all([api('get', { id: id }), api('photos', { id: id })]).then(guard(function (rs) {
       done(); show(detailNote, detailNote ? 'ok' : ''); detailNote = '';
       var c = normEnd(rs[0].campaign), v = $('view'); v.textContent = '';
       $('bar').hidden = true;
@@ -814,7 +817,7 @@
         ev.forEach(function (e) { det.appendChild(el('div', '', bkk(e.at).slice(0, 16).replace('T', ' ') + ' · ' + e.actor + ' · ' + e.action)); });
         v.appendChild(det);
       }
-    }).catch(fail);
+    })).catch(guard(fail));
   }
 
   // ---------- multi picker ----------
@@ -1223,9 +1226,9 @@
   function noteAfterLoad() { show(afterNote ? afterNote[0] : '', afterNote ? afterNote[1] : ''); afterNote = null; }
   function cashier() {
     $('bar').hidden = true; show(''); $('view').textContent = ''; loading(); cashAll = null; formBack = null;
-    Promise.all([api('cashier_packages'), api('cashier_list')]).then(function (r) {
+    Promise.all([api('cashier_packages'), api('cashier_list')]).then(guard(function (r) {
       done(); noteAfterLoad(); cash.packages = r[0].packages; cash.contracts = r[1].contracts.map(normEnd); cash.canEdit = r[1].can_edit; renderCashier();
-    }).catch(fail);
+    })).catch(guard(fail));
   }
   function cashierStats() {
     var live = cash.contracts.filter(function (c) { return cashState(c) === 'live'; }), rented = live.filter(function (c) { return !c.house; }), branches = {}, income = 0;
@@ -1424,7 +1427,7 @@
   var CON_KIND = { cashier: 'ชั้นแคชเชียร์', sign: 'ป้ายหัวชั้น/กระจก' };
   function contracts() {
     $('bar').hidden = true; show(''); $('view').textContent = ''; loading(); formBack = null;
-    Promise.all([api('cashier_packages'), api('cashier_list'), api('sign_list')]).then(function (r) {
+    Promise.all([api('cashier_packages'), api('cashier_list'), api('sign_list')]).then(guard(function (r) {
       done(); noteAfterLoad(); cash.packages = r[0].packages; cash.contracts = r[1].contracts.map(normEnd); cash.canEdit = r[1].can_edit;
       con.edit = { cashier: r[1].can_edit, sign: r[2].can_edit }; con.rows = []; con.canPay = r[2].can_pay === true;
       cash.contracts.forEach(function (c) {
@@ -1438,7 +1441,7 @@
       });
       if (!con.rows.some(function (x) { return x.key === con.sel; })) con.sel = null;
       renderContracts();
-    }).catch(fail);
+    })).catch(guard(fail));
   }
   function conRows() {
     var q = con.needle.trim().toLowerCase();
@@ -1772,9 +1775,9 @@
     }).catch(function (e) { holder.textContent = ''; show(e.message, 'err'); });
   }
   function loadFloor(holder) {
-    holder.textContent = ''; holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
+    navSeq++; holder.textContent = ''; holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
     Promise.all([api('floor_get', { branch: flo.branch }), isOffice() ? api('sign_list').catch(function () { return { contracts: [] }; }) : Promise.resolve({ contracts: [] })])
-      .then(function (rs) { flo.data = rs[0]; flo.signs = rs[1].contracts.map(normEnd); renderFloor(holder); }).catch(function (e) { holder.textContent = ''; show(e.message, 'err'); });
+      .then(guard(function (rs) { flo.data = rs[0]; flo.signs = rs[1].contracts.map(normEnd); renderFloor(holder); })).catch(function (e) { holder.textContent = ''; show(e.message, 'err'); });
   }
   // A form opened from a long list remembers the scroll position, so cancel/save return to the same spot.
   var keepY = 0;
@@ -2474,29 +2477,30 @@
     v.appendChild(dash);
     if (pendingQuery) { homeFind.run(pendingQuery); pendingQuery = ''; }
     if (sess.staff.role === 'WAREHOUSE') { homeFind.focus(); return; }
+    navSeq++;
     var wait = el('p', 'sub', 'กำลังโหลด...'); dash.appendChild(wait);
     // The cashier timeline is extra: if it cannot load, the rest of the home page still shows.
-    Promise.all([api('list', {}), api('cashier_list').catch(function () { return { contracts: [] }; }), api('sign_list').catch(function () { return { contracts: [] }; })]).then(function (rs) {
+    Promise.all([api('list', {}), api('cashier_list').catch(function () { return { contracts: [] }; }), api('sign_list').catch(function () { return { contracts: [] }; })]).then(guard(function (rs) {
       var d = rs[0]; all = d.campaigns.map(normEnd); cashHome = rs[1].contracts.map(normEnd); signHome = rs[2].contracts.map(normEnd); dash.textContent = '';
       if (isOffice()) officeDash(dash); else branchDash(dash);
-    }).catch(fail);
+    })).catch(guard(fail));
   }
   function openDetail(id) { setCurrent('media'); detail(id); }
   // A branch opens a cashier-shelf contract: the list it already holds has everything it may see; only the photos are fetched.
   function cashierBranchOpen(c) {
     if (!c) return;
     loading();
-    api('cashier_photos', { id: c.id }).then(function (d) {
+    api('cashier_photos', { id: c.id }).then(guard(function (d) {
       done(); var v = $('view'); v.textContent = ''; $('bar').hidden = true; window.scrollTo(0, 0);
       v.appendChild(button('← กลับภาพรวม', 'alt back', showHome));
       v.appendChild(card({ brand: c.brand, code: 'ชั้นแคชเชียร์', position_types: c.house ? { name: 'House Brand' } : null, status: 'approved', start_date: c.start_date, end_date: c.end_date, ad_no: c.ad_no, ad_expiry: c.ad_expiry, how_to_place: c.how_to_place, return_to: c.return_to, _raw: c._raw }));
       if (d.photos.length) { var ph = el('section', 'card'); ph.appendChild(el('h2', 'sec', 'รูปตัวอย่าง')); ph.appendChild(photoGrid(d.photos)); v.appendChild(ph); }
-    }).catch(fail);
+    })).catch(guard(fail));
   }
   // A branch opens a campaign to see which material it is: facts (with the advertising number) and the photos, never money or paperwork.
   function branchOpen(id) {
     loading();
-    Promise.all([api('get', { id: id }), api('photos', { id: id })]).then(function (rs) {
+    Promise.all([api('get', { id: id }), api('photos', { id: id })]).then(guard(function (rs) {
       done(); var v = $('view'); v.textContent = ''; $('bar').hidden = true; window.scrollTo(0, 0);
       v.appendChild(button('← กลับภาพรวม', 'alt back', showHome));
       v.appendChild(card(normEnd(rs[0].campaign)));
@@ -2505,7 +2509,7 @@
         if (!ps.length) return;
         var ph = el('section', 'card'); ph.appendChild(el('h2', 'sec', g[1])); ph.appendChild(photoGrid(ps)); v.appendChild(ph);
       });
-    }).catch(fail);
+    })).catch(guard(fail));
   }
 
   // ---------- shell: modules, sidebar, routing ----------
@@ -2562,7 +2566,7 @@
     if (!sess) return;
     var id = (location.hash || '#/home').slice(2).split('/')[0];
     if (!modules().some(function (m) { return m.id === id; })) id = 'home';
-    setCurrent(id); $('app').classList.remove('open'); $('bar').hidden = true; show('');
+    navSeq++; setCurrent(id); $('app').classList.remove('open'); $('bar').hidden = true; show('');
     if (id === 'media') loadOffice(); else if (id === 'cashier') cashier(); else if (id === 'floor') floor(); else if (id === 'contracts') contracts(); else if (id === 'settings') settings(); else showHome();
   }
 
