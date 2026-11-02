@@ -115,7 +115,8 @@
   .photos img { display: block; width: 100%; height: auto; border-radius: var(--radius-s); border: 1px solid var(--c-line);
     background: var(--c-surface-2); }
   details.hist { margin-top: var(--space-4); color: var(--c-ink-2); font-size: var(--fs-s); }
-  details.hist summary { cursor: pointer; min-height: var(--size-target); display: flex; align-items: center; }
+  details.hist summary { cursor: pointer; min-height: var(--size-target); display: flex; align-items: center; font-weight: 600; color: var(--c-ink); }
+  details.hist > div { padding: var(--space-1) 0; border-top: 1px solid var(--c-line); }
   .btn.danger { border-color: var(--c-err-line); color: var(--c-err); background: var(--c-surface); }
   .btn.danger:hover { background: var(--c-err-soft); border-color: var(--c-err); }
 
@@ -759,6 +760,29 @@
       row.appendChild(go);
     }).catch(function () { box.remove(); });
   }
+  // Campaign history in words: who (JT name when known, LINE approvers by the name LINE gave) and what, with the reason or source.
+  function eventWho(e) {
+    var d = e.detail || {}, a = String(e.actor || '');
+    if (a === 'line') return 'คลัง (LINE)';
+    if (a.indexOf('line:') === 0) return d.name || 'ผู้อนุมัติทาง LINE';
+    var p = people.filter(function (x) { return x.username === a; })[0];
+    return p ? p.name : a;
+  }
+  function eventText(e) {
+    var d = e.detail || {};
+    switch (e.action) {
+      case 'register': return 'ลงทะเบียน';
+      case 'draft': return 'คลังส่งรูปเข้ามา เปิดเคส';
+      case 'update': return 'แก้ไขข้อมูล';
+      case 'approve': return 'อนุมัติ' + (d.via === 'line' ? ' จาก LINE' : '') + (d.on_behalf ? ' (แทนผู้อนุมัติ)' : '');
+      case 'unapprove': return 'ถอนอนุมัติ' + (d.reason ? ' เหตุผล: ' + d.reason : '');
+      case 'cancel': return 'ยกเลิกแคมเปญ' + (d.was === 'approved' ? ' (หลังอนุมัติแล้ว)' : '');
+      case 'link': return 'ผูกรูปเข้ากับ ' + (d.into || 'แคมเปญอื่น') + ' แล้วปิดเคสนี้';
+      case 'photos_linked': return 'รับรูปจากคลัง' + (d.from ? ' (' + d.from + ')' : '');
+      case 'link_cashier': return 'ย้ายรูปไปสัญญาชั้นแคชเชียร์ แล้วปิดเคสนี้';
+      default: return e.action;
+    }
+  }
   var detailNote = ''; // a message to show once the detail page has been redrawn
   function detail(id) {
     loading();
@@ -855,8 +879,8 @@
       });
       var ev = rs[0].events || [];
       if (ev.length) {
-        var det = el('details', 'hist'); det.appendChild(el('summary', '', 'ประวัติการเปลี่ยนแปลง (' + ev.length + ')'));
-        ev.forEach(function (e) { det.appendChild(el('div', '', bkk(e.at).slice(0, 16).replace('T', ' ') + ' · ' + e.actor + ' · ' + e.action)); });
+        var det = el('details', 'card hist'); det.appendChild(el('summary', '', 'ประวัติการเปลี่ยนแปลง (' + ev.length + ')'));
+        ev.forEach(function (e) { var t = bkk(e.at); det.appendChild(el('div', '', thDate(t.slice(0, 10)) + ' ' + t.slice(11, 16) + ' · ' + eventWho(e) + ' · ' + eventText(e))); });
         v.appendChild(det);
       }
     })).catch(guard(fail));
