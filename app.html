@@ -268,13 +268,15 @@
     bad_photo: 'รูปนี้ใช้ไม่ได้ (ต้องเป็นรูปที่เปิดได้ และไม่ใหญ่เกินไป)', too_many_photos: 'ใส่รูปตัวอย่างได้ไม่เกิน 10 รูปต่อแคมเปญ',
     bad_target: 'แคมเปญที่เลือกผูกไม่ได้ (ยกเลิกแล้วหรือเป็นเคสจากคลัง)',
     'missing:ad': 'ยังไม่ได้ใส่เลขโฆษณาและวันหมดอายุ', 'missing:branches': 'ยังไม่ได้เลือกสาขา',
-    self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', bad_reason: 'ใส่เหตุผลก่อน', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
+    self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', bad_reason: 'ใส่เหตุผลก่อน', bad_due_date: 'เลือกวันที่ให้สาขาส่งรูปก่อน',
+    jt_off: 'ยังไม่ได้ตั้งการเชื่อม Job Tracker กรุณาแจ้งผู้ดูแลระบบ', no_branches: 'สัญญานี้ยังไม่มีสาขา', jt_refused: 'Job Tracker เปิดงานไม่สำเร็จ', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
     expired: 'เซสชันหมดอายุ กรุณาเข้าใหม่จากเมนู Job Tracker', bad_signature: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker',
     malformed: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker', reused: 'ลิงก์ถูกใช้แล้ว กรุณาเข้าใหม่จากเมนู Job Tracker',
     forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', line_down: 'ส่งข้อความเข้ากลุ่มคลังไม่สำเร็จ ลองใหม่อีกครั้ง', slot_rented: 'ตำแหน่งนี้มีสัญญาป้ายที่ยังใช้งานอยู่ ยกเลิกหรือย้ายสัญญาก่อนจึงจะลบได้ (หรือแก้เป็นเลิกใช้)', code_in_use: 'ชื่อนี้เป็นตำแหน่งอื่น (หัวชั้น/กระจก) อยู่แล้วในสาขา ให้ใช้ชื่ออื่น', no_branches: 'ไม่พบรายชื่อสาขาให้สร้างตำแหน่ง', branch_not_in_campaign: 'แคมเปญนี้ไม่ได้ระบุสาขานี้ ผูกได้เฉพาะสาขาที่อยู่ในแคมเปญ', bad_slots: 'ตำแหน่งที่เลือกใช้ไม่ได้ (ถูกลบหรือเลิกใช้แล้ว)', bad_slot: 'รหัสตำแหน่งในไฟล์ไม่ถูกต้อง', bad_branches: 'รหัสสาขาไม่ถูกต้อง (รูปแบบ เช่น IC008)'
   };
   function errText(code) {
     if (ERR[code]) return ERR[code];
+    if (/[ก-๙]/.test(code || '')) return code; // Job Tracker already answered in Thai
     if (/^cap:/.test(code)) return (code.slice(4) === 'ALL' ? 'ทุกสาขา' : 'สาขา ' + code.slice(4)) + ' วางตำแหน่งนี้เต็มเพดานในช่วงวันที่ชนกัน อนุมัติไม่ได้';
     return code ? 'ทำรายการไม่สำเร็จ (' + code + ')' : 'ทำรายการไม่สำเร็จ กรุณาลองใหม่';
   }
@@ -1603,6 +1605,31 @@
     }));
     box.appendChild(row); p.appendChild(box);
   }
+  // Install photos from the branches: Job Tracker opens one job per branch; progress and the photo report live there.
+  function installBox(p, r) {
+    var c = r.c, box = el('section', 'boxscroll'), info = el('p', 'sub', c.jt_batch_code ? 'ชุดงาน ' + c.jt_batch_code + ' กำลังโหลดความคืบหน้า...' : 'ยังไม่ได้ขอรูปติดตั้งจากสาขา');
+    box.appendChild(el('h3', '', 'รูปติดตั้งจากสาขา')); box.appendChild(info);
+    if (c.jt_batch_code) {
+      api('install_status', { kind: r.kind, id: c.id }).then(function (d) {
+        var b = d.batch; if (!b) return;
+        info.textContent = 'ชุดงาน ' + b.code + ' · ส่งแล้ว ' + b.submitted + '/' + b.total + ' สาขา · อนุมัติแล้ว ' + b.approved;
+        if (b.url) { var a = el('a', 'btn alt', 'เปิดใน Job Tracker (ดูรูปและออกรายงาน)'); a.href = b.url; a.target = '_blank'; a.rel = 'noopener'; box.insertBefore(a, info.nextSibling); }
+      }).catch(function (e) { info.textContent = 'ชุดงาน ' + c.jt_batch_code + ' · โหลดความคืบหน้าไม่ได้ (' + e.message + ')'; });
+    }
+    var row = el('div', 'row'), due = el('input', 'input');
+    due.type = 'date'; due.min = today(); due.value = addDays(today(), 7);
+    var dl = el('label', 'f'); dl.appendChild(el('span', 't', 'ให้สาขาส่งรูปภายใน')); dl.appendChild(due); row.appendChild(dl);
+    var go = button(c.jt_batch_code ? 'ขอรูปรอบใหม่' : 'ขอรูปติดตั้งจากสาขา', c.jt_batch_code ? 'alt' : '', function () {
+      if (!due.value) { show('เลือกวันที่ให้สาขาส่งรูปก่อน', 'err'); due.focus(); return; }
+      if (!confirm('เปิดงานใน Job Tracker ให้ทุกสาขาในสัญญานี้ (' + r.scope + ') ถ่ายรูปติดตั้งส่งภายใน ' + thDate(due.value) + '?' + (c.jt_batch_code ? '\nชุดงานเดิม ' + c.jt_batch_code + ' ยังอยู่ใน Job Tracker แต่หน้านี้จะแสดงชุดใหม่แทน' : ''))) return;
+      go.disabled = true;
+      api('install_request', { kind: r.kind, id: c.id, due_date: due.value }).then(function (d) {
+        afterNote = ['เปิดงาน ' + d.code + ' ใน Job Tracker แล้ว ' + d.jobs + ' สาขา' + (d.missing.length ? ' · สาขาที่ไม่มีผู้ใช้ใน Job Tracker: ' + d.missing.join(', ') : ''), d.missing.length ? 'err' : 'ok'];
+        contracts();
+      }).catch(function (e) { go.disabled = false; show(e.message, 'err'); });
+    });
+    row.appendChild(go); box.appendChild(row); p.appendChild(box);
+  }
   function conPanel(p) {
     p.textContent = '';
     var r = con.rows.filter(function (x) { return x.key === con.sel; })[0];
@@ -1627,6 +1654,7 @@
     } else if (c.branches && c.branches.length) {
       var bl = el('div', 'boxscroll'); bl.appendChild(el('h3', '', 'สาขา')); bl.appendChild(el('p', 'sub', c.branches.join(', '))); p.appendChild(bl);
     }
+    if (con.edit[r.kind] && st !== 'cancelled') installBox(p, r);
     if (con.edit[r.kind] && st !== 'cancelled') {
       var row = el('div', 'row');
       var next = r.kind === 'sign' ? con.rows.filter(function (x) { return x.kind === 'sign' && x.c.renewed_from === c.id && x.c.status !== 'cancelled'; })[0] : null;
