@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261112b">
+<link rel="stylesheet" href="shd-theme.css?v=20261112c">
 <style>
   body { line-height: 1.6; }
 
@@ -222,7 +222,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261112b">
+<link rel="stylesheet" href="shd-v2.css?v=20261112c">
 </head>
 <body>
 <div class="app" id="app">
@@ -2087,7 +2087,7 @@
       if (!rows.length) list.appendChild(el('p', 'empty-note', 'ไม่มีตำแหน่งในกลุ่มนี้'));
       rows.forEach(function (s) {
         var r = el('div', 'trow'); r.appendChild(el('b', 'slot-code', s.code));
-        var sp = (s.specs || []).map(function (x) { return (x.width_cm != null && x.height_cm != null ? x.width_cm + ' x ' + x.height_cm + ' cm' : x.size_text || '') + (x.qty != null && x.qty !== 1 ? ' x' + x.qty : ''); }).filter(Boolean);
+        var sp = (s.specs || []).map(function (x) { var z = (x.width_cm != null && x.height_cm != null ? x.width_cm + ' x ' + x.height_cm + ' cm' : x.size_text || '') + (x.qty != null && x.qty !== 1 ? ' x' + x.qty : ''); return z ? (x.sign_type ? x.sign_type + ' ' : '') + z : ''; }).filter(Boolean);
         r.appendChild(el('span', 'sub grow', [s.name, s.category, s.note, sp.length ? 'ขนาด ' + sp.slice(0, 3).join(', ') + (sp.length > 3 ? ' +' + (sp.length - 3) : '') : ''].filter(Boolean).join(' · ')));
         r.appendChild(el('span', 'chip', KIND_TH[s.kind] || s.kind)); if (s.kind === 'glass' || s.tenant === 'rent') r.appendChild(el('span', 'chip', TENANT_TH[s.tenant]));
         var placed = s.x != null && s.y != null, rentNow = signNow(s);
@@ -2125,11 +2125,32 @@
     var kind = sel('ชนิด', [['header', 'หัวชั้น'], ['glass', 'กระจกหน้าร้าน'], ['temp', 'ป้ายสื่อชั่วคราว (ผูกแคมเปญสื่อ)']], s ? s.kind : 'glass');
     var tenant = sel('ผู้ใช้ตำแหน่ง', [['icare', 'iCare ติดเอง'], ['rent', 'ให้ซัพพลายเออร์เช่า']], s ? s.tenant : 'icare');
     var note = fld('หมายเหตุ', s && s.note); d.appendChild(g);
+    // sign specs of this place: edit one size, add or remove a line
+    var specs = ((s && s.specs) || []).map(function (x) { return { sign_type: x.sign_type || '', material: x.material || '', qty: x.qty == null ? '' : x.qty, width_cm: x.width_cm == null ? '' : x.width_cm, height_cm: x.height_cm == null ? '' : x.height_cm, size_text: x.size_text || '', note: x.note || '' }; });
+    var specBox = el('div');
+    function paintSpecs() {
+      specBox.textContent = '';
+      specs.forEach(function (x, i) {
+        var r = el('div', 'brow');
+        [['sign_type', 'ประเภทป้าย', 'text'], ['material', 'วัสดุ', 'text'], ['width_cm', 'กว้าง (cm)', 'number'], ['height_cm', 'สูง (cm)', 'number'], ['qty', 'จำนวน', 'number'], ['note', 'หมายเหตุ', 'text']].forEach(function (f) {
+          var l = el('label', 'f'); l.appendChild(el('span', 't', f[1])); var inp = el('input', 'input'); inp.type = f[2]; if (f[2] === 'number') inp.min = 0; inp.value = x[f[0]];
+          inp.oninput = function () { x[f[0]] = inp.value; }; l.appendChild(inp); r.appendChild(l);
+        });
+        if (x.size_text) r.appendChild(el('span', 'sub', 'ขนาดเดิมในไฟล์: ' + x.size_text));
+        r.appendChild(button('ลบรายการ', 'danger', function () { specs.splice(i, 1); paintSpecs(); }));
+        specBox.appendChild(r);
+      });
+      if (!specs.length) specBox.appendChild(el('p', 'sub', 'ยังไม่มีรายการป้าย'));
+    }
+    if (s) { d.appendChild(el('h3', '', 'รายการป้ายของตำแหน่งนี้')); paintSpecs(); d.appendChild(specBox); d.appendChild(button('+ เพิ่มรายการป้าย', 'alt', function () { specs.push({ sign_type: '', material: '', qty: 1, width_cm: '', height_cm: '', size_text: '', note: '' }); paintSpecs(); })); }
     var al = el('label', 'check'), act = el('input'); act.type = 'checkbox'; act.checked = s ? s.active : true; al.appendChild(act); al.appendChild(document.createTextNode('ใช้งานอยู่ (ติ๊กออก = เลิกใช้)')); d.appendChild(al);
     var row = el('div', 'row');
     row.appendChild(button('บันทึก', '', function () {
       if (!code.value.trim()) { show('ใส่รหัสตำแหน่งก่อน', 'err'); return; }
+      var num = function (v) { return v === '' || v === null ? null : Number(v); };
+      var items = specs.map(function (x) { return { code: code.value.trim().toUpperCase(), sign_type: x.sign_type, material: x.material, qty: num(x.qty), width_cm: num(x.width_cm), height_cm: num(x.height_cm), size_text: x.size_text, note: x.note }; });
       api('slot_save', { branch: flo.branch, code: code.value, name: name.value, category: cat.value, kind: kind.value, tenant: tenant.value, note: note.value, active: act.checked })
+        .then(function () { return s ? api('slot_specs_save', { branch: flo.branch, items: items.length ? items : [{ code: code.value.trim().toUpperCase() }] }) : null; })
         .then(function () { show('บันทึกตำแหน่งแล้ว', 'ok'); loadFloor(holder); }).catch(function (e) { show(e.message, 'err'); });
     }));
     row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
@@ -2213,7 +2234,7 @@
   // "Sticker โปร่งแสง · 78 x 49 cm · 1 ชิ้น" for one spec
   function specLine(p) {
     var size = p.width_cm != null && p.height_cm != null ? p.width_cm + ' x ' + p.height_cm + ' cm' : p.size_text || '';
-    return [p.material, size, p.qty != null ? p.qty + ' ชิ้น' : '', p.note].filter(Boolean).join(' · ');
+    return [p.sign_type, p.material, size, p.qty != null ? p.qty + ' ชิ้น' : '', p.note].filter(Boolean).join(' · ');
   }
 
   var setTab = 'media';
