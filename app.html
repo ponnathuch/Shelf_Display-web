@@ -742,12 +742,16 @@
       var list = d.contracts.filter(function (k) { return k.status === 'active' && k.end_date >= td; })
         .sort(function (a, b) { return (same(b) ? 1 : 0) - (same(a) ? 1 : 0) || String(a.brand).localeCompare(String(b.brand)); });
       if (!list.length) { box.remove(); return; }
+      // a native select shows its first option as if chosen; start blank unless the brand really matches
+      sel.appendChild(el('option', '', 'เลือกสัญญา...')).value = '';
       list.forEach(function (k) {
         var o = el('option', '', k.brand + ' · ' + (k.branches && k.branches.length ? k.branches.length + ' สาขา' : 'ทุกสาขา') + ' · ถึง ' + thDate(k.end_date)); o.value = k.id; sel.appendChild(o);
       });
+      sel.value = same(list[0]) ? String(list[0].id) : '';
       var go = button('ย้ายรูปไปสัญญานี้', 'alt', function () {
         var k = list.filter(function (x) { return String(x.id) === sel.value; })[0];
-        if (!k || !confirm('ย้ายรูปของ ' + c.code + ' ไปสัญญาชั้นแคชเชียร์ ' + k.brand + ' และปิดเคสนี้?')) return;
+        if (!k) { show('เลือกสัญญาชั้นแคชเชียร์ก่อน', 'err'); sel.focus(); return; }
+        if (!confirm('ย้ายรูปของ ' + c.code + ' ไปสัญญาชั้นแคชเชียร์ ' + k.brand + ' และปิดเคสนี้?')) return;
         go.disabled = true;
         api('draft_to_cashier', { id: c.id, contract_id: k.id }).then(function () { show('ย้ายรูปไปสัญญาชั้นแคชเชียร์ ' + k.brand + ' แล้ว แจ้งกลุ่มคลังเรียบร้อย', 'ok'); loadOffice(true); })
           .catch(function (e) { go.disabled = false; show(e.message, 'err'); });
