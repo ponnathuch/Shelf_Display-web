@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261110f">
+<link rel="stylesheet" href="shd-theme.css?v=20261110g">
 <style>
   body { line-height: 1.6; }
 
@@ -214,7 +214,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261110f">
+<link rel="stylesheet" href="shd-v2.css?v=20261110g">
 </head>
 <body>
 <div class="app" id="app">
@@ -382,11 +382,12 @@
     fact(dl, 'ติดต่อ', [c.registrant_dept, c.supplier_contact].filter(Boolean).join(' · '));
     fact(dl, 'วิธีวาง/ข้อห้าม', c.how_to_place, true);
     fact(dl, 'หลังสิ้นสุด', c.return_to, true);
+    // everyone sees who approved it (a branch gets the name and date, not the LINE user id)
+    if (c.approved_by_name) fact(dl, 'อนุมัติโดย', c.approved_by_name + (String(c.approved_by || '').indexOf('line:') === 0 ? ' (ผ่าน LINE)' : '') + (c.approved_at ? ' · ' + thDate(String(c.approved_at).slice(0, 10)) : ''));
     if (opts.office) {
       var br = (c.campaign_branches || []).length;
       fact(dl, 'สาขา', br ? br + ' สาขา' : 'ทุกสาขา');
       if (c.status === 'pending') fact(dl, 'ค้างมา', ageDays(c) + ' วัน');
-      if (c.approved_by_name) fact(dl, 'อนุมัติโดย', c.approved_by_name + (String(c.approved_by || '').indexOf('line:') === 0 ? ' (ผ่าน LINE)' : ''));
       if (c.notes) fact(dl, 'หมายเหตุ', c.notes, true);
     }
     if (dl.childNodes.length) d.appendChild(dl);
@@ -504,7 +505,7 @@
     if (r.source === 'warehouse') chips.appendChild(el('span', 'chip', 'จากคลัง'));
     left.appendChild(chips);
     var period = r.open_ended ? 'วางต่อเนื่อง ไม่มีกำหนดสิ้นสุด' : (r.start_date || r.end_date) ? thDate(r.start_date) + ' ถึง ' + thDate(r.end_date) : 'ยังไม่ระบุช่วงวาง';
-    left.appendChild(el('p', 'sub', [r.position || 'ยังไม่ระบุตำแหน่ง', period, r.branch_count ? r.branch_count + ' สาขา' : 'ทุกสาขา'].join(' · ')));
+    left.appendChild(el('p', 'sub', [r.position || 'ยังไม่ระบุตำแหน่ง', period, r.branch_count ? r.branch_count + ' สาขา' : 'ทุกสาขา', r.approved_by_name ? 'อนุมัติโดย ' + r.approved_by_name : ''].filter(Boolean).join(' · ')));
     head.appendChild(left);
     if (r.thumb_url) {
       var a = el('a'); a.href = r.thumb_url; a.target = '_blank'; a.rel = 'noopener'; a.setAttribute('aria-label', 'เปิดรูป');
@@ -1893,7 +1894,8 @@
     return box;
   }
   function timelineRows(list) {
-    return list.filter(function (c) { return c.start_date && (c.status === 'approved' || c.status === 'pending') && (!c.end_date || daysTo(c.end_date) >= FROM); })
+    // open-ended cases (approved from LINE with no end date) stay off the timeline; they are still listed and searchable
+    return list.filter(function (c) { return c.start_date && !c.open_ended && (c.status === 'approved' || c.status === 'pending') && (!c.end_date || daysTo(c.end_date) >= FROM); })
       .sort(function (a, b) { return String(a.start_date).localeCompare(String(b.start_date)); }).slice(0, 14);
   }
   function timelineCard(list, onOpen) {
