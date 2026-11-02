@@ -4,17 +4,17 @@
   color-scheme: light dark;
 
   /* colour */
-  --c-page: #f2f4f8;
-  --c-surface: #fcfdfe;
-  --c-surface-2: #f6f8fc;
-  --c-line: #e1e6ee;
-  --c-line-strong: #c9d3e3;
+  --c-page: #f6f7fb;
+  --c-surface: #ffffff;
+  --c-surface-2: #f2f4f9;
+  --c-line: #e7e9f1;
+  --c-line-strong: #d3d7e4;
   --c-ink: #172033;
   --c-ink-2: #475069;
   --c-ink-3: #5b647a;
   --c-brand: #6a3fc4;
   --c-brand-strong: #52309f;
-  --c-brand-soft: #f1ecfb;
+  --c-brand-soft: #f3effd;
   --c-brand-line: #c3aeea;
   --c-on-brand: #fcfdfe;
   --c-header-1: #4a2a8f;
@@ -24,12 +24,12 @@
   --c-on-header-soft: rgba(252, 253, 254, 0.16);
   --c-on-header-hover: rgba(252, 253, 254, 0.28);
   --c-ok: #18703f;
-  --c-ok-soft: #e3f5ea;
+  --c-ok-soft: #e6f6ed;
   --c-warn: #7a5300;
-  --c-warn-soft: #fff6e0;
+  --c-warn-soft: #fff4dc;
   --c-warn-line: #f0c95c;
   --c-err: #b3261e;
-  --c-err-soft: #fdecea;
+  --c-err-soft: #fdeceb;
   --c-err-line: #f3b8b1;
   --c-badge: #ffd75e;
   --c-badge-ink: #4a3500;
@@ -51,43 +51,44 @@
   --c-kind-other: var(--c-ink-3);
 
   /* shape and space */
-  --radius-s: 8px;
-  --radius-m: 12px;
-  --radius-l: 14px;
+  --radius-s: 10px;
+  --radius-m: 14px;
+  --radius-l: 20px;
   --radius-pill: 999px;
   --space-0: 2px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
+  --space-1: 3px;
+  --space-2: 6px;
+  --space-3: 10px;
+  --space-4: 14px;
+  --space-5: 18px;
+  --space-6: 24px;
 
   /* layout sizes */
-  --size-icon-s: 16px;
-  --size-icon: 20px;
+  --size-icon-s: 14px;
+  --size-icon: 18px;
   --size-icon-l: 24px;
   --size-logo: 40px;
   --size-avatar: 28px;
-  --size-target: 32px;
-  --size-target-lg: 44px;
+  --size-target: 28px;
+  --size-target-lg: 34px;
   --size-empty: 64px;
   --size-tile: 130px;
   --size-thumb: 120px;
   --size-thumb-s: 80px;
   --size-fact: 140px;
-  --size-gantt-label: 210px;
-  --size-gantt-bar: 24px;
-  --size-gantt-row: 40px;
+  --size-gantt-label: 190px;
+  --size-gantt-label-s: 110px;
+  --size-gantt-bar: 18px;
+  --size-gantt-row: 32px;
   --size-today-line: 2px;
-  --size-nav: 244px;
+  --size-nav: 216px;
   --size-row-thumb: 44px;
   --size-cell: 132px;
   --size-pane: 320px;
   --size-cell-wide: 200px;
   --size-scroll: 280px;
   --size-plan: 520px;
-  --size-bar: 56px;
+  --size-bar: 50px;
   --size-card-min: 260px;
   --size-kpi-min: 160px;
   --size-bar-h: 8px;
@@ -102,46 +103,53 @@
   --max-page-image: 1000px;
 
   /* type */
-  --fs-xs: 0.78rem;
-  --fs-s: 0.88rem;
-  --fs-m: 1rem;
-  --fs-l: 1.12rem;
-  --fs-xl: 1.3rem;
-  --font-ui: "Leelawadee UI", "Leelawadee", Tahoma, sans-serif;
+  --fs-xs: 0.72rem;
+  --fs-s: 0.8rem;
+  --fs-m: 0.875rem;
+  --fs-l: 0.975rem;
+  --fs-xl: 1.1rem;
+  --font-ui: "IBM Plex Sans Thai", "Segoe UI Variable Text", "Leelawadee UI", system-ui, sans-serif;
   --font-code: Consolas, "Courier New", monospace;
 
   /* depth, focus, motion */
-  --shadow-1: 0 1px 2px rgba(23, 32, 51, 0.06), 0 4px 14px rgba(23, 32, 51, 0.06);
+  --shadow-1: none;
   --focus: 0 0 0 3px rgba(106, 63, 196, 0.35);
   --outline-w: 2px;
   --dur-fast: 120ms;
   --dur-shimmer: 1200ms;
+  --size-logo-mark: 30px;
+  --size-dot: 7px;
+  --size-spark: 28px;
+  --size-spark-bar: 5px;
+  --size-search: 380px;
+  --fs-kpi: 1.65rem;
 }
+@media (pointer: coarse) { :root { --size-target: 36px; --size-target-lg: 44px; --fs-m: 1rem; --fs-s: 0.9rem; } }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --c-page: #0f141d;
-    --c-surface: #1a2130;
-    --c-surface-2: #212a3b;
-    --c-line: #2b3547;
-    --c-line-strong: #3a4659;
+    --c-page: #0e1118;
+    --c-surface: #161b26;
+    --c-surface-2: #1c2331;
+    --c-line: #262e3f;
+    --c-line-strong: #36405a;
     --c-ink: #e6e9f0;
     --c-ink-2: #b7bfcf;
     --c-ink-3: #959eb2;
     --c-brand: #b9a2f2;
     --c-brand-strong: #d0c0f7;
-    --c-brand-soft: #2a2145;
+    --c-brand-soft: #251f3d;
     --c-brand-line: #5a4496;
     --c-on-brand: #1a1030;
     --c-header-1: #2d1b5e;
     --c-header-2: #3d2680;
     --c-ok: #6fd39a;
-    --c-ok-soft: #173426;
+    --c-ok-soft: #14301f;
     --c-warn: #f2c46b;
-    --c-warn-soft: #2a2414;
+    --c-warn-soft: #2d2615;
     --c-warn-line: #5c4a1a;
     --c-err: #ff8f84;
-    --c-err-soft: #3a1d1b;
+    --c-err-soft: #35191a;
     --c-err-line: #6b2b26;
     --c-badge: #f2c46b;
     --c-badge-ink: #2a2414;

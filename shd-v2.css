@@ -1,7 +1,7 @@
 /* ds-allow-hardcode: @font-face must name the family literally */
-/* Shelf Display v2 look (prototype only): quiet neutral surfaces, one violet accent, hairline borders instead of shadows,
+/* Shelf Display v2 look: quiet neutral surfaces, one violet accent, hairline borders instead of shadows,
    rounder corners, bigger numbers, pill chips with a status dot, a slim sidebar and a global search in the top bar.
-   Loaded after shd-theme.css so it only overrides tokens and component styles for the prototype. */
+   Loaded after shd-theme.css. Component styles only: every token value lives in shd-theme.css. */
 
 @font-face { font-family: "IBM Plex Sans Thai"; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/ibm-plex-sans-thai-thai-400-normal.woff2) format("woff2"); unicode-range: U+0E01-0E5B, U+200B-200D, U+25CC; } /* ds-allow-hardcode */
 @font-face { font-family: "IBM Plex Sans Thai"; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/ibm-plex-sans-thai-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; } /* ds-allow-hardcode */
@@ -12,49 +12,6 @@
 @font-face { font-family: "IBM Plex Sans Thai"; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/ibm-plex-sans-thai-thai-700-normal.woff2) format("woff2"); unicode-range: U+0E01-0E5B, U+200B-200D, U+25CC; } /* ds-allow-hardcode */
 @font-face { font-family: "IBM Plex Sans Thai"; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/ibm-plex-sans-thai-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; } /* ds-allow-hardcode */
 
-:root {
-  --c-page: #f6f7fb;
-  --c-surface: #ffffff;
-  --c-surface-2: #f2f4f9;
-  --c-line: #e7e9f1;
-  --c-line-strong: #d3d7e4;
-  --c-brand-soft: #f3effd;
-  --c-ok-soft: #e6f6ed;
-  --c-warn-soft: #fff4dc;
-  --c-err-soft: #fdeceb;
-  --radius-s: 10px;
-  --radius-m: 16px;
-  --radius-l: 20px;
-  --shadow-1: none;
-  --font-ui: "IBM Plex Sans Thai", "Segoe UI Variable Text", "Leelawadee UI", system-ui, sans-serif;
-  --size-nav: 216px;
-  --size-bar: 50px;
-  --size-logo-mark: 30px;
-  --size-dot: 7px;
-  --size-spark: 28px;
-  --size-spark-bar: 5px;
-  --size-search: 380px;
-  --fs-kpi: 1.65rem;
-  /* density: a small, tight desktop scale; touch screens get the large targets back below */
-  --fs-xs: 0.72rem; --fs-s: 0.8rem; --fs-m: 0.875rem; --fs-l: 0.975rem; --fs-xl: 1.1rem;
-  --space-1: 3px; --space-2: 6px; --space-3: 10px; --space-4: 14px; --space-5: 18px; --space-6: 24px;
-  --size-target: 28px; --size-target-lg: 34px; --size-icon: 18px; --size-icon-s: 14px;
-  --radius-m: 14px;
-}
-@media (pointer: coarse) { :root { --size-target: 36px; --size-target-lg: 44px; --fs-m: 1rem; --fs-s: 0.9rem; } }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --c-page: #0e1118;
-    --c-surface: #161b26;
-    --c-surface-2: #1c2331;
-    --c-line: #262e3f;
-    --c-line-strong: #36405a;
-    --c-brand-soft: #251f3d;
-    --c-ok-soft: #14301f;
-    --c-warn-soft: #2d2615;
-    --c-err-soft: #35191a;
-  }
-}
 
 body { font-family: var(--font-ui); font-size: var(--fs-m); letter-spacing: 0; }
 .nav { background: var(--c-surface); border-right: 1px solid var(--c-line); }
@@ -159,14 +116,6 @@ body { line-height: 1.45; }
 .btn { min-height: var(--size-target-lg); padding: 0 var(--space-3); }
 .input { min-height: var(--size-target-lg); }
 
-:root {
-  --size-kpi-min: 160px;
-  --size-gantt-label: 190px;
-  --size-gantt-label-s: 110px;
-  --size-gantt-bar: 18px;
-  --size-gantt-row: 32px;
-  --size-today-line: 2px;
-}
 
 
 /* ---------- app shell: slim sidebar, top bar, page ---------- */
