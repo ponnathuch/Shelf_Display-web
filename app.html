@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>การวางสื่อในร้าน</title>
-<link rel="stylesheet" href="shd-theme.css?v=20261112c">
+<link rel="stylesheet" href="shd-theme.css?v=20261112d">
 <style>
   body { line-height: 1.6; }
 
@@ -173,6 +173,9 @@
   .missgrid .tile:hover { background: var(--c-brand-soft); }
   .linker { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
   .linker input { flex: 1 1 var(--size-cell); }
+  .csvbox { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); margin-bottom: var(--space-4); padding-bottom: var(--space-4); border-bottom: 1px solid var(--c-line); }
+  .csvbox .linker { margin-top: 0; }
+  .csvbox textarea.input { width: 100%; min-height: var(--size-thumb); resize: vertical; }
   .pin.tmp { background: var(--c-ok); }
   .rents { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--size-cell), 1fr)); gap: var(--space-3); margin-top: var(--space-3); }
   .rents label.f { margin-bottom: 0; }
@@ -222,7 +225,7 @@
     .card-head { flex-direction: column; }
   }
 </style>
-<link rel="stylesheet" href="shd-v2.css?v=20261112c">
+<link rel="stylesheet" href="shd-v2.css?v=20261112d">
 </head>
 <body>
 <div class="app" id="app">
@@ -1339,6 +1342,7 @@
     api('cashier_notify', { id: c.id }).then(function () { show('แจ้งกลุ่มคลังแล้ว', 'ok'); }).catch(function (e) { show(e.message, 'err'); });
   }
   function cashierForm(c) {
+    rememberScroll();
     var v = $('view'); v.textContent = ''; show('');
     var d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', c ? 'แก้ไขสัญญา' : 'เพิ่มสัญญาชั้นแคชเชียร์'));
     var g = el('div', 'grid');
@@ -1425,7 +1429,7 @@
     }).sort(function (a, b) { return String(a.c.end_date).localeCompare(String(b.c.end_date)); });
   }
   function renderContracts() {
-    var v = $('view'); v.textContent = '';
+    restoreScroll(); var v = $('view'); v.textContent = '';
     var live = con.rows.filter(function (r) { return cashState(r.c) === 'live'; }), soon = live.filter(function (r) { return daysTo(r.c.end_date) <= 30; });
     var income = live.reduce(function (n, r) { return n + (r.rent || 0); }, 0), brands = {}; live.forEach(function (r) { brands[String(r.c.brand).toLowerCase()] = true; });
     var go2 = function (x) { return function () { con.view = x; con.limit = 30; renderContracts(); }; };
@@ -1743,8 +1747,12 @@
     Promise.all([api('floor_get', { branch: flo.branch }), isOffice() ? api('sign_list').catch(function () { return { contracts: [] }; }) : Promise.resolve({ contracts: [] })])
       .then(function (rs) { flo.data = rs[0]; flo.signs = rs[1].contracts.map(normEnd); renderFloor(holder); }).catch(function (e) { holder.textContent = ''; show(e.message, 'err'); });
   }
+  // A form opened from a long list remembers the scroll position, so cancel/save return to the same spot.
+  var keepY = 0;
+  function rememberScroll() { keepY = window.scrollY; }
+  function restoreScroll() { var y = keepY; keepY = 0; if (y) requestAnimationFrame(function () { window.scrollTo(0, y); }); }
   function renderFloor(holder) {
-    holder.textContent = ''; var d = flo.data, lay = d.layout;
+    restoreScroll(); holder.textContent = ''; var d = flo.data, lay = d.layout;
     var grid = el('div', 'floorgrid'), card = el('section', 'card floorplan'); card.appendChild(el('h2', 'sec', 'ผังร้าน ' + flo.branch));
     if (lay && lay.image_url) {
       card.appendChild(planWithPins(holder, lay.image_url));
@@ -1920,6 +1928,7 @@
     return card;
   }
   function signForm(holder, c, presetSlot, renew) {
+    rememberScroll();
     var edit = c && !renew, d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', renew ? 'ต่อสัญญาป้าย ' + c.brand + ' (จาก ' + (c.sys_no || '') + ')' : c ? 'แก้ไขสัญญาป้าย' : 'เพิ่มสัญญาป้าย'));
     if (renew) d.appendChild(el('p', 'sub', 'คัดลอกสาขา ตำแหน่ง และค่าเช่ามาให้แล้ว ใส่วันที่ใหม่และเลขที่เอกสารใหม่ สัญญาเดิมยังอยู่เป็นประวัติ'));
     var g = el('div', 'grid');
@@ -2044,7 +2053,8 @@
     io.appendChild(button('นำเข้าจากไฟล์ CSV', 'alt', function () { file.click(); }));
     io.appendChild(button('นำเข้าจากที่วาง', 'alt', function () { runImport(paste.value); }));
     file.onchange = function () { var f = file.files[0]; if (!f) return; f.text().then(runImport); file.value = ''; };
-    sb.appendChild(io); sb.appendChild(paste); sb.appendChild(file);
+    var csvBox = el('div', 'csvbox'); csvBox.appendChild(io); csvBox.appendChild(paste); csvBox.appendChild(file);
+    sb.appendChild(csvBox);
     sb.appendChild(bulk); sb.appendChild(rowsBox);
     d.appendChild(sb);
     var pm = photoManager({ addAction: 'sign_photo_add', removeAction: 'sign_photo_remove' });
@@ -2112,6 +2122,7 @@
     return card;
   }
   function slotForm(holder, s) {
+    rememberScroll();
     var d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', s ? 'แก้ไขตำแหน่ง ' + s.code : 'เพิ่มตำแหน่ง'));
     var g = el('div', 'grid');
     function fld(text, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el('input', 'input'); i.type = 'text'; i.value = val || ''; l.appendChild(i); g.appendChild(l); return i; }
