@@ -588,7 +588,8 @@
       return p.then(function (d) {
         return cashierForSearch().then(function (all) {
           var ns = needles || d.brands || [];
-          return { d: d, cash: all.filter(function (c) { return ns.some(function (n) { return fuzzyHas(c.brand, n); }); }) };
+          // Both ways: the AI often reads more than the brand ("Double A Care" for the contract "Double A"), like the server's photo search.
+          return { d: d, cash: all.filter(function (c) { return ns.some(function (n) { return fuzzyHas(c.brand, n) || (String(c.brand || '').trim().length >= 3 && fuzzyHas(n, c.brand)); }); }) };
         });
       }).then(function (x) { if (my === seq) paint(x.d.results, x.d.brands, x.cash); }, function (e) { if (my === seq) { out.textContent = ''; show(e.message, 'err'); } });
     }
