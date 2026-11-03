@@ -536,8 +536,15 @@
       var im = el('img', 'thumb'); im.src = r.thumb_url; im.alt = 'รูป ' + r.code; im.loading = 'lazy'; a.appendChild(im); head.appendChild(a);
     }
     d.appendChild(head);
-    if (onOpen && (r.mine === null || (r.mine && r.status === 'approved'))) { var row = el('div', 'row'); row.appendChild(button('เปิดดู', 'alt', function () { onOpen(r.id); })); d.appendChild(row); }
+    if (sess.staff.role === 'WAREHOUSE') {
+      // The warehouse cannot open a campaign; it unfolds all its photos here, to match a delivery against every material.
+      if (r.photo_count > 1) { var wr = el('div', 'row'), wb = button('ดูรูปทั้งหมด (' + r.photo_count + ')', 'alt', function () { warehousePhotos(r.id, d, wr, wb); }); wr.appendChild(wb); d.appendChild(wr); }
+    } else if (onOpen && (r.mine === null || (r.mine && r.status === 'approved'))) { var row = el('div', 'row'); row.appendChild(button('เปิดดู', 'alt', function () { onOpen(r.id); })); d.appendChild(row); }
     return d;
+  }
+  function warehousePhotos(id, d, row, b) {
+    b.disabled = true;
+    api('photos', { id: id }).then(function (x) { row.remove(); d.appendChild(photoGrid(x.photos)); }, function (e) { b.disabled = false; show(e.message, 'err'); });
   }
   function findPanel(host, opts) {
     opts = opts || {};
