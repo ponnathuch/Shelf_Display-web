@@ -47,6 +47,8 @@
   .card.tone-warn { --accent: var(--c-warn-line); }
   .card.tone-err { --accent: var(--c-err); }
   .card-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+  /* the brand side takes the free width, so the date column lines up beside the photo on every card */
+  .card-head .head-main { flex: 1 1 0; min-width: 0; }
   .card h3 { margin: 0; font-size: var(--fs-xl); line-height: 1.3; }
   .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
   .chip { display: inline-block; padding: var(--space-0) var(--space-3); border-radius: var(--radius-pill);
@@ -97,7 +99,6 @@
   .until { text-align: right; min-width: var(--size-strip-w); }
   .until strong { display: block; font-size: var(--fs-xl); line-height: 1.3; }
   .until span { font-size: var(--fs-s); color: var(--c-ink-2); }
-  .until .until-note { display: block; max-width: var(--size-search); margin-top: var(--space-1); font-size: var(--fs-xs); line-height: 1.4; }
   .tone-ok .until strong { color: var(--c-ok); }
   .tone-warn .until strong { color: var(--c-warn); }
   .tone-err .until strong { color: var(--c-err); }
@@ -228,6 +229,7 @@
     .btn, .seg button, .linkbtn { min-height: var(--size-target-lg); }
     .until { text-align: left; }
     .card-head { flex-direction: column; }
+    .card-head .head-main { flex: none; width: 100%; }
   }
 </style>
 <link rel="stylesheet" href="shd-v2.css?v=20261103t">
@@ -353,11 +355,7 @@
   function untilBlock(c) {
     if (c.status !== 'approved') return null;
     var u = el('div', 'until');
-    if (c.open_ended) {
-      u.appendChild(el('strong', '', 'ไม่มีวันหมดอายุ')); u.appendChild(el('span', '', 'เริ่ม ' + thDate(c.start_date)));
-      u.appendChild(el('span', 'until-note', OPEN_ENDED_NOTE));
-      return u;
-    }
+    if (c.open_ended) { u.appendChild(el('strong', '', 'ไม่มีวันหมดอายุ')); u.appendChild(el('span', '', 'เริ่ม ' + thDate(c.start_date))); return u; }
     if (!c.end_date) return null;
     var left = daysTo(c.end_date);
     var head = left < 0 ? 'สิ้นสุดแล้ว' : left === 0 ? 'วันสุดท้ายวันนี้' : 'เหลือ ' + left + ' วัน';
@@ -380,7 +378,7 @@
   function card(c, opts) {
     opts = opts || {};
     var d = el('article', 'card ' + toneOf(c) + (opts.office ? ' compact' : ''));
-    var head = el('div', 'card-head'), left = el('div');
+    var head = el('div', 'card-head'), left = el('div', 'head-main');
     if (opts.pick) { var pk = el('label', 'pick'); var cb = el('input'); cb.type = 'checkbox'; cb.checked = !!opts.pick.checked; cb.setAttribute('aria-label', 'เลือก ' + (c.code || '')); cb.onchange = function () { opts.pick.onChange(cb.checked); }; pk.appendChild(cb); head.appendChild(pk); }
     left.appendChild(el('h3', '', c.brand || '(ยังไม่มีชื่อแบรนด์)'));
     var chips = el('div', 'chips');
@@ -396,7 +394,10 @@
     if (opts.office && incomplete(c)) chips.appendChild(el('span', 'chip warn', 'ต้องกรอกข้อมูลเพิ่ม'));
     if (opts.office && c.wait) chips.appendChild(el('span', 'chip warn', 'รอข้อมูล'));
     if (c.open_ended && c.status !== 'approved') chips.appendChild(el('span', 'chip ok', 'ไม่มีวันหมดอายุ'));
-    left.appendChild(chips); head.appendChild(left);
+    left.appendChild(chips);
+    // under the brand, not in the date column: a long line there would push that column out of line with the other cards
+    if (c.open_ended && c.status === 'approved') left.appendChild(el('p', 'sub', OPEN_ENDED_NOTE));
+    head.appendChild(left);
     var u = untilBlock(c); if (u) head.appendChild(u);
     if (c.thumb_url) {
       var a = el('a'); a.href = c.thumb_url; a.target = '_blank'; a.rel = 'noopener'; a.setAttribute('aria-label', 'เปิดรูปจากคลัง');
