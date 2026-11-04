@@ -97,6 +97,7 @@
   .until { text-align: right; min-width: var(--size-strip-w); }
   .until strong { display: block; font-size: var(--fs-xl); line-height: 1.3; }
   .until span { font-size: var(--fs-s); color: var(--c-ink-2); }
+  .until .until-note { display: block; max-width: var(--size-search); margin-top: var(--space-1); font-size: var(--fs-xs); line-height: 1.4; }
   .tone-ok .until strong { color: var(--c-ok); }
   .tone-warn .until strong { color: var(--c-warn); }
   .tone-err .until strong { color: var(--c-err); }
@@ -351,7 +352,11 @@
   function untilBlock(c) {
     if (c.status !== 'approved') return null;
     var u = el('div', 'until');
-    if (c.open_ended) { u.appendChild(el('strong', '', 'ไม่มีวันหมดอายุ')); u.appendChild(el('span', '', 'เริ่ม ' + thDate(c.start_date))); return u; }
+    if (c.open_ended) {
+      u.appendChild(el('strong', '', 'ไม่มีวันหมดอายุ')); u.appendChild(el('span', '', 'เริ่ม ' + thDate(c.start_date)));
+      u.appendChild(el('span', 'until-note', 'สาขาสามารถพิจารณาการวางสื่อตามสินค้าที่นำเข้าสาขา หรือตามระยะเวลาที่ปรากฏบนสื่อ'));
+      return u;
+    }
     if (!c.end_date) return null;
     var left = daysTo(c.end_date);
     var head = left < 0 ? 'สิ้นสุดแล้ว' : left === 0 ? 'วันสุดท้ายวันนี้' : 'เหลือ ' + left + ' วัน';
