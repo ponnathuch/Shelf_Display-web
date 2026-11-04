@@ -349,12 +349,13 @@
     var d = el('div', wide ? 'wide' : ''); d.appendChild(el('dt', '', label)); d.appendChild(el('dd', '', value)); dl.appendChild(d);
   }
   // The answer branches look for first: how long may this stay?
+  var OPEN_ENDED_NOTE = 'สาขาสามารถพิจารณาการวางสื่อตามสินค้าที่นำเข้าสาขา หรือตามระยะเวลาที่ปรากฏบนสื่อ';
   function untilBlock(c) {
     if (c.status !== 'approved') return null;
     var u = el('div', 'until');
     if (c.open_ended) {
       u.appendChild(el('strong', '', 'ไม่มีวันหมดอายุ')); u.appendChild(el('span', '', 'เริ่ม ' + thDate(c.start_date)));
-      u.appendChild(el('span', 'until-note', 'สาขาสามารถพิจารณาการวางสื่อตามสินค้าที่นำเข้าสาขา หรือตามระยะเวลาที่ปรากฏบนสื่อ'));
+      u.appendChild(el('span', 'until-note', OPEN_ENDED_NOTE));
       return u;
     }
     if (!c.end_date) return null;
@@ -537,6 +538,7 @@
     left.appendChild(chips);
     var period = r.open_ended ? 'วางต่อเนื่อง ไม่มีกำหนดสิ้นสุด' : (r.start_date || r.end_date) ? thDate(r.start_date) + ' ถึง ' + thDate(r.end_date) : 'ยังไม่ระบุช่วงวาง';
     left.appendChild(el('p', 'sub', [r.position || 'ยังไม่ระบุตำแหน่ง', period, r.branch_count ? r.branch_count + ' สาขา' : 'ทุกสาขา', r.approved_by_name ? 'อนุมัติโดย ' + r.approved_by_name : ''].filter(Boolean).join(' · ')));
+    if (r.open_ended && r.status === 'approved') left.appendChild(el('p', 'sub', OPEN_ENDED_NOTE));
     head.appendChild(left);
     if (r.thumb_url) {
       var a = el('a'); a.href = r.thumb_url; a.target = '_blank'; a.rel = 'noopener'; a.setAttribute('aria-label', 'เปิดรูป');
