@@ -268,7 +268,7 @@
     bad_photo: 'รูปนี้ใช้ไม่ได้ (ต้องเป็นรูปที่เปิดได้ และไม่ใหญ่เกินไป)', too_many_photos: 'ใส่รูปตัวอย่างได้ไม่เกิน 10 รูปต่อแคมเปญ',
     bad_target: 'แคมเปญที่เลือกผูกไม่ได้ (ยกเลิกแล้วหรือเป็นเคสจากคลัง)',
     'missing:ad': 'ยังไม่ได้ใส่เลขโฆษณาและวันหมดอายุ', 'missing:branches': 'ยังไม่ได้เลือกสาขา',
-    self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', bad_reason: 'ใส่เหตุผลก่อน', bad_due_date: 'เลือกวันที่ให้สาขาส่งรูปก่อน',
+    self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', bad_reason: 'ใส่เหตุผลก่อน', bad_note: 'พิมพ์ว่ารออะไรอยู่ก่อน', bad_due_date: 'เลือกวันที่ให้สาขาส่งรูปก่อน',
     jt_off: 'ยังไม่ได้ตั้งการเชื่อม Job Tracker กรุณาแจ้งผู้ดูแลระบบ', no_branches: 'สัญญานี้ยังไม่มีสาขา', jt_refused: 'Job Tracker เปิดงานไม่สำเร็จ', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
     expired: 'เซสชันหมดอายุ กรุณาเข้าใหม่จากเมนู Job Tracker', bad_signature: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker',
     malformed: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker', reused: 'ลิงก์ถูกใช้แล้ว กรุณาเข้าใหม่จากเมนู Job Tracker',
@@ -388,6 +388,7 @@
     if (c.status === 'pending' && c.start_date && daysTo(c.start_date) <= 14) chips.appendChild(el('span', 'chip err', 'เร่งด่วน'));
     if (opts.office && fromLine(c)) chips.appendChild(el('span', 'chip', 'อนุมัติจาก LINE'));
     if (opts.office && incomplete(c)) chips.appendChild(el('span', 'chip warn', 'ต้องกรอกข้อมูลเพิ่ม'));
+    if (opts.office && c.wait) chips.appendChild(el('span', 'chip warn', 'รอข้อมูล'));
     if (c.open_ended && c.status !== 'approved') chips.appendChild(el('span', 'chip ok', 'ไม่มีวันหมดอายุ'));
     left.appendChild(chips); head.appendChild(left);
     var u = untilBlock(c); if (u) head.appendChild(u);
@@ -412,6 +413,7 @@
       var br = (c.campaign_branches || []).length;
       fact(dl, 'สาขา', br ? br + ' สาขา' : 'ทุกสาขา');
       if (c.status === 'pending') fact(dl, 'ค้างมา', ageDays(c) + ' วัน');
+      if (c.wait) { var wt = bkk(c.wait.at); fact(dl, 'รอข้อมูล', c.wait.note + ' · ' + c.wait.name + ' · ' + thDate(wt.slice(0, 10)) + ' ' + wt.slice(11, 16), true); }
       if (c.notes) fact(dl, 'หมายเหตุ', c.notes, true);
     }
     if (dl.childNodes.length) d.appendChild(dl);
@@ -679,8 +681,22 @@
     if (!rows.length) { v.appendChild(el('p', 'empty', term ? 'ไม่พบแคมเปญที่ตรงกับคำค้น' : tab === 'pending' ? 'ไม่มีแคมเปญรออนุมัติ' : 'ไม่มีรายการ')); return; }
     rows.forEach(function (c) {
       var primary = tab === 'pending' && isApprover();
-      v.appendChild(card(c, { office: true, pick: canDelete ? { checked: !!picked[c.id], onChange: function (on) { if (on) picked[c.id] = true; else delete picked[c.id]; renderList(); } } : null, actions: [button(primary ? 'ตรวจและอนุมัติ' : 'เปิดดู', primary ? '' : 'alt', function () { detail(c.id); })] }));
+      var acts = [button(primary ? 'ตรวจและอนุมัติ' : 'เปิดดู', primary ? '' : 'alt', function () { detail(c.id); })];
+      if (canWait(c)) acts.push(waitButton(c, function () { loadOffice(true); }));
+      v.appendChild(card(c, { office: true, pick: canDelete ? { checked: !!picked[c.id], onChange: function (on) { if (on) picked[c.id] = true; else delete picked[c.id]; renderList(); } } : null, actions: acts }));
     });
+  }
+  // A pending case that cannot be approved yet: say what it waits for, so the end-of-day email shows it is not ignored.
+  function canWait(c) { return c.status === 'pending' && (isApprover() || (isOffice() && c.registrant_user === sess.staff.u)); }
+  function waitButton(c, after) {
+    var b = button('รอข้อมูล', 'alt', function () {
+      var note = (prompt('รายการ ' + c.code + ' ยังอนุมัติไม่ได้ เพราะรออะไรอยู่\nเช่น รอ PM ส่งเลขที่สัญญา\n\n(หัวหน้าเห็นข้อความนี้พร้อมชื่อและเวลา ในหน้าระบบและอีเมลสรุป)', c.wait ? c.wait.note : '') || '').trim();
+      if (!note) return;
+      b.disabled = true;
+      api('wait', { id: c.id, note: note }).then(function () { show('บันทึกแล้ว: ' + note, 'ok'); after(); })
+        .catch(function (e) { b.disabled = false; show(e.message, 'err'); });
+    });
+    return b;
   }
 
   // ---------- detail ----------
@@ -786,6 +802,7 @@
       case 'update': return 'แก้ไขข้อมูล';
       case 'approve': return 'อนุมัติ' + (d.via === 'line' ? ' จาก LINE' : '') + (d.on_behalf ? ' (แทนผู้อนุมัติ)' : '');
       case 'unapprove': return 'ถอนอนุมัติ' + (d.reason ? ' เหตุผล: ' + d.reason : '');
+      case 'wait': return 'รอข้อมูล: ' + (d.note || '');
       case 'cancel': return 'ยกเลิกแคมเปญ' + (d.was === 'approved' ? ' (หลังอนุมัติแล้ว)' : '');
       case 'link': return 'ผูกรูปเข้ากับ ' + (d.into || 'แคมเปญอื่น') + ' แล้วปิดเคสนี้';
       case 'photos_linked': return 'รับรูปจากคลัง' + (d.from ? ' (' + d.from + ')' : '');
@@ -811,6 +828,7 @@
         actions.push(ok);
       }
       actions.push(button('แก้ไข', 'alt', function () { form(c); }));
+      if (canWait(c)) actions.push(waitButton(c, function () { detailNote = 'บันทึกแล้ว ดูในประวัติด้านล่าง'; detail(id); }));
       if (isApprover() && c.status === 'approved') {
         var back = button('ถอนอนุมัติ', 'alt', function () {
           var why = (prompt('ถอนอนุมัติ ' + c.code + ' กลับเป็นรออนุมัติ\nระบบจะแจ้งกลุ่มคลังว่าห้ามกระจาย\n\nเหตุผล:') || '').trim();
