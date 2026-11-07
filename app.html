@@ -1294,6 +1294,61 @@
       eb.appendChild(row);
     }).catch(function (e) { show(e.message, 'err'); });
   }
+  // Space core settings (design v3): shelf fixture types and the default count of quota spaces per branch.
+  function spaceSettings(v) {
+    var ff = fold('ประเภทชั้นวาง', 'Wall Shelf, EndCap, Gondola และจำนวนชั้นเริ่มต้น', true), fb = ff.body; v.appendChild(ff.node);
+    var qf = fold('จุดโควตาต่อสาขา', 'ชั้นแคชเชียร์และป้ายหน้าร้าน (ค่าเริ่มต้น)', false), qb = qf.body; v.appendChild(qf.node);
+    fb.appendChild(el('p', 'hint', 'Section ที่รหัสขึ้นต้นด้วยตัวอักษรในช่อง "รหัสพื้นที่" จะเป็นประเภทนี้เอง (เช่น OA01 คือ OA) เปลี่ยนเป็นประเภทอื่นได้ที่หน้าแก้ไขตำแหน่ง จำนวนชั้นเริ่มต้นใช้กับ Section ที่ยังไม่ได้กำหนดชั้นเอง'));
+    var list = el('div'); fb.appendChild(list);
+    api('space_settings').then(function (d) {
+      function trow(t) {
+        var fresh = !t, r = el('div', 'trow');
+        var nm = el('input', 'input'); nm.type = 'text'; nm.maxLength = 60; nm.value = fresh ? '' : t.name; nm.placeholder = 'ชื่อประเภทใหม่ เช่น ชั้นตู้แช่'; nm.setAttribute('aria-label', 'ชื่อประเภทชั้นวาง');
+        var sh = el('input', 'input cap'); sh.type = 'number'; sh.min = 1; sh.max = 20; sh.value = fresh ? 4 : t.default_shelves; sh.setAttribute('aria-label', 'จำนวนชั้นเริ่มต้น');
+        var px = el('input', 'input'); px.type = 'text'; px.value = fresh ? '' : (t.area_prefixes || []).join(', '); px.placeholder = 'รหัสพื้นที่ เช่น OA'; px.setAttribute('aria-label', 'รหัสพื้นที่ คั่นด้วยจุลภาค');
+        var l = el('label', 'check'), on = el('input'); on.type = 'checkbox'; on.checked = fresh ? true : t.active !== false; l.appendChild(on); l.appendChild(document.createTextNode('ใช้งาน'));
+        r.appendChild(nm); r.appendChild(el('span', 'sub', 'ชั้น')); r.appendChild(sh); r.appendChild(px); r.appendChild(l);
+        if (d.can_edit) r.appendChild(button(fresh ? 'เพิ่ม' : 'บันทึก', fresh ? '' : 'alt', function () {
+          var b = { name: nm.value.trim(), default_shelves: Number(sh.value), area_prefixes: px.value.split(/[ ,]+/).filter(Boolean), active: on.checked };
+          if (!b.name) { show('ใส่ชื่อประเภทก่อน', 'err'); return; }
+          if (!fresh) b.id = t.id;
+          api('fixture_type_save', b).then(function () { show('บันทึกประเภทชั้นวางแล้ว', 'ok'); settings(); }).catch(function (e) { show(e.message, 'err'); });
+        }));
+        else [nm, sh, px, on].forEach(function (x) { x.disabled = true; });
+        list.appendChild(r);
+      }
+      d.types.forEach(trow); if (d.can_edit) trow(null);
+      qb.appendChild(el('p', 'hint', 'จำนวนจุดที่แต่ละสาขามี ใช้นับพื้นที่ว่าง สาขาที่ต่างจากค่าเริ่มต้นแก้ได้ที่หน้า "พื้นที่" ของสาขานั้น'));
+      d.kinds.forEach(function (k) {
+        var r = el('div', 'trow'), n = el('input', 'input cap'); n.type = 'number'; n.min = 0; n.max = 50; n.value = k.default_n; n.setAttribute('aria-label', 'จำนวนเริ่มต้น ' + k.label);
+        var own = d.quota.filter(function (q) { return q.kind === k.kind; }).length;
+        r.appendChild(el('b', 'grow', k.label)); r.appendChild(n); r.appendChild(el('span', 'sub', 'จุดต่อสาขา' + (own ? ' · ' + own + ' สาขาตั้งเอง' : '')));
+        if (d.can_edit) r.appendChild(button('บันทึก', 'alt', function () {
+          api('quota_save', { kind: k.kind, default_n: Number(n.value) }).then(function () { show('บันทึกแล้ว', 'ok'); }).catch(function (e) { show(e.message, 'err'); });
+        })); else n.disabled = true;
+        qb.appendChild(r);
+      });
+    }).catch(function (e) { show(e.message, 'err'); });
+  }
+  // The branch's quota spaces (cashier counter, storefront signs): how many it has, editable for contract approvers.
+  function quotaCard(holder) {
+    var d = flo.data, card = el('section', 'card'); card.appendChild(el('h2', 'sec', 'จุดโควตาของสาขานี้'));
+    (d.quota || []).forEach(function (q) {
+      var r = el('div', 'trow'); r.appendChild(el('b', 'grow', q.label));
+      r.appendChild(el('span', '', q.n + ' จุด')); r.appendChild(el('span', 'chip', q.own ? 'ตั้งเฉพาะสาขา' : 'ค่าเริ่มต้น'));
+      if (isContract()) {
+        r.appendChild(button('แก้', 'alt', function () {
+          var v = prompt('จำนวน' + q.label + 'ของสาขา ' + flo.branch + ' (เว้นว่าง = ใช้ค่าเริ่มต้น)', q.own ? q.n : '');
+          if (v === null) return;
+          var n = v.trim() === '' ? null : Number(v);
+          if (n !== null && !(Number.isInteger(n) && n >= 0 && n <= 50)) { show('ใส่ตัวเลข 0-50', 'err'); return; }
+          api('quota_save', { kind: q.kind, branch: flo.branch, n: n }).then(function () { loadFloor(holder); }).catch(function (e) { show(e.message, 'err'); });
+        }));
+      }
+      card.appendChild(r);
+    });
+    return card;
+  }
   function cashierSettings(v) {
     editorsFold(v, 'สิทธิ์แก้ไขสัญญา', 'ใครเพิ่ม/แก้ไข/ยกเลิกสัญญาได้', 'cashier_editors', 'cashier_editors_save', 'ผู้ดูแลและผู้อนุมัติสัญญาแก้ได้เสมอ คนอื่นในทีมที่เลือกไว้ที่นี่จะเพิ่ม/แก้ไข/ยกเลิกสัญญาได้ คนที่ไม่ได้เลือกยังดูได้อย่างเดียว');
     var holder = el('div'); v.appendChild(holder); holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
@@ -1951,6 +2006,7 @@
     grid.appendChild(card); grid.appendChild(detailPanel(holder)); holder.appendChild(grid);
     if (isOffice()) holder.appendChild(signsCard(holder));
     holder.appendChild(slotsCard(holder));
+    if (isOffice() && d.quota && d.quota.length) holder.appendChild(quotaCard(holder));
   }
   // The plan image with one pin per placed, active place. Editors drag a pin to move it, or place a chosen place by tapping the plan.
   function planWithPins(holder, url) {
@@ -2283,6 +2339,10 @@
         var sp = (s.specs || []).map(function (x) { var z = (x.width_cm != null && x.height_cm != null ? x.width_cm + ' x ' + x.height_cm + ' cm' : x.size_text || '') + (x.qty != null && x.qty !== 1 ? ' x' + x.qty : ''); return z ? (x.sign_type ? x.sign_type + ' ' : '') + z : ''; }).filter(Boolean);
         r.appendChild(el('span', 'sub grow', [s.name, s.category, s.note, sp.length ? 'ขนาด ' + sp.slice(0, 3).join(', ') + (sp.length > 3 ? ' +' + (sp.length - 3) : '') : ''].filter(Boolean).join(' · ')));
         r.appendChild(el('span', 'chip', KIND_TH[s.kind] || s.kind)); if (s.kind === 'glass' || s.tenant === 'rent') r.appendChild(el('span', 'chip', TENANT_TH[s.tenant]));
+        if (s.fixture) {
+          r.appendChild(el('span', 'chip', s.fixture.type_name + ' · ' + shelfText(s.fixture.shelves)));
+          if (!s.fixture.confirmed) r.appendChild(el('span', 'chip warn', 'ยังไม่ยืนยันจำนวนชั้น'));
+        }
         var placed = s.x != null && s.y != null, rentNow = signNow(s);
         if (s.specs && s.specs.length) r.appendChild(el('span', 'chip', s.specs.length + ' รายการป้าย'));
         if (rentNow) r.appendChild(el('span', 'chip warn', 'เช่า: ' + rentNow.brand));
@@ -2337,18 +2397,65 @@
       if (!specs.length) specBox.appendChild(el('p', 'sub', 'ยังไม่มีรายการป้าย'));
     }
     { d.appendChild(el('h3', '', 'รายการป้ายของตำแหน่งนี้')); paintSpecs(); d.appendChild(specBox); d.appendChild(button('+ เพิ่มรายการป้าย', 'alt', function () { specs.push({ sign_type: '', material: '', qty: 1, width_cm: '', height_cm: '', size_text: '', note: '' }); paintSpecs(); })); }
+    var shelf = s && (s.kind === 'header' || s.fixture) ? shelfEditor(d, s) : null;
+    if (!s) d.appendChild(el('p', 'hint', 'ชั้นวางสำหรับขาย: บันทึกตำแหน่งก่อน แล้วกด "แก้ไข" อีกครั้งเพื่อกำหนดประเภทและจำนวนชั้น'));
     var al = el('label', 'check'), act = el('input'); act.type = 'checkbox'; act.checked = s ? s.active : true; al.appendChild(act); al.appendChild(document.createTextNode('ใช้งานอยู่ (ติ๊กออก = เลิกใช้)')); d.appendChild(al);
     var row = el('div', 'row');
     row.appendChild(button('บันทึก', '', function () {
       if (!code.value.trim()) { show('ใส่รหัสตำแหน่งก่อน', 'err'); return; }
+      if (shelf && !shelf.valid()) { show('จำนวนชั้น 1-20 และช่องต่อชั้น 1-10', 'err'); return; }
       var num = function (v) { return v === '' || v === null ? null : Number(v); };
       var items = specs.map(function (x) { return { code: code.value.trim().toUpperCase(), sign_type: x.sign_type, material: x.material, qty: num(x.qty), width_cm: num(x.width_cm), height_cm: num(x.height_cm), size_text: x.size_text, note: x.note }; });
       api('slot_save', { branch: flo.branch, code: code.value, name: name.value, category: cat.value, kind: kind.value, tenant: tenant.value, note: note.value, active: act.checked })
         .then(function () { return s || items.length ? api('slot_specs_save', { branch: flo.branch, items: items.length ? items : [{ code: code.value.trim().toUpperCase() }] }) : null; })
+        .then(function () { return shelf && shelf.dirty() ? api('slot_shelves_save', shelf.body()) : null; })
         .then(function () { show('บันทึกตำแหน่งแล้ว', 'ok'); loadFloor(holder); }).catch(function (e) { show(e.message, 'err'); });
     }));
     row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
     holder.textContent = ''; holder.appendChild(d);
+  }
+  // "4 ชั้น" or "3 ชั้น (ชั้น 1 แบ่ง 2 ช่อง)": how a shelf Section is sold.
+  function shelfText(shelves) {
+    var split = shelves.map(function (n, i) { return n > 1 ? 'ชั้น ' + (i + 1) + ' แบ่ง ' + n + ' ช่อง' : ''; }).filter(Boolean);
+    return shelves.length + ' ชั้น' + (split.length ? ' (' + split.join(', ') + ')' : '');
+  }
+  // The shelf part of the place form: fixture type (by code or chosen), number of shelves, slots per shelf, checked or not.
+  function shelfEditor(d, s) {
+    var types = flo.data.types || [], fx = s.fixture;
+    var box = el('fieldset', 'card'); box.appendChild(el('legend', '', 'ชั้นวางสำหรับขาย'));
+    var g = el('div', 'grid');
+    var tl = el('label', 'f'); tl.appendChild(el('span', 't', 'ประเภทชั้นวาง')); var ts = el('select', 'input');
+    var auto = el('option', '', fx && fx.by_prefix ? 'ตามรหัสพื้นที่ (' + fx.type_name + ')' : 'ตามรหัสพื้นที่ (ไม่ใช่ชั้นวาง)'); auto.value = ''; ts.appendChild(auto);
+    types.forEach(function (t) { var o = el('option', '', t.name); o.value = String(t.id); if (fx && !fx.by_prefix && fx.type_id === t.id) o.selected = true; ts.appendChild(o); });
+    tl.appendChild(ts); g.appendChild(tl);
+    var nl = el('label', 'f'); nl.appendChild(el('span', 't', 'จำนวนชั้น')); var ns = el('input', 'input'); ns.type = 'number'; ns.min = 1; ns.max = 20; nl.appendChild(ns); g.appendChild(nl);
+    box.appendChild(g);
+    var slotsBox = el('div', 'chips'); box.appendChild(el('p', 'hint', 'ช่องต่อชั้น: 1 = ขายทั้งชั้น, 2 = ครึ่งชั้น')); box.appendChild(slotsBox);
+    var cl = el('label', 'check'), cf = el('input'); cf.type = 'checkbox'; cf.checked = !!(fx && fx.confirmed); cl.appendChild(cf); cl.appendChild(document.createTextNode('ตรวจที่สาขาแล้ว จำนวนชั้นและช่องถูกต้อง')); box.appendChild(cl);
+    var shelves = fx ? fx.shelves.slice() : [], touched = false;
+    var typeOf = function () { return ts.value ? types.filter(function (t) { return String(t.id) === ts.value; })[0] : null; };
+    function paint() {
+      slotsBox.textContent = ''; ns.value = shelves.length || '';
+      shelves.forEach(function (n, i) {
+        var l = el('label', 'f'); l.appendChild(el('span', 't', 'ชั้น ' + (i + 1))); var x = el('input', 'input cap'); x.type = 'number'; x.min = 1; x.max = 10; x.value = n;
+        x.oninput = function () { shelves[i] = Number(x.value); touched = true; }; l.appendChild(x); slotsBox.appendChild(l);
+      });
+      var on = !!(ts.value || (fx && fx.by_prefix)); ns.disabled = !on; cf.disabled = !on;
+    }
+    ns.oninput = function () { var k = Number(ns.value); if (!(k >= 1 && k <= 20)) return; while (shelves.length < k) shelves.push(1); shelves.length = k; touched = true; paint(); };
+    ts.onchange = function () {
+      var t = typeOf();
+      if (!touched) shelves = t ? Array.apply(null, Array(Number(t.default_shelves))).map(function () { return 1; }) : (fx && fx.by_prefix ? fx.shelves.slice() : []);
+      paint();
+    };
+    paint(); d.appendChild(box);
+    var start = JSON.stringify([ts.value, shelves, cf.checked]);
+    return {
+      dirty: function () { return JSON.stringify([ts.value, shelves, cf.checked]) !== start; },
+      valid: function () { return !shelves.length || (shelves.length <= 20 && shelves.every(function (n) { return Number.isInteger(n) && n >= 1 && n <= 10; })); },
+      // untouched shelves stay null so a later change of the type default still applies
+      body: function () { return { id: s.id, fixture_type_id: ts.value ? Number(ts.value) : null, shelf_slots: touched && shelves.length ? shelves : null, confirmed: cf.checked }; }
+    };
   }
   function layoutForm(holder) {
     var lay = flo.data.layout || {}, d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', 'ผังร้านและข้อมูลร้าน ' + flo.branch));
@@ -2454,7 +2561,7 @@
     });
     var tb = el('div', 'toolbar'); tb.appendChild(seg); v.appendChild(tb);
     if (setTab === 'cashier') { cashierSettings(v); return; }
-    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและสัญญาป้าย', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการสัญญาป้ายได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติสัญญาจัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกสัญญาป้ายได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); return; }
+    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและสัญญาป้าย', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการสัญญาป้ายได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติสัญญาจัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกสัญญาป้ายได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); spaceSettings(v); return; }
     var fd = fold('ประเภทตำแหน่งสื่อ', 'เพดานต่อสาขา เพิ่มประเภทใหม่ได้', true), card = fd.body; v.appendChild(fd.node); card.classList.add('tset');
     card.appendChild(el('p', 'hint', 'เพดาน = จำนวนสื่อสูงสุดต่อสาขาในช่วงวันที่ชนกัน เว้นว่าง = ไม่จำกัด ประเภทที่ปิดการใช้งานจะไม่ให้เลือกตอนลงทะเบียน แต่แคมเปญเดิมยังอยู่'));
     var body = el('div'); card.appendChild(body);
@@ -2682,7 +2789,7 @@
     var r = sess.staff.role;
     if (r === 'WAREHOUSE') return [{ id: 'home', label: 'ค้นหา', icon: 'home' }];
     if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'floor', label: 'ผังร้าน', icon: 'floor' }];
-    var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }, { id: 'floor', label: 'ผังและพื้นที่', icon: 'floor' }, { id: 'contracts', label: 'สัญญาและเงื่อนไข', icon: 'contract' }];
+    var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }, { id: 'floor', label: 'พื้นที่', icon: 'floor' }, { id: 'contracts', label: 'สัญญาและเงื่อนไข', icon: 'contract' }];
     if (isApprover() || isContract()) m.push({ id: 'settings', label: 'ตั้งค่า', icon: 'gear' });
     return m;
   }
