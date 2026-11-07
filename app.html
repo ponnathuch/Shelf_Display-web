@@ -263,7 +263,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var sess = null, tab = 'pending', types = [], all = [], units = [], people = [];
 
-  var ROLE_TH = { ADMIN: 'ผู้ดูแลระบบ', APPROVER: 'ผู้อนุมัติ', REGISTRANT: 'ผู้ลงทะเบียน', STAFF: 'สาขา', WAREHOUSE: 'คลัง' };
+  var ROLE_TH = { ADMIN: 'ผู้ดูแลระบบ', APPROVER: 'ผู้อนุมัติสื่อ', REGISTRANT: 'ผู้ลงทะเบียน', STAFF: 'สาขา', WAREHOUSE: 'คลัง' };
   var ERR = {
     'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
     'missing:dates': 'ยังไม่ได้ใส่วันเริ่ม และวันสิ้นสุด (หรือติ๊ก "ไม่มีวันหมดอายุ")', 'missing:agreement_no': 'ยังไม่ได้ใส่เลขที่สัญญา/TTA',
@@ -327,6 +327,8 @@
 
   var isApprover = function () { return sess.staff.role === 'ADMIN' || sess.staff.role === 'APPROVER'; };
   var isOffice = function () { return isApprover() || sess.staff.role === 'REGISTRANT'; };
+  // contract approver: a separate Job Tracker list (topic 'contract'), may or may not also approve media
+  var isContract = function () { return sess.staff.role === 'ADMIN' || (sess.staff.topics || []).indexOf('contract') !== -1; };
 
   // ---------- dates ----------
   var TH_M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
@@ -859,11 +861,12 @@
       var spots = rs[0].spots || [];
       if (c.status !== 'cancelled') {
         // Temporary signs are set up branch by branch: show how many of the campaign's branches have their place tied yet, and which are missing.
-        var sc = el('section', 'card'), listed = (c.campaign_branches || []).map(function (b) { return b.branch_code; }), everyBranch = !listed.length, want = everyBranch ? units.filter(function (u) { return u.is_branch; }).map(function (u) { return u.code; }) : listed;
+        var listed = (c.campaign_branches || []).map(function (b) { return b.branch_code; }), everyBranch = !listed.length, want = everyBranch ? units.filter(function (u) { return u.is_branch; }).map(function (u) { return u.code; }) : listed;
         var tied = {}; spots.forEach(function (sp) { tied[sp.branch_code] = true; });
         var missing = want.filter(function (b) { return !tied[b]; });
-        sc.appendChild(el('h2', 'sec', 'ตำแหน่งในร้าน'));
-        sc.appendChild(el('p', 'sub', want.length ? 'ผูกแล้ว ' + (want.length - missing.length) + ' จาก ' + want.length + ' สาขา' + (everyBranch ? ' (แคมเปญนี้ใช้ทุกสาขา)' : '') : 'ยังไม่ได้ผูกกับตำแหน่งในร้าน (ใช้กับป้ายสื่อชั่วคราว)'));
+        // Folded by default: a long board of branches pushes the rest of the page down. Stays open across reloads of this page.
+        var fd = fold('ตำแหน่งในร้าน', want.length ? 'ผูกแล้ว ' + (want.length - missing.length) + ' จาก ' + want.length + ' สาขา' + (everyBranch ? ' (แคมเปญนี้ใช้ทุกสาขา)' : '') : 'ยังไม่ได้ผูกกับตำแหน่งในร้าน (ใช้กับป้ายสื่อชั่วคราว)', spotsOpen), sc = fd.body;
+        fd.node.ontoggle = function () { spotsOpen = fd.node.open; };
         var goFloor = function (code, sel) { flo.branch = code; flo.sel = sel; flo.mode = 'branch'; flo.view = 'temp'; flo.backTo = { id: id, code: c.code }; go('floor'); };
         // One board for every branch of the campaign: tied (with its place) or not yet, filter + search, scrolls inside the card.
         // The floor page has a button back to this campaign, so a tap there and back loses nothing.
@@ -905,7 +908,7 @@
           }));
           sc.appendChild(bulk);
         }
-        v.appendChild(sc);
+        v.appendChild(fd.node);
       }
       [['example_ok', 'รูปตัวอย่างสื่อ'], ['warehouse', 'รูปจากคลัง']].forEach(function (g) {
         var ps = rs[1].photos.filter(function (p) { return (p.kind === 'example_ok') === (g[0] === 'example_ok'); });
@@ -1287,7 +1290,7 @@
     }).catch(function (e) { show(e.message, 'err'); });
   }
   function cashierSettings(v) {
-    editorsFold(v, 'สิทธิ์แก้ไขสัญญา', 'ใครเพิ่ม/แก้ไข/ยกเลิกสัญญาได้', 'cashier_editors', 'cashier_editors_save', 'ผู้ดูแลและผู้อนุมัติแก้ได้เสมอ คนอื่นในทีมที่เลือกไว้ที่นี่จะเพิ่ม/แก้ไข/ยกเลิกสัญญาได้ คนที่ไม่ได้เลือกยังดูได้อย่างเดียว');
+    editorsFold(v, 'สิทธิ์แก้ไขสัญญา', 'ใครเพิ่ม/แก้ไข/ยกเลิกสัญญาได้', 'cashier_editors', 'cashier_editors_save', 'ผู้ดูแลและผู้อนุมัติสัญญาแก้ได้เสมอ คนอื่นในทีมที่เลือกไว้ที่นี่จะเพิ่ม/แก้ไข/ยกเลิกสัญญาได้ คนที่ไม่ได้เลือกยังดูได้อย่างเดียว');
     var holder = el('div'); v.appendChild(holder); holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
     api('cashier_packages').then(function (d) {
       holder.textContent = '';
@@ -1615,7 +1618,7 @@
   function payPanel(p, c, kind) {
     var box = el('section', 'boxscroll'), list = (c.payments || []).map(function (x) { return { dp_no: x.dp_no || '', received_on: x.received_on || '', amount: x.amount == null ? '' : x.amount, memo_no: x.memo_no || '', note: x.note || '' }; });
     var stSel = el('select', 'input'); Object.keys(PAY_TH).forEach(function (k) { var o = el('option', '', PAY_TH[k]); o.value = k; if (k === (c.pay_status || 'pending')) o.selected = true; stSel.appendChild(o); });
-    box.appendChild(el('h3', '', 'การรับเงินจากเวนเดอร์ (เฉพาะผู้อนุมัติ)')); var sl = el('label', 'f'); sl.appendChild(el('span', 't', 'สถานะ')); sl.appendChild(stSel); box.appendChild(sl);
+    box.appendChild(el('h3', '', 'การรับเงินจากเวนเดอร์ (เฉพาะผู้อนุมัติสัญญา)')); var sl = el('label', 'f'); sl.appendChild(el('span', 't', 'สถานะ')); sl.appendChild(stSel); box.appendChild(sl);
     var rowsEl = el('div');
     function paint() {
       rowsEl.textContent = '';
@@ -2425,7 +2428,7 @@
     return [p.sign_type, p.material, size, p.qty != null ? p.qty + ' ชิ้น' : '', p.note].filter(Boolean).join(' · ');
   }
 
-  var setTab = 'media';
+  var setTab = 'media', spotsOpen = false;
   // A collapsible block: a title row that opens and closes its body.
   function fold(title, note, open) {
     var d = el('details', 'card fold'), sm = el('summary'); d.open = !!open;
@@ -2437,13 +2440,16 @@
     $('bar').hidden = true; show('');
     var v = $('view'); v.textContent = '';
     var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'หมวดการตั้งค่า');
-    [['media', 'สื่อ'], ['cashier', 'ชั้นแคชเชียร์'], ['floor', 'ผังร้าน']].forEach(function (t) {
+    // media settings for media approvers, cashier/floor settings for contract approvers
+    var tabs = [['media', 'สื่อ', isApprover()], ['cashier', 'ชั้นแคชเชียร์', isContract()], ['floor', 'ผังร้าน', isContract()]].filter(function (t) { return t[2]; });
+    if (!tabs.some(function (t) { return t[0] === setTab; })) setTab = tabs[0][0];
+    tabs.forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(setTab === t[0]));
       x.onclick = function () { setTab = t[0]; settings(); }; seg.appendChild(x);
     });
     var tb = el('div', 'toolbar'); tb.appendChild(seg); v.appendChild(tb);
     if (setTab === 'cashier') { cashierSettings(v); return; }
-    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและสัญญาป้าย', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการสัญญาป้ายได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติจัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกสัญญาป้ายได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); return; }
+    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและสัญญาป้าย', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการสัญญาป้ายได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติสัญญาจัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกสัญญาป้ายได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); return; }
     var fd = fold('ประเภทตำแหน่งสื่อ', 'เพดานต่อสาขา เพิ่มประเภทใหม่ได้', true), card = fd.body; v.appendChild(fd.node); card.classList.add('tset');
     card.appendChild(el('p', 'hint', 'เพดาน = จำนวนสื่อสูงสุดต่อสาขาในช่วงวันที่ชนกัน เว้นว่าง = ไม่จำกัด ประเภทที่ปิดการใช้งานจะไม่ให้เลือกตอนลงทะเบียน แต่แคมเปญเดิมยังอยู่'));
     var body = el('div'); card.appendChild(body);
@@ -2672,7 +2678,7 @@
     if (r === 'WAREHOUSE') return [{ id: 'home', label: 'ค้นหา', icon: 'home' }];
     if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'floor', label: 'ผังร้าน', icon: 'floor' }];
     var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }, { id: 'floor', label: 'ผังและพื้นที่', icon: 'floor' }, { id: 'contracts', label: 'สัญญาและเงื่อนไข', icon: 'contract' }];
-    if (isApprover()) m.push({ id: 'settings', label: 'ตั้งค่า', icon: 'gear' });
+    if (isApprover() || isContract()) m.push({ id: 'settings', label: 'ตั้งค่า', icon: 'gear' });
     return m;
   }
   var whoText = '', roleText = '', current = 'home';
@@ -2711,7 +2717,7 @@
   // ---------- start ----------
   function start(s) {
     sess = s;
-    whoText = (s.staff.n || '') + (s.staff.un ? ' · ' + s.staff.un : ''); roleText = ROLE_TH[s.staff.role] || s.staff.role || '';
+    whoText = (s.staff.n || '') + (s.staff.un ? ' · ' + s.staff.un : ''); roleText = (ROLE_TH[s.staff.role] || s.staff.role || '') + (s.staff.role !== 'ADMIN' && (s.staff.topics || []).indexOf('contract') !== -1 ? ' · ผู้อนุมัติสัญญา' : '');
     show('');
     if (isOffice()) {
       var unitsReq = api('units').then(function (d) { units = d.units || []; people = d.people || []; }).catch(function () { units = []; people = []; });
