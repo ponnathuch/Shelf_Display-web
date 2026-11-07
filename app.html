@@ -968,7 +968,9 @@
     tools.appendChild(button('ล้างที่เลือก', 'alt', function () { chosen = {}; render(); }));
     tools.appendChild(button('เสร็จ', '', function () { toggle(false); }));
     panel.appendChild(tools); panel.appendChild(list);
-    var chips = el('div', 'chosen'); chips.setAttribute('aria-live', 'polite'); root.appendChild(chips);
+    // A long choice (all 70 branches) folds away: the button already says how many are chosen.
+    var fold = el('details', 'hist'), foldSum = el('summary'), chips = el('div', 'chosen'); chips.setAttribute('aria-live', 'polite');
+    fold.appendChild(foldSum); root.appendChild(fold);
 
     function toggle(force) {
       var willOpen = force === undefined ? panel.hidden : force;
@@ -1002,6 +1004,9 @@
       if (cfg.onChange) cfg.onChange(codes);
       open.textContent = codes.length ? 'เลือกแล้ว ' + codes.length + ' ' + cfg.noun + ' (กดเพื่อเพิ่ม/แก้ไข)' : cfg.placeholder;
       chips.textContent = '';
+      var many = codes.length > 6;
+      fold.hidden = !many; foldSum.textContent = 'ดูรายการที่เลือก (' + codes.length + ' ' + cfg.noun + ')';
+      (many ? fold : root).appendChild(chips);
       codes.forEach(function (code) {
         var chip = el('span', 'chip');
         chip.appendChild(document.createTextNode(cfg.labelOf(code) + ' '));
