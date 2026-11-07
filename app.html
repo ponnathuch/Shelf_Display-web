@@ -271,7 +271,7 @@
     bad_photo: 'รูปนี้ใช้ไม่ได้ (ต้องเป็นรูปที่เปิดได้ และไม่ใหญ่เกินไป)', too_many_photos: 'ใส่รูปตัวอย่างได้ไม่เกิน 10 รูปต่อแคมเปญ',
     bad_target: 'แคมเปญที่เลือกผูกไม่ได้ (ยกเลิกแล้วหรือเป็นเคสจากคลัง)',
     'missing:ad': 'ยังไม่ได้ใส่เลขโฆษณาและวันหมดอายุ', 'missing:branches': 'ยังไม่ได้เลือกสาขา',
-    self: 'ผู้ลงทะเบียนอนุมัติของตัวเองไม่ได้', bad_reason: 'ใส่เหตุผลก่อน', bad_note: 'พิมพ์ว่ารออะไรอยู่ก่อน', bad_due_date: 'เลือกวันที่ให้สาขาส่งรูปก่อน',
+    self: 'อนุมัติข้อตกลงที่ตัวเองลงทะเบียนไม่ได้', bad_reason: 'ใส่เหตุผลก่อน', bad_note: 'พิมพ์ว่ารออะไรอยู่ก่อน', bad_due_date: 'เลือกวันที่ให้สาขาส่งรูปก่อน',
     jt_off: 'ยังไม่ได้ตั้งการเชื่อม Job Tracker กรุณาแจ้งผู้ดูแลระบบ', no_branches: 'สัญญานี้ยังไม่มีสาขา', jt_refused: 'Job Tracker เปิดงานไม่สำเร็จ', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
     expired: 'เซสชันหมดอายุ กรุณาเข้าใหม่จากเมนู Job Tracker', bad_signature: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker',
     malformed: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker', reused: 'ลิงก์ถูกใช้แล้ว กรุณาเข้าใหม่จากเมนู Job Tracker',
@@ -1534,7 +1534,7 @@
   }
   function cashierForm(c) {
     rememberScroll();
-    var savedId = c ? c.id : null, toldOnce = false;
+    var savedId = c ? c.id : null, toldOnce = false, agId = formAgreement; formAgreement = null;
     var v = $('view'); v.textContent = ''; show('');
     var d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', c ? 'แก้ไขสัญญา' : 'เพิ่มสัญญาชั้นแคชเชียร์'));
     var g = el('div', 'grid');
@@ -1567,8 +1567,8 @@
     if (c) api('cashier_photos', { id: c.id }).then(function (r) { pm.setExisting(r.photos); }).catch(function () { /* the form works without the photos */ });
     var hl = el('label', 'f'), house = el('input'); house.type = 'checkbox'; house.checked = !!(c && c.house);
     hl.appendChild(house); hl.appendChild(document.createTextNode(' House Brand (ไม่ใช่แบรนด์เช่า ไม่นับค่าเช่า)')); d.appendChild(hl);
-    var nl = el('label', 'f'), notify = el('input'); notify.type = 'checkbox'; notify.checked = !c;
-    nl.appendChild(notify); nl.appendChild(document.createTextNode(' แจ้งกลุ่มคลังทางไลน์ว่ากระจายได้ (ไม่มีค่าเช่า ไม่มีชื่อเวนเดอร์)')); d.appendChild(nl);
+    var nl = el('label', 'f'), notify = el('input'); notify.type = 'checkbox'; notify.checked = false;
+    nl.appendChild(notify); nl.appendChild(document.createTextNode(' แจ้งกลุ่มคลังทางไลน์ว่ากระจายได้ (ทำได้หลังอนุมัติข้อตกลงแล้ว ถ้ายังไม่อนุมัติให้กด "แจ้งคลังอีกครั้ง" ทีหลัง)')); d.appendChild(nl);
     var row = el('div', 'row');
     var save = button('บันทึก', '', function () {
       var p = pkgOf(Number(ps.value));
@@ -1577,12 +1577,12 @@
       if (p && !p.branches.length) { show('แพ็กเกจนี้ยังไม่มีสาขา ให้ผู้ดูแลเพิ่มสาขาในหน้าตั้งค่าก่อน', 'err'); return; }
       save.disabled = true;
       var b = { brand: brand.value, vendor: vendor.value, package_id: Number(ps.value), start_date: from.value, end_date: to.value, note: note.value, house: house.checked, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value, supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, branches: bpick ? bpick.getCodes() : [], notify: notify.checked };
-      if (savedId) b.id = savedId;
+      if (savedId) b.id = savedId; else if (agId) b.agreement_id = agId;
       if (toldOnce) b.notify = false; // the warehouse group was told on the first try
       var told = toldOnce;
       api('cashier_save', b).then(function (r) {
         savedId = r.id; told = told || r.notified; toldOnce = told; return pm.flush(r.id);
-      }).then(function () { afterNote = [notify.checked && !told ? 'บันทึกแล้ว แต่แจ้งกลุ่มคลังไม่สำเร็จ กด "แจ้งคลังอีกครั้ง" ที่สัญญา' : notify.checked ? 'บันทึกแล้ว และแจ้งกลุ่มคลังแล้ว' : 'บันทึกแล้ว', notify.checked && !told ? 'err' : 'ok']; (formBack || cashier)(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
+      }).then(function () { afterNote = !c && !agId ? ['บันทึกแล้ว รออนุมัติข้อตกลงก่อนจึงจะแจ้งคลังและแสดงให้สาขาเห็น', 'ok'] : [notify.checked && !told ? 'บันทึกแล้ว แต่แจ้งกลุ่มคลังไม่สำเร็จ กด "แจ้งคลังอีกครั้ง" ที่สัญญา' : notify.checked ? 'บันทึกแล้ว และแจ้งกลุ่มคลังแล้ว' : 'บันทึกแล้ว', notify.checked && !told ? 'err' : 'ok']; (formBack || cashier)(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', '', function () { (formBack || renderCashier)(); })); d.appendChild(row); v.appendChild(d);
   }
@@ -1590,43 +1590,50 @@
   // ---------- settings ----------
   // ---------- contracts: one ledger of cashier-shelf and sign contracts (office only) ----------
   // Reading, searching and the money view live here; editing opens the same forms the other modules use and comes back.
-  var con = { rows: [], edit: {}, view: 'live', type: 'all', pay: 'all', needle: '', sel: null, limit: 30, canPay: false };
+  var con = { rows: [], edit: {}, view: 'live', type: 'all', pay: 'all', needle: '', sel: null, limit: 30, canPay: false, canApprove: false, ags: [] };
+  var formAgreement = null; // agreement id a new cashier/sign line joins; the form takes it when it opens
   var PAY_TH = { pending: 'ยังไม่ได้รับเงิน', partial: 'รับบางส่วน', paid: 'รับเงินแล้ว', none: 'ไม่เก็บเงิน' };
   var CON_KIND = { cashier: 'ชั้นแคชเชียร์', sign: 'ป้ายหัวชั้น/กระจก' };
   function contracts() {
     $('bar').hidden = true; show(''); $('view').textContent = ''; loading(); formBack = null;
-    Promise.all([api('cashier_packages'), api('cashier_list'), api('sign_list')]).then(guard(function (r) {
+    Promise.all([api('cashier_packages'), api('cashier_list'), api('sign_list'), api('agreement_list')]).then(guard(function (r) {
       done(); noteAfterLoad(); cash.packages = r[0].packages; cash.contracts = r[1].contracts.map(normEnd); cash.canEdit = r[1].can_edit;
-      con.edit = { cashier: r[1].can_edit, sign: r[2].can_edit }; con.rows = []; con.canPay = r[2].can_pay === true || r[1].can_pay === true;
+      con.edit = { cashier: r[1].can_edit, sign: r[2].can_edit }; con.rows = []; con.canPay = r[3].can_pay === true; con.canApprove = r[3].can_approve === true; con.ags = r[3].agreements;
+      var agById = {}; con.ags.forEach(function (a) { agById[a.id] = a; });
       cash.contracts.forEach(function (c) {
         var p = pkgOf(c.package_id);
-        con.rows.push({ kind: 'cashier', key: 'c' + c.id, c: c, pay: c.pay_status || null, rent: c.house || !p ? null : Number(p.rate), scope: c.branches && c.branches.length ? c.branches.length + ' สาขา' : 'ทุกสาขา' });
+        con.rows.push({ kind: 'cashier', key: 'c' + c.id, c: c, ag: agById[c.agreement_id] || null, pay: (agById[c.agreement_id] || {}).pay_status || null, rent: c.house || !p ? null : Number(p.rate), scope: c.branches && c.branches.length ? c.branches.length + ' สาขา' : 'ทุกสาขา' });
       });
       r[2].contracts.map(normEnd).forEach(function (c) {
         var bs = {}, rent = 0, has = false;
         c.slots.forEach(function (x) { bs[x.branch_code] = true; if (x.rent != null) { rent += Number(x.rent); has = true; } });
-        con.rows.push({ kind: 'sign', key: 's' + c.id, c: c, pay: c.pay_status || null, rent: has ? rent : null, scope: Object.keys(bs).length + ' สาขา · ' + c.slots.length + ' ตำแหน่ง' });
+        con.rows.push({ kind: 'sign', key: 's' + c.id, c: c, ag: agById[c.agreement_id] || null, pay: (agById[c.agreement_id] || {}).pay_status || null, rent: has ? rent : null, scope: Object.keys(bs).length + ' สาขา · ' + c.slots.length + ' ตำแหน่ง' });
       });
       if (!con.rows.some(function (x) { return x.key === con.sel; })) con.sel = null;
       renderContracts();
     })).catch(guard(fail));
   }
+  // Waiting for approval: the line or its agreement is pending, or the agreement changed since it was approved.
+  function isWait(r) { return r.c.status === 'pending' || !!(r.ag && (r.ag.status === 'pending' || r.ag.needs_review)); }
   function conRows() {
     var q = con.needle.trim().toLowerCase();
     return con.rows.filter(function (r) {
       var st = cashState(r.c);
       if (con.type !== 'all' && r.kind !== con.type) return false;
       if (con.pay !== 'all' && (r.pay || 'pending') !== con.pay) return false;
-      if (con.view === 'soon' ? !(st === 'live' && daysTo(r.c.end_date) <= 30) : st !== con.view) return false;
+      if (con.view === 'wait') { if (!isWait(r) || st === 'cancelled') return false; }
+      else if (r.c.status === 'pending' || (con.view === 'soon' ? !(st === 'live' && daysTo(r.c.end_date) <= 30) : st !== con.view)) return false;
       return !q || (r.c.brand + ' ' + (r.c.vendor || '') + ' ' + (r.c.agreement_no || '') + ' ' + (r.c.sys_no || '') + ' ' + (r.c.ad_no || '')).toLowerCase().indexOf(q) >= 0;
     }).sort(function (a, b) { return String(a.c.end_date).localeCompare(String(b.c.end_date)); });
   }
   function renderContracts() {
     restoreScroll(); var v = $('view'); v.textContent = '';
-    var live = con.rows.filter(function (r) { return cashState(r.c) === 'live'; }), soon = live.filter(function (r) { return daysTo(r.c.end_date) <= 30; });
+    var live = con.rows.filter(function (r) { return cashState(r.c) === 'live' && r.c.status !== 'pending'; }), soon = live.filter(function (r) { return daysTo(r.c.end_date) <= 30; });
+    var waitN = con.ags.filter(function (a) { return a.status === 'pending' || (a.status === 'active' && a.needs_review); }).length;
     var income = live.reduce(function (n, r) { return n + (r.pay === 'none' ? 0 : r.rent || 0); }, 0), brands = {}; live.forEach(function (r) { brands[String(r.c.brand).toLowerCase()] = true; });
     var go2 = function (x) { return function () { con.view = x; con.limit = 30; renderContracts(); }; };
     var k = el('div', 'kpi');
+    k.appendChild(kpiCard('รออนุมัติ', waitN, 'ข้อตกลง (TTA)', waitN ? 'warn' : '', go2('wait')));
     k.appendChild(kpiCard('สัญญาที่ใช้งานอยู่', live.length, 'ชั้นแคชเชียร์และป้าย', 'ok', go2('live')));
     k.appendChild(kpiCard('ใกล้หมดใน 30 วัน', soon.length, soon[0] ? soon[0].c.brand : 'ไม่มี', soon.length ? 'warn' : '', go2('soon')));
     k.appendChild(kpiCard('ค่าเช่าต่อเดือนรวม', baht(income), 'บาท (สัญญาที่ใช้งานอยู่ ไม่นับที่ไม่เก็บเงิน)', '', go2('live')));
@@ -1634,8 +1641,8 @@
     v.appendChild(k);
     var bar = el('div', 'toolbar'), seg = el('div', 'seg'), tseg = el('div', 'seg');
     seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'กรองตามสถานะ'); tseg.setAttribute('role', 'group'); tseg.setAttribute('aria-label', 'กรองตามประเภท');
-    [['live', 'ใช้งานอยู่'], ['soon', 'ใกล้หมด'], ['next', 'ยังไม่เริ่ม'], ['ended', 'หมดอายุ'], ['cancelled', 'ยกเลิก']].forEach(function (t) {
-      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.view === t[0])); x.onclick = go2(t[0]); seg.appendChild(x);
+    [['wait', 'รออนุมัติ'], ['live', 'ใช้งานอยู่'], ['soon', 'ใกล้หมด'], ['next', 'ยังไม่เริ่ม'], ['ended', 'หมดอายุ'], ['cancelled', 'ยกเลิก']].forEach(function (t) {
+      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.view === t[0])); x.onclick = go2(t[0]); if (t[0] === 'wait') x.appendChild(el('span', 'n', String(waitN))); seg.appendChild(x);
     });
     [['all', 'ทั้งหมด'], ['cashier', CON_KIND.cashier], ['sign', CON_KIND.sign]].forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.type === t[0])); x.onclick = function () { con.type = t[0]; con.limit = 30; renderContracts(); }; tseg.appendChild(x);
@@ -1663,6 +1670,8 @@
         b.appendChild(el('b', 'slot-code', r.c.brand)); b.appendChild(el('span', 'chip', CON_KIND[r.kind])); b.appendChild(el('span', 'sub grow', [r.c.vendor, r.scope].filter(Boolean).join(' · ')));
         if (r.rent != null) b.appendChild(el('span', 'sub', baht(r.rent) + ' บาท/เดือน'));
         if (con.canPay) { var pk = r.pay || 'pending'; b.appendChild(el('span', 'chip ' + (pk === 'paid' ? 'ok' : pk === 'partial' ? 'warn' : ''), PAY_TH[pk])); }
+        if (r.c.status === 'pending' || (r.ag && r.ag.status === 'pending')) b.appendChild(el('span', 'chip warn', 'รออนุมัติ'));
+        if (r.ag && r.ag.needs_review) b.appendChild(el('span', 'chip warn', 'ต้องอนุมัติใหม่'));
         var st = cashState(r.c), left = daysTo(r.c.end_date);
         b.appendChild(el('span', 'chip ' + (st === 'live' ? (left <= 30 ? 'warn' : 'ok') : st === 'cancelled' ? 'err' : ''), st === 'next' ? 'เริ่ม ' + thDate(r.c.start_date) : thDate(r.c.end_date)));
         b.onclick = function () { con.sel = r.key; paint(); conPanel(side); };
@@ -1674,33 +1683,142 @@
   }
   // Open the sign form with no floor plan loaded: it fetches the places of the branches it needs.
   function openSignFromContracts(c, renew) { flo.branch = ''; flo.data = null; formBack = contracts; signForm($('view'), c, undefined, renew); }
-  // Vendor payment record: approvers only (the server never sends it to anyone else)
-  function payPanel(p, c, kind) {
-    var box = el('section', 'boxscroll'), list = (c.payments || []).map(function (x) { return { dp_no: x.dp_no || '', received_on: x.received_on || '', amount: x.amount == null ? '' : x.amount, memo_no: x.memo_no || '', note: x.note || '' }; });
-    var stSel = el('select', 'input'); Object.keys(PAY_TH).forEach(function (k) { var o = el('option', '', PAY_TH[k]); o.value = k; if (k === (c.pay_status || 'pending')) o.selected = true; stSel.appendChild(o); });
-    box.appendChild(el('h3', '', 'การรับเงินจากเวนเดอร์ (เฉพาะผู้อนุมัติสัญญา)')); var sl = el('label', 'f'); sl.appendChild(el('span', 't', 'สถานะ')); sl.appendChild(stSel); box.appendChild(sl);
+  // Vendor money of one agreement (payments received and dues expected): approvers and finance only; the server sends it to no one else
+  function agPayPanel(p, a) {
+    var box = el('section', 'boxscroll'), list = (a.payments || []).map(function (x) { return { dp_no: x.dp_no || '', received_on: x.received_on || '', amount: x.amount == null ? '' : x.amount, memo_no: x.memo_no || '', note: x.note || '' }; });
+    var dues = (a.dues || []).map(function (x) { return { id: x.id, due_on: x.due_on || '', amount: x.amount == null ? '' : x.amount, note: x.note || '' }; });
+    var stSel = el('select', 'input'); Object.keys(PAY_TH).forEach(function (k) { var o = el('option', '', PAY_TH[k]); o.value = k; if (k === (a.pay_status || 'pending')) o.selected = true; stSel.appendChild(o); });
+    box.appendChild(el('h3', '', 'การรับเงินของข้อตกลง (ผู้อนุมัติสัญญาและการเงิน)')); var sl = el('label', 'f'); sl.appendChild(el('span', 't', 'สถานะ')); sl.appendChild(stSel); box.appendChild(sl);
+    box.appendChild(el('p', 'sub', 'รับแล้ว ' + baht(a.received || 0) + ' บาท' + (a.paid_pct != null ? ' (' + a.paid_pct + '% ของมูลค่ารวม)' : '')));
+    function inputs(row, x, defs, repaint) {
+      defs.forEach(function (f) {
+        var l = el('label', 'f'); l.appendChild(el('span', 't', f[1])); var inp = el('input', 'input'); inp.type = f[2]; if (f[2] === 'number') inp.min = 0; inp.value = x[f[0]];
+        inp.oninput = function () { x[f[0]] = inp.value; }; if (repaint) inp.onchange = repaint; l.appendChild(inp); row.appendChild(l);
+      });
+    }
     var rowsEl = el('div');
     function paint() {
       rowsEl.textContent = '';
       list.forEach(function (x, i) {
         var r = el('div', 'brow');
-        [['dp_no', 'เลข DP ใน NAV', 'text'], ['received_on', 'วันที่รับเงิน', 'date'], ['amount', 'ยอดเงิน (บาท)', 'number'], ['memo_no', 'เลขที่เอกสารภายใน MEMO', 'text'], ['note', 'หมายเหตุ', 'text']].forEach(function (f) {
-          var l = el('label', 'f'); l.appendChild(el('span', 't', f[1])); var inp = el('input', 'input'); inp.type = f[2]; if (f[2] === 'number') inp.min = 0; inp.value = x[f[0]];
-          inp.oninput = function () { x[f[0]] = inp.value; }; l.appendChild(inp); r.appendChild(l);
-        });
+        inputs(r, x, [['dp_no', 'เลข DP ใน NAV', 'text'], ['received_on', 'วันที่รับเงิน', 'date'], ['amount', 'ยอดเงิน (บาท)', 'number'], ['memo_no', 'เลขที่เอกสารภายใน MEMO', 'text'], ['note', 'หมายเหตุ', 'text']]);
         r.appendChild(button('ลบรายการ', 'danger', function () { list.splice(i, 1); paint(); }));
         rowsEl.appendChild(r);
       });
       if (!list.length) rowsEl.appendChild(el('p', 'sub', 'ยังไม่มีรายการรับเงิน'));
     }
     paint(); box.appendChild(rowsEl);
+    var addRow = el('div', 'row');
+    addRow.appendChild(button('+ เพิ่มรายการรับเงิน', 'alt', function () { list.push({ dp_no: '', received_on: '', amount: '', memo_no: '', note: '' }); paint(); }));
+    box.appendChild(addRow);
+    box.appendChild(el('h3', '', 'งวดที่ต้องได้รับ'));
+    var dueEl = el('div');
+    function paintDues() {
+      dueEl.textContent = '';
+      dues.forEach(function (x, i) {
+        var r = el('div', 'brow');
+        inputs(r, x, [['due_on', 'วันครบกำหนด', 'date'], ['amount', 'ยอด (บาท)', 'number'], ['note', 'หมายเหตุ', 'text']], paintDues);
+        if (x.due_on && x.due_on < today() && stSel.value !== 'paid') r.appendChild(el('span', 'chip err', 'เลยกำหนด'));
+        r.appendChild(button('ลบงวด', 'danger', function () { dues.splice(i, 1); paintDues(); }));
+        dueEl.appendChild(r);
+      });
+      if (!dues.length) dueEl.appendChild(el('p', 'sub', 'ยังไม่มีงวดที่ต้องได้รับ'));
+    }
+    stSel.onchange = paintDues; paintDues(); box.appendChild(dueEl);
     var row = el('div', 'row');
-    row.appendChild(button('+ เพิ่มรายการรับเงิน', 'alt', function () { list.push({ dp_no: '', received_on: '', amount: '', memo_no: '', note: '' }); paint(); }));
+    row.appendChild(button('+ เพิ่มงวด', 'alt', function () { dues.push({ due_on: '', amount: '', note: '' }); paintDues(); }));
     row.appendChild(button('บันทึกการรับเงิน', '', function () {
-      var body = list.map(function (x) { return { dp_no: x.dp_no, received_on: x.received_on, amount: x.amount === '' ? null : Number(x.amount), memo_no: x.memo_no, note: x.note }; });
-      api('pay_save', { kind: kind, id: c.id, pay_status: stSel.value, payments: body }).then(function () { show('บันทึกการรับเงินแล้ว', 'ok'); contracts(); }).catch(function (e) { show(e.message, 'err'); });
+      if (dues.some(function (x) { return !x.due_on; })) { show('ใส่วันครบกำหนดของทุกงวดก่อน', 'err'); return; }
+      var pays = list.map(function (x) { return { dp_no: x.dp_no, received_on: x.received_on, amount: x.amount === '' ? null : Number(x.amount), memo_no: x.memo_no, note: x.note }; });
+      var dueBody = dues.map(function (x) { var o = { due_on: x.due_on, amount: x.amount === '' ? null : Number(x.amount), note: x.note }; if (x.id) o.id = x.id; return o; });
+      api('agreement_pay_save', { id: a.id, pay_status: stSel.value, payments: pays, dues: dueBody }).then(function () { afterNote = ['บันทึกการรับเงินแล้ว', 'ok']; contracts(); }).catch(function (e) { show(e.message, 'err'); });
     }));
     box.appendChild(row); p.appendChild(box);
+  }
+  // Agreement (TTA) form: money and approval live here, not on the lines
+  function agreementForm(a) {
+    var v = $('view'); v.textContent = ''; show(''); formBack = contracts;
+    var d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', 'แก้ไขข้อตกลง ' + (a.tta_no || '')));
+    var g = el('div', 'grid');
+    function fld(text, type, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el(type === 'textarea' ? 'textarea' : 'input', 'input'); if (type !== 'textarea') i.type = type; i.value = val == null ? '' : val; l.appendChild(i); g.appendChild(l); return i; }
+    var tta = fld('เลข TTA', 'text', a.tta_no), vendor = fld('เวนเดอร์', 'text', a.vendor), brand = fld('แบรนด์', 'text', a.brand);
+    var from = fld('เริ่ม', 'date', a.start_date), to = fld('สิ้นสุด', 'date', a.end_date), total = fld('มูลค่ารวม (บาท)', 'number', a.total); total.min = 0;
+    d.appendChild(g);
+    var dz = people.length ? peoplePicker(d, a.designated || []) : { getCodes: function () { return a.designated || []; } };
+    var note = fld('หมายเหตุ', 'textarea', a.note); note.rows = 2; d.appendChild(note.parentNode);
+    var row = el('div', 'row');
+    var save = button('บันทึก', '', function () {
+      if (!tta.value.trim() || !from.value || !to.value) { show('ใส่เลข TTA วันเริ่ม และวันสิ้นสุดก่อน', 'err'); return; }
+      if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
+      save.disabled = true;
+      api('agreement_save', { id: a.id, tta_no: tta.value, vendor: vendor.value, brand: brand.value, start_date: from.value, end_date: to.value, total: total.value === '' ? null : Number(total.value), designated: dz.getCodes(), note: note.value })
+        .then(function () { afterNote = ['บันทึกข้อตกลงแล้ว', 'ok']; contracts(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
+    });
+    row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', contracts)); d.appendChild(row); v.appendChild(d);
+  }
+  var AG_ACT = { create: 'สร้างข้อตกลง', approve: 'อนุมัติ', cancel: 'ยกเลิก', pay: 'บันทึกรับเงิน' };
+  function agEventText(e) {
+    var d = e.detail || {};
+    if (e.action === 'unapprove') return 'ถอนอนุมัติ: ' + (d.reason || '');
+    if (e.action === 'wait') return 'รอข้อมูล: ' + (d.note || '');
+    if (e.action === 'edit') return 'แก้ไข: ' + (d.what || '');
+    return AG_ACT[e.action] || e.action;
+  }
+  // Agreement block of the contract panel: facts, its lines, the approval buttons and the history
+  function agBlock(p, r) {
+    var a = r.ag; if (!a) return;
+    var box = el('section', 'boxscroll'), live = a.status !== 'cancelled', review = a.status === 'active' && a.needs_review;
+    var mine = a.registrant_user === (sess.staff && sess.staff.u), waiting = a.status === 'pending' || review;
+    box.appendChild(el('h3', '', 'ข้อตกลง ' + (a.tta_no || '')));
+    var dl = el('dl', 'facts one');
+    fact(dl, 'เลข TTA', a.tta_no); fact(dl, 'เวนเดอร์', a.vendor); fact(dl, 'ช่วงเวลา', a.start_date ? thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) : '');
+    fact(dl, 'มูลค่ารวม', a.total != null ? baht(a.total) + ' บาท' : ''); fact(dl, 'ผู้ลงทะเบียน', a.registrant_name);
+    fact(dl, 'อนุมัติโดย', a.approved_by && a.approved_by !== 'migrated' ? a.approved_by + (a.approved_at ? ' · ' + thDate(bkk(a.approved_at).slice(0, 10)) : '') : '');
+    box.appendChild(dl);
+    var chips = el('div', 'chips');
+    chips.appendChild(el('span', 'chip ' + (a.status === 'cancelled' ? 'err' : waiting ? 'warn' : 'ok'), a.status === 'cancelled' ? 'ยกเลิกแล้ว' : review ? 'ต้องอนุมัติใหม่' : a.status === 'pending' ? 'รออนุมัติ' : 'อนุมัติแล้ว'));
+    box.appendChild(chips);
+    if (a.wait) box.appendChild(el('p', 'sub', 'รอข้อมูล: ' + a.wait.note + ' · ' + a.wait.name + ' · ' + thDate(bkk(a.wait.at).slice(0, 10))));
+    var ls = el('div', 'chips');
+    (a.lines || []).forEach(function (x) {
+      var key = (x.kind === 'cashier' ? 'c' : 's') + x.id, b = button(CON_KIND[x.kind] + ' ' + (x.sys_no || x.brand), 'alt', function () { con.sel = key; renderContracts(); });
+      b.appendChild(el('span', 'chip ' + (x.status === 'active' ? 'ok' : x.status === 'cancelled' ? 'err' : 'warn'), { active: 'ใช้งาน', pending: 'รออนุมัติ', cancelled: 'ยกเลิก' }[x.status] || x.status));
+      if (key === r.key) b.setAttribute('aria-current', 'true'); ls.appendChild(b);
+    });
+    box.appendChild(ls);
+    var row = el('div', 'row');
+    function act(label, cls, fn) { var b = button(label, cls, function () { b.disabled = true; fn(function (e) { b.disabled = false; if (e.message) show(e.message, 'err'); }); }); row.appendChild(b); }
+    function run(action, body, ok) { return function (bad) { api(action, body).then(function () { afterNote = [ok, 'ok']; contracts(); }).catch(bad); }; }
+    if (live) {
+      if (con.canApprove && waiting) act('อนุมัติข้อตกลง', '', function (bad) { run('agreement_approve', { id: a.id }, 'อนุมัติข้อตกลงแล้ว')(bad); });
+      if (con.canApprove && a.status === 'active' && !a.needs_review) act('ถอนอนุมัติ', 'alt', function (bad) {
+        var why = (prompt('ถอนอนุมัติข้อตกลง ' + (a.tta_no || '') + ' กลับเป็นรออนุมัติ\n\nเหตุผล:') || '').trim();
+        if (!why) { bad({ message: 'ใส่เหตุผลก่อน' }); return; }
+        run('agreement_unapprove', { id: a.id, reason: why }, 'ถอนอนุมัติแล้ว')(bad);
+      });
+      if ((con.canApprove || mine) && waiting) act('รอข้อมูล', 'alt', function (bad) {
+        var n = (prompt('ข้อตกลง ' + (a.tta_no || '') + ' ยังอนุมัติไม่ได้ เพราะรออะไรอยู่\n\n(ไม่เกิน 200 ตัวอักษร)', a.wait ? a.wait.note : '') || '').trim().slice(0, 200);
+        if (!n) { bad({ message: 'พิมพ์ว่ารออะไรอยู่ก่อน' }); return; }
+        run('agreement_wait', { id: a.id, note: n }, 'บันทึกแล้ว: ' + n)(bad);
+      });
+      if (con.canApprove || mine) act('แก้ไขข้อตกลง', 'alt', function () { agreementForm(a); });
+      if (con.edit.cashier) act('+ เพิ่มชั้นแคชเชียร์ในข้อตกลงนี้', 'alt', function () { formAgreement = a.id; formBack = contracts; cashierForm(null); });
+      if (con.edit.sign) act('+ เพิ่มป้ายในข้อตกลงนี้', 'alt', function () { formAgreement = a.id; openSignFromContracts(null); });
+      if (con.canApprove || (mine && a.status === 'pending')) act('ยกเลิกข้อตกลง', 'danger', function (bad) {
+        if (!confirm('ยกเลิกข้อตกลง ' + (a.tta_no || '') + ' และทุกสัญญาในข้อตกลงนี้ ?')) { bad({ message: '' }); return; }
+        run('agreement_cancel', { id: a.id }, 'ยกเลิกข้อตกลงแล้ว')(bad);
+      });
+    }
+    box.appendChild(row);
+    var det = el('details', 'card hist'), loaded = false; det.appendChild(el('summary', '', 'ประวัติ'));
+    det.addEventListener('toggle', function () {
+      if (!det.open || loaded) return; loaded = true;
+      api('agreement_events', { id: a.id }).then(function (d) {
+        if (!d.events.length) det.appendChild(el('div', '', 'ยังไม่มีประวัติ'));
+        d.events.forEach(function (e) { var t = bkk(e.at), d2 = e.detail || {}; det.appendChild(el('div', '', thDate(t.slice(0, 10)) + ' ' + t.slice(11, 16) + ' · ' + (d2.name || eventWho(e)) + ' · ' + agEventText(e))); });
+      }).catch(function (e) { loaded = false; det.appendChild(el('div', '', e.message)); });
+    });
+    box.appendChild(det); p.appendChild(box);
   }
   // Install photos from the branches: Job Tracker opens one job per branch; progress and the photo report live there.
   function installBox(p, r) {
@@ -1733,8 +1851,11 @@
     if (!r) { p.appendChild(el('p', 'empty-note', 'กดสัญญาในรายการเพื่อดูรายละเอียดตรงนี้')); return; }
     var c = r.c, head = el('div', 'card-head'), left = el('div'); left.appendChild(el('h3', '', c.brand));
     var chips = el('div', 'chips'); chips.appendChild(el('span', 'chip', CON_KIND[r.kind])); if (c.house) chips.appendChild(el('span', 'chip', 'House Brand'));
-    var st = cashState(c); chips.appendChild(el('span', 'chip ' + (st === 'live' ? 'ok' : st === 'cancelled' ? 'err' : ''), { live: 'ใช้งานอยู่', next: 'ยังไม่เริ่ม', ended: 'หมดอายุแล้ว', cancelled: 'ยกเลิกแล้ว' }[st]));
+    var st = cashState(c);
+    if (c.status === 'pending') chips.appendChild(el('span', 'chip warn', 'รออนุมัติ'));
+    else chips.appendChild(el('span', 'chip ' + (st === 'live' ? 'ok' : st === 'cancelled' ? 'err' : ''), { live: 'ใช้งานอยู่', next: 'ยังไม่เริ่ม', ended: 'หมดอายุแล้ว', cancelled: 'ยกเลิกแล้ว' }[st]));
     left.appendChild(chips); head.appendChild(left); head.appendChild(button('ปิด', 'alt', function () { con.sel = null; renderContracts(); })); p.appendChild(head);
+    agBlock(p, r);
     var dl = el('dl', 'facts one');
     fact(dl, 'ช่วงเวลา', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) + (c._raw ? ' (ตามวันหมดอายุโฆษณา)' : ''));
     fact(dl, 'เวนเดอร์', c.vendor); fact(dl, 'ค่าเช่า', r.rent != null ? baht(r.rent) + ' บาท/เดือน' : ''); fact(dl, 'ขอบเขต', r.scope);
@@ -1742,7 +1863,7 @@
     fact(dl, 'เลขที่สัญญา/TTA', c.agreement_no); fact(dl, 'เลขโฆษณา', c.ad_no ? c.ad_no + (c.ad_expiry ? ' (หมดอายุ ' + thDate(c.ad_expiry) + ')' : '') : '');
     fact(dl, 'ติดต่อ', c.supplier_contact); fact(dl, 'วิธีวาง/ข้อห้าม', c.how_to_place); fact(dl, 'หลังสิ้นสุดให้ทำอย่างไร', c.return_to); fact(dl, 'หมายเหตุ', c.note);
     p.appendChild(dl);
-    if (con.canPay) payPanel(p, c, r.kind);
+    if (con.canPay && r.ag) agPayPanel(p, r.ag);
     if (r.kind === 'sign') {
       var by = {}; c.slots.forEach(function (x) { (by[x.branch_code] = by[x.branch_code] || []).push(x.code); });
       var pl = el('div', 'boxscroll'); pl.appendChild(el('h3', '', 'ตำแหน่งที่เช่า'));
@@ -1751,14 +1872,15 @@
     } else if (c.branches && c.branches.length) {
       var bl = el('div', 'boxscroll'); bl.appendChild(el('h3', '', 'สาขา')); bl.appendChild(el('p', 'sub', c.branches.join(', '))); p.appendChild(bl);
     }
-    if (con.edit[r.kind] && st !== 'cancelled') installBox(p, r);
+    var act = c.status === 'active';
+    if (con.edit[r.kind] && st !== 'cancelled') { if (act) installBox(p, r); else p.appendChild(el('p', 'sub', 'รายการนี้รออนุมัติข้อตกลงก่อน จึงแจ้งคลังและขอรูปจากสาขาได้')); }
     if (con.edit[r.kind] && st !== 'cancelled') {
       var row = el('div', 'row');
       var next = r.kind === 'sign' ? con.rows.filter(function (x) { return x.kind === 'sign' && x.c.renewed_from === c.id && x.c.status !== 'cancelled'; })[0] : null;
       if (next) row.appendChild(button('ต่อแล้วเป็น ' + (next.c.sys_no || next.c.brand), 'alt', function () { con.sel = next.key; renderContracts(); }));
       else if (r.kind === 'sign' && (st === 'ended' || (st === 'live' && daysTo(c.end_date) <= 60))) row.appendChild(button('ต่อสัญญา', '', function () { openSignFromContracts(c, true); }));
       row.appendChild(button('แก้ไข', '', function () { if (r.kind === 'cashier') { formBack = contracts; cashierForm(c); } else openSignFromContracts(c); }));
-      if (r.kind === 'cashier') row.appendChild(button('แจ้งคลังอีกครั้ง', 'alt', function () { notifyCashier(c); }));
+      if (r.kind === 'cashier' && act) row.appendChild(button('แจ้งคลังอีกครั้ง', 'alt', function () { notifyCashier(c); }));
       row.appendChild(button('ยกเลิกสัญญา', 'danger', function () {
         if (!confirm('ยกเลิกสัญญา ' + c.brand + ' ?')) return;
         api(r.kind === 'cashier' ? 'cashier_cancel' : 'sign_cancel', { id: c.id }).then(contracts).catch(function (e) { show(e.message, 'err'); });
@@ -2158,7 +2280,7 @@
   }
   function signForm(holder, c, presetSlot, renew) {
     rememberScroll();
-    var savedId = c && !renew ? c.id : null;
+    var savedId = c && !renew ? c.id : null, agId = formAgreement; formAgreement = null;
     var edit = c && !renew, d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', renew ? 'ต่อสัญญาป้าย ' + c.brand + ' (จาก ' + (c.sys_no || '') + ')' : c ? 'แก้ไขสัญญาป้าย' : 'เพิ่มสัญญาป้าย'));
     if (renew) d.appendChild(el('p', 'sub', 'คัดลอกสาขา ตำแหน่ง และค่าเช่ามาให้แล้ว ใส่วันที่ใหม่และเลขที่เอกสารใหม่ สัญญาเดิมยังอยู่เป็นประวัติ'));
     var g = el('div', 'grid');
@@ -2309,7 +2431,8 @@
       var b = { brand: brand.value, vendor: vendor.value, start_date: from.value, end_date: to.value, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value,
         supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, note: note.value, slots: slots };
       if (savedId) b.id = savedId; else if (renew) b.renewed_from = c.id;
-      api('sign_save', b).then(function (r) { savedId = r.id; flo.signsReq = null; return pm.flush(r.id); }).then(function () { show('บันทึกแล้ว', 'ok'); if (formBack) formBack(); else loadFloor(holder); })
+      if (!savedId && agId) b.agreement_id = agId;
+      api('sign_save', b).then(function (r) { savedId = r.id; flo.signsReq = null; return pm.flush(r.id); }).then(function () { var msg = edit || agId ? 'บันทึกแล้ว' : 'บันทึกแล้ว รออนุมัติข้อตกลงก่อนจึงจะแจ้งคลังและแสดงให้สาขาเห็น'; if (formBack) { afterNote = [msg, 'ok']; formBack(); } else { show(msg, 'ok'); loadFloor(holder); } })
         .catch(function (e) { save.disabled = false; show(e.code === 'slot_taken' ? 'ตำแหน่งเหล่านี้มีสัญญาอื่นอยู่ในช่วงวันที่ชนกัน: ' + e.data.slots.join(', ') + ' (เอาออกหรือเปลี่ยนวันที่)' : e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', function () { if (formBack) formBack(); else renderFloor(holder); })); d.appendChild(row);
