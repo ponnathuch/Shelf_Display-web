@@ -1735,6 +1735,9 @@
     }));
     box.appendChild(row); p.appendChild(box);
   }
+  // Loaded once per page; a failure (lists not pushed yet) leaves the form as plain text boxes.
+  var navCache = null;
+  function navLists() { return navCache || (navCache = api('nav_lists', {}).catch(function () { navCache = null; return null; })); }
   // Agreement (TTA) form: money and approval live here, not on the lines
   function agreementForm(a) {
     var v = $('view'); v.textContent = ''; show(''); formBack = contracts;
@@ -1744,6 +1747,39 @@
     var tta = fld('เลข TTA', 'text', a.tta_no), vendor = fld('เวนเดอร์', 'text', a.vendor), brand = fld('แบรนด์', 'text', a.brand);
     var from = fld('เริ่ม', 'date', a.start_date), to = fld('สิ้นสุด', 'date', a.end_date), total = fld('มูลค่ารวม (บาท)', 'number', a.total); total.min = 0;
     d.appendChild(g);
+    // Vendor and brand names come from MASTER_NAV. A name not in the list is still accepted, only flagged.
+    // shortcut: native datalist, fine for a few thousand names; build a filtered list if it gets slow.
+    var nav = null, vHint = el('span', 'hint'); vendor.parentNode.appendChild(vHint);
+    function vendorNo() {
+      var name = vendor.value.trim();
+      if (!nav) return name === (a.vendor || '') ? a.vendor_no || null : null;
+      var hit = nav.vendors.filter(function (x) { return x.name === name; });
+      if (name === (a.vendor || '') && a.vendor_no && hit.some(function (x) { return x.no === a.vendor_no; })) return a.vendor_no;
+      return hit.length === 1 ? hit[0].no : null;
+    }
+    function vendorCheck() {
+      var name = vendor.value.trim(), known = nav && nav.vendors.some(function (x) { return x.name === name; });
+      vHint.textContent = !nav || !name || vendorNo() ? '' : known ? 'ชื่อนี้มีหลายเลขเวนเดอร์ใน NAV ยังไม่ผูกเลข' : 'ยังไม่มีใน NAV (บันทึกได้ ผูกเลขเวนเดอร์ภายหลัง)';
+    }
+    function dlist(inp, id, vals) {
+      var dl = el('datalist'); dl.id = id;
+      vals.forEach(function (x) { var o = el('option'); o.value = x[0]; if (x[1]) o.label = x[1]; dl.appendChild(o); });
+      d.appendChild(dl); inp.setAttribute('list', id); inp.autocomplete = 'off';
+    }
+    vendor.addEventListener('input', vendorCheck);
+    brand.addEventListener('change', function () {
+      if (!nav || vendor.value.trim()) return;
+      var nos = nav.brands.filter(function (x) { return x.brand === brand.value.trim() && x.vendor_no; });
+      var v = nos.length === 1 ? nav.vendors.filter(function (x) { return x.no === nos[0].vendor_no; })[0] : null;
+      if (v) { vendor.value = v.name; vendorCheck(); }
+    });
+    navLists().then(function (r) {
+      if (!r || !r.vendors || !r.brands) return;
+      nav = r; var seen = {};
+      dlist(vendor, 'dl-vendor', r.vendors.map(function (x) { return [x.name, x.no]; }));
+      dlist(brand, 'dl-brand', r.brands.filter(function (x) { return !seen[x.brand] && (seen[x.brand] = 1); }).map(function (x) { return [x.brand]; }));
+      vendorCheck();
+    });
     var dz = people.length ? peoplePicker(d, a.designated || []) : { getCodes: function () { return a.designated || []; } };
     var note = fld('หมายเหตุ', 'textarea', a.note); note.rows = 2; d.appendChild(note.parentNode);
     var row = el('div', 'row');
@@ -1751,7 +1787,7 @@
       if (!tta.value.trim() || !from.value || !to.value) { show('ใส่เลข TTA วันเริ่ม และวันสิ้นสุดก่อน', 'err'); return; }
       if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
       save.disabled = true;
-      api('agreement_save', { id: a.id, tta_no: tta.value, vendor: vendor.value, brand: brand.value, start_date: from.value, end_date: to.value, total: total.value === '' ? null : Number(total.value), designated: dz.getCodes(), note: note.value })
+      api('agreement_save', { id: a.id, tta_no: tta.value, vendor: vendor.value, vendor_no: vendorNo(), brand: brand.value, start_date: from.value, end_date: to.value, total: total.value === '' ? null : Number(total.value), designated: dz.getCodes(), note: note.value })
         .then(function () { afterNote = ['บันทึกข้อตกลงแล้ว', 'ok']; contracts(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', contracts)); d.appendChild(row); v.appendChild(d);
