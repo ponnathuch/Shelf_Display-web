@@ -1550,7 +1550,7 @@
     });
     pl.appendChild(ps); g.appendChild(pl);
     var from = fld('วันเริ่ม', 'date', c && c.start_date), to = fld('วันสิ้นสุด', 'date', c && (c._raw || c).end_date);
-    d.appendChild(g);
+    d.appendChild(g); navAttach(d, brand, vendor);
     var g2 = el('div', 'grid'); d.appendChild(g2);
     function fld2(text, type, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el('input', 'input'); i.type = type; i.value = val || ''; l.appendChild(i); g2.appendChild(l); return i; }
     var agr = fld2('เลขที่สัญญา/TTA', 'text', c && c.agreement_no), adn = fld2('เลขโฆษณา', 'text', c && c.ad_no);
@@ -1561,7 +1561,7 @@
     var bbox = el('fieldset', 'card'); bbox.appendChild(el('legend', '', 'สาขาที่วางแบรนด์นี้ (ไม่เลือก = ทุกสาขา)'));
     var bpick = units.length ? branchPicker(bbox, (c && c.branches) || []) : null;
     if (bpick) d.appendChild(bbox);
-    var note = fld('หมายเหตุ', 'textarea', c && c.note); note.rows = 2; d.appendChild(note.parentNode);
+    var note = fld('รายละเอียด/หมายเหตุ (แสดงในรายการสัญญา)', 'textarea', c && c.note); note.rows = 2; d.appendChild(note.parentNode);
     var pm = photoManager({ addAction: 'cashier_photo_add', removeAction: 'cashier_photo_remove' });
     d.appendChild(el('h3', '', 'รูปตัวอย่าง')); d.appendChild(el('p', 'hint', 'ใส่ได้หลายรูป ระบบย่อรูปให้อัตโนมัติ สาขาจะเห็นรูปแรกเพื่อรู้ว่าต้องวางอะไร')); d.appendChild(pm.node);
     if (c) api('cashier_photos', { id: c.id }).then(function (r) { pm.setExisting(r.photos); }).catch(function () { /* the form works without the photos */ });
@@ -1667,7 +1667,7 @@
       if (!rows.length) list.appendChild(el('p', 'empty-note', 'ไม่มีสัญญาในกลุ่มนี้'));
       rows.slice(0, con.limit).forEach(function (r) {
         var b = el('button', 'trow signline'); b.type = 'button'; if (r.key === con.sel) b.setAttribute('aria-current', 'true');
-        b.appendChild(el('b', 'slot-code', r.c.brand)); b.appendChild(el('span', 'chip', CON_KIND[r.kind])); b.appendChild(el('span', 'sub grow', [r.c.vendor, r.scope].filter(Boolean).join(' · ')));
+        b.appendChild(el('b', 'slot-code', r.c.brand)); b.appendChild(el('span', 'chip', CON_KIND[r.kind])); b.appendChild(el('span', 'sub grow', [r.c.vendor, r.scope, r.c.note && String(r.c.note).slice(0, 80)].filter(Boolean).join(' · ')));
         if (r.rent != null) b.appendChild(el('span', 'sub', baht(r.rent) + ' บาท/เดือน'));
         if (con.canPay) { var pk = r.pay || 'pending'; b.appendChild(el('span', 'chip ' + (pk === 'paid' ? 'ok' : pk === 'partial' ? 'warn' : ''), PAY_TH[pk])); }
         if (r.c.status === 'pending' || (r.ag && r.ag.status === 'pending')) b.appendChild(el('span', 'chip warn', 'รออนุมัติ'));
@@ -1738,6 +1738,31 @@
   // Loaded once per page; a failure (lists not pushed yet) leaves the form as plain text boxes.
   var navCache = null;
   function navLists() { return navCache || (navCache = api('nav_lists', {}).catch(function () { navCache = null; return null; })); }
+  // Vendor and brand names come from MASTER_NAV. A name not in the list is still accepted.
+  // shortcut: native datalist, fine for a few thousand names; build a filtered list if it gets slow.
+  function navAttach(d, brand, vendor, ready) {
+    var nav = null;
+    function dlist(inp, id, vals) {
+      var old = document.getElementById(id); if (old) old.remove();
+      var dl = el('datalist'); dl.id = id;
+      vals.forEach(function (x) { var o = el('option'); o.value = x[0]; if (x[1]) o.label = x[1]; dl.appendChild(o); });
+      d.appendChild(dl); inp.setAttribute('list', id); inp.autocomplete = 'off';
+    }
+    // A brand sold by exactly one vendor fills an empty vendor box.
+    brand.addEventListener('change', function () {
+      if (!nav || vendor.value.trim()) return;
+      var nos = nav.brands.filter(function (x) { return x.brand === brand.value.trim() && x.vendor_no; });
+      var v = nos.length === 1 ? nav.vendors.filter(function (x) { return x.no === nos[0].vendor_no; })[0] : null;
+      if (v) { vendor.value = v.name; vendor.dispatchEvent(new Event('input')); }
+    });
+    navLists().then(function (r) {
+      if (!r || !r.vendors || !r.brands) return;
+      nav = r; var seen = {};
+      dlist(vendor, 'dl-vendor', r.vendors.map(function (x) { return [x.name, x.no]; }));
+      dlist(brand, 'dl-brand', r.brands.filter(function (x) { return !seen[x.brand] && (seen[x.brand] = 1); }).map(function (x) { return [x.brand]; }));
+      if (ready) ready(r);
+    });
+  }
   // Agreement (TTA) form: money and approval live here, not on the lines
   function agreementForm(a) {
     var v = $('view'); v.textContent = ''; show(''); formBack = contracts;
@@ -1747,8 +1772,7 @@
     var tta = fld('เลข TTA', 'text', a.tta_no), vendor = fld('เวนเดอร์', 'text', a.vendor), brand = fld('แบรนด์', 'text', a.brand);
     var from = fld('เริ่ม', 'date', a.start_date), to = fld('สิ้นสุด', 'date', a.end_date), total = fld('มูลค่ารวม (บาท)', 'number', a.total); total.min = 0;
     d.appendChild(g);
-    // Vendor and brand names come from MASTER_NAV. A name not in the list is still accepted, only flagged.
-    // shortcut: native datalist, fine for a few thousand names; build a filtered list if it gets slow.
+    // A name not in the NAV list is still accepted, only flagged.
     var nav = null, vHint = el('span', 'hint'); vendor.parentNode.appendChild(vHint);
     function vendorNo() {
       var name = vendor.value.trim();
@@ -1761,25 +1785,8 @@
       var name = vendor.value.trim(), known = nav && nav.vendors.some(function (x) { return x.name === name; });
       vHint.textContent = !nav || !name || vendorNo() ? '' : known ? 'ชื่อนี้มีหลายเลขเวนเดอร์ใน NAV ยังไม่ผูกเลข' : 'ยังไม่มีใน NAV (บันทึกได้ ผูกเลขเวนเดอร์ภายหลัง)';
     }
-    function dlist(inp, id, vals) {
-      var dl = el('datalist'); dl.id = id;
-      vals.forEach(function (x) { var o = el('option'); o.value = x[0]; if (x[1]) o.label = x[1]; dl.appendChild(o); });
-      d.appendChild(dl); inp.setAttribute('list', id); inp.autocomplete = 'off';
-    }
     vendor.addEventListener('input', vendorCheck);
-    brand.addEventListener('change', function () {
-      if (!nav || vendor.value.trim()) return;
-      var nos = nav.brands.filter(function (x) { return x.brand === brand.value.trim() && x.vendor_no; });
-      var v = nos.length === 1 ? nav.vendors.filter(function (x) { return x.no === nos[0].vendor_no; })[0] : null;
-      if (v) { vendor.value = v.name; vendorCheck(); }
-    });
-    navLists().then(function (r) {
-      if (!r || !r.vendors || !r.brands) return;
-      nav = r; var seen = {};
-      dlist(vendor, 'dl-vendor', r.vendors.map(function (x) { return [x.name, x.no]; }));
-      dlist(brand, 'dl-brand', r.brands.filter(function (x) { return !seen[x.brand] && (seen[x.brand] = 1); }).map(function (x) { return [x.brand]; }));
-      vendorCheck();
-    });
+    navAttach(d, brand, vendor, function (r) { nav = r; vendorCheck(); });
     var dz = people.length ? peoplePicker(d, a.designated || []) : { getCodes: function () { return a.designated || []; } };
     var note = fld('หมายเหตุ', 'textarea', a.note); note.rows = 2; d.appendChild(note.parentNode);
     var row = el('div', 'row');
@@ -2324,13 +2331,13 @@
     function add(box, text, type, val) { var f = fld(text, type, val); box.appendChild(f.l); return f.i; }
     var brand = add(g, 'แบรนด์', 'text', c && c.brand), vendor = add(g, 'บริษัท/เวนเดอร์', 'text', c && c.vendor);
     var oldEnd = c && (c._raw || c).end_date, from = add(g, 'วันเริ่ม', 'date', renew ? addDays(oldEnd, 1) : c && c.start_date), to = add(g, 'วันสิ้นสุด', 'date', renew ? addDays(addDays(oldEnd, 1), 365 - 1) : oldEnd);
-    d.appendChild(g);
+    d.appendChild(g); navAttach(d, brand, vendor);
     var g2 = el('div', 'grid'); d.appendChild(g2);
     var agr = add(g2, 'เลขที่สัญญา/TTA', 'text', renew ? '' : c && c.agreement_no), adn = add(g2, 'เลขโฆษณา', 'text', c && c.ad_no);
     if (renew && c.agreement_no) { agr.placeholder = 'เดิม: ' + c.agreement_no; agr.parentNode.appendChild(button('ใช้เลขเดิม', 'alt', function () { agr.value = c.agreement_no; })); }
     var adx = add(g2, 'วันหมดอายุโฆษณา', 'date', renew ? '' : c && c.ad_expiry), sup = add(g2, 'ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c && c.supplier_contact);
     function area(text, val) { var f = fld(text, 'textarea', val); f.i.rows = 2; d.appendChild(f.l); return f.i; }
-    var how = area('วิธีวาง/ข้อห้าม (สาขาจะเห็น)', c && c.how_to_place), ret = area('หลังสิ้นสุดให้ทำอย่างไร (สาขาจะเห็น)', c && c.return_to), note = area('หมายเหตุ', c && c.note);
+    var how = area('วิธีวาง/ข้อห้าม (สาขาจะเห็น)', c && c.how_to_place), ret = area('หลังสิ้นสุดให้ทำอย่างไร (สาขาจะเห็น)', c && c.return_to), note = area('รายละเอียด/หมายเหตุ (แสดงในรายการสัญญา)', c && c.note);
     // places: pick the branches first (one, a group, or every branch the supplier rents in), then the place in each; rent is per place per month
     var rents = {}, sel = {}, info = {}, cache = {}, chosenB = [];
     function learn(x) { info[x.id] = x; return x; }
