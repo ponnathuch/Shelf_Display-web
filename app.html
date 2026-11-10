@@ -1668,7 +1668,7 @@
       if (!rows.length) list.appendChild(el('p', 'empty-note', 'ไม่มีสัญญาในกลุ่มนี้'));
       rows.slice(0, con.limit).forEach(function (r) {
         var b = el('button', 'trow signline'); b.type = 'button'; if (r.key === con.sel) b.setAttribute('aria-current', 'true');
-        b.appendChild(el('b', 'slot-code', r.c.brand)); b.appendChild(el('span', 'chip', CON_KIND[r.kind])); b.appendChild(el('span', 'sub grow', [r.c.vendor, r.scope, r.c.note && String(r.c.note).slice(0, 80)].filter(Boolean).join(' · ')));
+        b.appendChild(el('b', 'slot-code', r.c.brand)); b.appendChild(el('span', 'chip', CON_KIND[r.kind])); b.appendChild(el('span', 'sub grow', [r.c.vendor, r.scope, String(r.c.note || (r.ag && r.ag.note) || '').slice(0, 80)].filter(Boolean).join(' · ')));
         if (r.rent != null) b.appendChild(el('span', 'sub', baht(r.rent) + ' บาท/เดือน'));
         if (con.canPay) { var pk = r.pay || 'pending'; b.appendChild(el('span', 'chip ' + (pk === 'paid' ? 'ok' : pk === 'partial' ? 'warn' : ''), PAY_TH[pk])); }
         if (r.c.status === 'pending' || (r.ag && r.ag.status === 'pending')) b.appendChild(el('span', 'chip warn', 'รออนุมัติ'));
