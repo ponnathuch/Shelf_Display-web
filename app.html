@@ -1331,6 +1331,52 @@
       });
     }).catch(function (e) { show(e.message, 'err'); });
   }
+  // Branch profile (design v3 Q33): chain, size, floor area, and the A/B grade of the chosen year.
+  var profYear = new Date().getFullYear();
+  function branchProfiles(v) {
+    var f = fold('ข้อมูลประจำสาขา', 'เครือ ขนาด ตร.ม. และเกรด A/B รายปี', false), fb = f.body; v.appendChild(f.node);
+    fb.appendChild(el('p', 'hint', 'เกรดเก็บแยกรายปี เพราะราคาของสัญญาใช้เกรดของปีที่ทำสัญญา ขนาดและ ตร.ม. เป็นค่าเดียวกับหน้า "พื้นที่" ของสาขา สาขาที่ปิดแล้วไม่แสดง'));
+    var bar = el('div', 'trow'), ys = el('select', 'input sortsel'), sum = el('span', 'sub grow'), list = el('div'); ys.setAttribute('aria-label', 'ปีของเกรด');
+    bar.appendChild(ys); bar.appendChild(sum); fb.appendChild(bar); fb.appendChild(list);
+    api('branch_profiles').then(function (d) {
+      var prof = {}, grade = {}, years = {};
+      d.profiles.forEach(function (p) { prof[p.branch_code] = p; });
+      d.grades.forEach(function (g) { grade[g.branch_code + g.year] = g.grade; years[g.year] = 1; });
+      years[profYear] = 1; years[profYear + 1] = 1;
+      Object.keys(years).sort().forEach(function (y) { var o = el('option', '', 'เกรดปี ' + y); o.value = y; ys.appendChild(o); });
+      ys.value = String(profYear); ys.onchange = function () { profYear = Number(ys.value); paint(); };
+      function pick(label, vals, cur, blank) {
+        var s = el('select', 'input sortsel'); s.setAttribute('aria-label', label); cur = cur || '';
+        if (vals.indexOf(cur) < 0) vals = vals.concat(cur); // keep a value typed elsewhere
+        [''].concat(vals.filter(Boolean)).forEach(function (x) { var o = el('option', '', x || blank); o.value = x; s.appendChild(o); });
+        s.value = cur; s.disabled = !d.can_edit; return s;
+      }
+      function count() {
+        var n = { A: 0, B: 0, '': 0 }; d.branches.forEach(function (u) { n[grade[u.code + profYear] || '']++; });
+        sum.textContent = 'เกรด A ' + n.A + ' สาขา · เกรด B ' + n.B + ' สาขา' + (n[''] ? ' · ยังไม่กำหนด ' + n[''] + ' สาขา' : '');
+      }
+      function paint() {
+        list.textContent = ''; count();
+        d.branches.forEach(function (u) {
+          var p = prof[u.code] || {}, r = el('div', 'trow');
+          var ch = pick('เครือของ ' + u.code, ['ICARE', 'PHARMAX', 'SUPER DRUG', 'VITAMINCLUB'], p.chain, 'เครือ'), sz = pick('ขนาดของ ' + u.code, ['S', 'M', 'L', 'XL'], p.size_label, 'ขนาด');
+          var sq = el('input', 'input cap'); sq.type = 'number'; sq.min = 1; sq.step = 'any'; sq.value = p.sqm == null ? '' : p.sqm; sq.placeholder = 'ตร.ม.'; sq.setAttribute('aria-label', 'ตร.ม. ของ ' + u.code); sq.disabled = !d.can_edit;
+          var gr = pick('เกรดปี ' + profYear + ' ของ ' + u.code, ['A', 'B'], grade[u.code + profYear], 'เกรด');
+          r.appendChild(el('b', 'slot-code', u.code)); r.appendChild(el('span', 'sub grow', u.name)); r.appendChild(ch); r.appendChild(sz); r.appendChild(sq); r.appendChild(gr);
+          if (d.can_edit) r.appendChild(button('บันทึก', 'alt', function () {
+            var b = { branch: u.code, chain: ch.value, size: sz.value || null, sqm: sq.value === '' ? null : Number(sq.value), year: profYear, grade: gr.value || null };
+            api('branch_profile_save', b).then(function () {
+              prof[u.code] = { branch_code: u.code, chain: b.chain, size_label: b.size, sqm: b.sqm }; grade[u.code + profYear] = b.grade; count();
+              show('บันทึก ' + u.code + ' แล้ว', 'ok');
+            }).catch(function (e) { show(e.message, 'err'); });
+          }));
+          list.appendChild(r);
+        });
+        if (!d.branches.length) list.appendChild(el('p', 'empty-note', 'ยังไม่มีรายชื่อสาขา'));
+      }
+      paint();
+    }).catch(function (e) { show(e.message, 'err'); });
+  }
   // The branch's quota spaces (cashier counter, storefront signs): how many it has, editable for contract approvers.
   function quotaCard(holder) {
     var d = flo.data, card = el('section', 'card'); card.appendChild(el('h2', 'sec', 'จุดโควตาของสาขานี้'));
@@ -2728,7 +2774,7 @@
     });
     var tb = el('div', 'toolbar'); tb.appendChild(seg); v.appendChild(tb);
     if (setTab === 'cashier') { cashierSettings(v); return; }
-    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและสัญญาป้าย', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการสัญญาป้ายได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติสัญญาจัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกสัญญาป้ายได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); spaceSettings(v); return; }
+    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและสัญญาป้าย', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการสัญญาป้ายได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติสัญญาจัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกสัญญาป้ายได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); spaceSettings(v); branchProfiles(v); return; }
     var fd = fold('ประเภทตำแหน่งสื่อ', 'เพดานต่อสาขา เพิ่มประเภทใหม่ได้', true), card = fd.body; v.appendChild(fd.node); card.classList.add('tset');
     card.appendChild(el('p', 'hint', 'เพดาน = จำนวนสื่อสูงสุดต่อสาขาในช่วงวันที่ชนกัน เว้นว่าง = ไม่จำกัด ประเภทที่ปิดการใช้งานจะไม่ให้เลือกตอนลงทะเบียน แต่แคมเปญเดิมยังอยู่'));
     var body = el('div'); card.appendChild(body);
