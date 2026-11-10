@@ -1363,13 +1363,17 @@
           var sq = el('input', 'input cap'); sq.type = 'number'; sq.min = 1; sq.step = 'any'; sq.value = p.sqm == null ? '' : p.sqm; sq.placeholder = 'ตร.ม.'; sq.setAttribute('aria-label', 'ตร.ม. ของ ' + u.code); sq.disabled = !d.can_edit;
           var gr = pick('เกรดปี ' + profYear + ' ของ ' + u.code, ['A', 'B'], grade[u.code + profYear], 'เกรด');
           r.appendChild(el('b', 'slot-code', u.code)); r.appendChild(el('span', 'sub grow', u.name)); r.appendChild(ch); r.appendChild(sz); r.appendChild(sq); r.appendChild(gr);
-          if (d.can_edit) r.appendChild(button('บันทึก', 'alt', function () {
+          // The list is long and the page message sits at the top, so the button itself reports the result.
+          var sv = button('บันทึก', 'alt', function () {
             var b = { branch: u.code, chain: ch.value, size: sz.value || null, sqm: sq.value === '' ? null : Number(sq.value), year: profYear, grade: gr.value || null };
+            function done(text) { sv.textContent = text; sv.disabled = false; setTimeout(function () { sv.textContent = 'บันทึก'; }, 2500); }
+            sv.disabled = true; sv.textContent = 'กำลังบันทึก';
             api('branch_profile_save', b).then(function () {
               prof[u.code] = { branch_code: u.code, chain: b.chain, size_label: b.size, sqm: b.sqm }; grade[u.code + profYear] = b.grade; count();
-              show('บันทึก ' + u.code + ' แล้ว', 'ok');
-            }).catch(function (e) { show(e.message, 'err'); });
-          }));
+              show('บันทึก ' + u.code + ' แล้ว', 'ok'); done('บันทึกแล้ว');
+            }).catch(function (e) { show(e.message, 'err'); done('ไม่สำเร็จ'); });
+          });
+          if (d.can_edit) r.appendChild(sv);
           list.appendChild(r);
         });
         if (!d.branches.length) list.appendChild(el('p', 'empty-note', 'ยังไม่มีรายชื่อสาขา'));
