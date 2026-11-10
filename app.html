@@ -188,7 +188,10 @@
   .rents label.f { margin-bottom: 0; }
   .floorgrid { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: flex-start; margin-bottom: var(--space-4); }
   .floorplan { flex: 3 1 var(--size-plan); min-width: 0; margin-bottom: 0; }
-  .floorpanel { flex: 1 1 var(--size-pane); min-width: 0; position: sticky; top: var(--size-bar); margin-bottom: 0; }
+  .floorpanel { flex: 1 1 var(--size-pane); min-width: 0; position: sticky; top: calc(var(--size-bar) + var(--size-target-lg) + var(--space-5)); margin-bottom: 0; }
+  /* Jump links to the sections of a branch page: the place list is long, so they stay in reach while scrolling. */
+  .jumpbar { position: sticky; top: var(--size-bar); z-index: 2; width: fit-content; max-width: 100%; margin-bottom: var(--space-4); border: 1px solid var(--c-line); }
+  .jumpto { scroll-margin-top: calc(var(--size-bar) + var(--size-target-lg) + var(--space-5)); }
   button.signline { width: 100%; text-align: left; font: inherit; color: inherit; background: none; border-width: 0 0 1px; cursor: pointer; }
   button.signline:hover, button.signline[aria-current="true"] { background: var(--c-brand-soft); }
   .signrow { padding: var(--space-3) 0; border-bottom: 1px solid var(--c-line); }
@@ -2219,10 +2222,16 @@
       row.appendChild(button('นำเข้ารายการป้ายจาก Template (.xlsx)', 'alt', function () { fs2.click(); })); row.appendChild(fs2);
       card.appendChild(row);
     }
-    grid.appendChild(card); grid.appendChild(detailPanel(holder)); holder.appendChild(grid);
-    if (isOffice()) holder.appendChild(signsCard(holder));
-    holder.appendChild(slotsCard(holder));
-    if (isOffice() && d.quota && d.quota.length) holder.appendChild(quotaCard(holder));
+    grid.appendChild(card); grid.appendChild(detailPanel(holder));
+    var secs = [['ผังร้าน', grid]];
+    if (isOffice()) secs.push(['สัญญาป้าย', signsCard(holder)]);
+    secs.push(['ตำแหน่งป้าย (' + d.slots.length + ')', slotsCard(holder)]);
+    if (isOffice() && d.quota && d.quota.length) secs.push(['จุดโควตา', quotaCard(holder)]);
+    var jump = el('nav', 'seg jumpbar'); jump.setAttribute('aria-label', 'ไปยังหัวข้อของสาขานี้'); holder.appendChild(jump);
+    secs.forEach(function (s) {
+      s[1].classList.add('jumpto'); holder.appendChild(s[1]);
+      var jb = el('button', '', s[0]); jb.type = 'button'; jb.onclick = function () { s[1].scrollIntoView(); }; jump.appendChild(jb);
+    });
   }
   // The plan image with one pin per placed, active place. Editors drag a pin to move it, or place a chosen place by tapping the plan.
   function planWithPins(holder, url) {
