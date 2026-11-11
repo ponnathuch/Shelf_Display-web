@@ -261,7 +261,9 @@
   .pastebox textarea.input { display: block; width: 100%; min-height: var(--size-thumb); resize: vertical; margin-top: var(--space-2); }
   .pastebox .row { margin-top: var(--space-2); }
   .agdlg { height: fit-content; max-width: calc(var(--size-pane) * 2); }
-  .agdlg > .btn { display: block; width: 100%; margin-top: var(--space-2); text-align: left; }
+  .agdlg .agopt { margin-top: var(--space-3); }
+  .agdlg .agopt > .btn { display: block; width: 100%; text-align: left; }
+  .agdlg .agopt > details.hist { margin-top: var(--space-1); }
   .agdlg .row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
   .conacts { margin: var(--space-2) 0 var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--c-line); }
   .paybox > .boxscroll { margin-top: 0; }
@@ -1848,7 +1850,18 @@
         dlg.appendChild(el('h2', 'sec', brand + ' มีข้อตกลงในช่วงวันนี้อยู่แล้ว'));
         dlg.appendChild(el('p', 'sub', 'ถ้าอยู่ใน TTA ใบเดียวกัน ให้ใส่ในข้อตกลงเดิม มูลค่า การอนุมัติ และงวดเงินจะรวมเป็นก้อนเดียว ข้อตกลงที่อนุมัติแล้วจะต้องอนุมัติใหม่'));
         r.agreements.forEach(function (a) {
-          dlg.appendChild(button('ใส่ในข้อตกลง ' + (a.tta_no || '(ยังไม่มีเลข TTA)') + ' · ' + thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) + ' · ' + a.lines + ' สัญญา' + (a.status === 'pending' ? ' · รออนุมัติ' : ' · อนุมัติแล้ว'), '', function () { fin(a.id); }));
+          var opt = el('div', 'agopt');
+          opt.appendChild(button('ใส่ในข้อตกลง ' + (a.tta_no || '(ยังไม่มีเลข TTA)') + ' · ' + thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) + ' · ' + a.lines.length + ' สัญญา' + (a.status === 'pending' ? ' · รออนุมัติ' : ' · อนุมัติแล้ว'), '', function () { fin(a.id); }));
+          // what is in it, so two agreements without a TTA number can be told apart
+          var det = el('details', 'hist'); det.appendChild(el('summary', '', 'ดูว่ามีอะไรในข้อตกลงนี้'));
+          a.lines.forEach(function (l) {
+            var where = l.kind === 'sign' ? (l.places ? l.branches + ' สาขา ' + l.places + ' ตำแหน่ง' : 'รอระบุตำแหน่ง') : l.branches ? l.branches + ' สาขา' : 'สาขาตามแพ็กเกจ';
+            det.appendChild(el('div', '', (l.kind === 'sign' ? 'สัญญาพื้นที่ ' + (l.sys_no || '') : 'สัญญาชั้นแคชเชียร์') + ' · ' + where + ' · ' + thDate(l.start_date) + ' ถึง ' + thDate(l.end_date) + (l.status === 'pending' ? ' · รออนุมัติ' : '')));
+          });
+          if (a.items.length) det.appendChild(el('div', '', 'รายการอื่น: ' + a.items.join(', ')));
+          if (a.total != null) det.appendChild(el('div', '', 'มูลค่ารวม ' + baht(a.total) + ' บาท'));
+          if (!a.lines.length && !a.items.length) det.appendChild(el('div', '', 'ยังไม่มีสัญญาหรือรายการ'));
+          opt.appendChild(det); dlg.appendChild(opt);
         });
         var row = el('div', 'row');
         row.appendChild(button('สร้างข้อตกลงใหม่ (คนละ TTA)', 'alt', function () { fin(null); }));
