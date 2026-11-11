@@ -357,6 +357,7 @@
   .agdlg .agopt > details.hist { margin-top: var(--space-1); }
   .agdlg .row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
   .gapnote { margin: var(--space-3) 0; }
+  .lacknote { margin: var(--space-3) 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-s); border: 1px solid var(--c-warn-line); background: var(--c-warn-soft); color: var(--c-warn); font-weight: bold; }
   .conacts { margin: var(--space-2) 0 var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--c-line); }
   .paybox > .boxscroll { margin-top: 0; }
   .fieldbad > .t { color: var(--c-err); font-weight: bold; }
@@ -538,9 +539,12 @@
     return u;
   }
   function fromLine(c) { return c.status === 'approved' && String(c.approved_by || '').indexOf('line:') === 0; }
-  function incomplete(c) {
-    return c.status === 'approved' && (!c.brand || !(c.position_types || c.shd_position_types));
+  // what an approved campaign still lacks (approved from LINE before the marketing team filled it in)
+  function missingOf(c) {
+    if (c.status !== 'approved') return [];
+    return [!c.brand ? 'แบรนด์' : '', !(c.position_types || c.shd_position_types) ? 'ประเภทตำแหน่ง' : ''].filter(Boolean);
   }
+  function incomplete(c) { return missingOf(c).length > 0; }
   function toneOf(c) {
     if (c.status === 'cancelled') return 'tone-err';
     if (c.status === 'pending') return 'tone-warn';
@@ -565,7 +569,7 @@
     if (opts.office && c.photo_count > 1) chips.appendChild(el('span', 'chip', c.photo_count + ' รูป'));
     if (c.status === 'pending' && c.start_date && daysTo(c.start_date) <= 14) chips.appendChild(el('span', 'chip err', 'เร่งด่วน'));
     if (opts.office && fromLine(c)) chips.appendChild(el('span', 'chip', 'อนุมัติจาก LINE'));
-    if (opts.office && incomplete(c)) chips.appendChild(el('span', 'chip warn', 'ต้องกรอกข้อมูลเพิ่ม'));
+    if (opts.office && incomplete(c)) chips.appendChild(el('span', 'chip warn', 'ยังไม่ได้กรอก: ' + missingOf(c).join(', ')));
     if (opts.office && c.wait) chips.appendChild(el('span', 'chip warn', 'รอข้อมูล'));
     if (c.open_ended && c.status !== 'approved') chips.appendChild(el('span', 'chip ok', 'ไม่มีวันหมดอายุ'));
     left.appendChild(chips);
@@ -1011,7 +1015,9 @@
         });
         actions.push(ok);
       }
-      actions.push(button('แก้ไข', 'alt', function () { form(c); }));
+      var lack = missingOf(c);
+      if (lack.length) v.appendChild(el('p', 'lacknote', 'อนุมัติจาก LINE แล้ว แต่ยังไม่ได้กรอก ' + lack.join(' และ ') + ' กด "แก้ไข" เพื่อกรอกให้ครบ'));
+      actions.push(button('แก้ไข', lack.length ? '' : 'alt', function () { form(c); }));
       if (canWait(c)) actions.push(waitButton(c, function () { detailNote = 'บันทึกแล้ว ดูในประวัติด้านล่าง'; detail(id); }));
       if (isApprover() && c.status === 'approved') {
         var back = button('ถอนอนุมัติ', 'alt', function () {
