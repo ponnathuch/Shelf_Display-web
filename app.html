@@ -326,7 +326,7 @@
 
   var ROLE_TH = { ADMIN: 'ผู้ดูแลระบบ', APPROVER: 'ผู้อนุมัติสื่อ', REGISTRANT: 'ผู้ลงทะเบียน', STAFF: 'สาขา', WAREHOUSE: 'คลัง' };
   var ERR = {
-    'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
+    'missing:purchase': 'ยังไม่ได้เลือก Med หรือ Nonmed ของ TTA ใหม่', 'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
     'missing:dates': 'ยังไม่ได้ใส่วันเริ่ม และวันสิ้นสุด (หรือติ๊ก "ไม่มีวันหมดอายุ")', 'missing:agreement_no': 'ยังไม่ได้ใส่เลข TTA',
     hang_min: 'ป้ายแขวนต้องเช่าอย่างน้อย 3 เดือน ปรับวันสิ้นสุด หรือเอาตำแหน่งป้ายแขวนออก',
     plan_ai_down: 'AI อ่านผังไม่ได้ในตอนนี้ ลองใหม่ภายหลัง หรือปักหมุดเอง', plan_limit: 'ใช้ AI ครบจำนวนต่อวันแล้ว ลองใหม่พรุ่งนี้ หรือปักหมุดเอง', no_plan: 'สาขานี้ยังไม่มีรูปผัง อัปโหลดผังก่อน',
@@ -1802,6 +1802,7 @@
     function fld2(text, type, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el('input', 'input'); i.type = type; i.value = val || ''; l.appendChild(i); g2.appendChild(l); return i; }
     var agr = fld2('เลข TTA', 'text', c && c.agreement_no), adn = fld2('เลขโฆษณา', 'text', c && c.ad_no); ttaWatch(agr, c && c.agreement_id);
     var adx = fld2('วันหมดอายุโฆษณา', 'date', c && c.ad_expiry), sup = fld2('ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c && c.supplier_contact);
+    var pur = !savedId && !agId ? purchaseSel(g2, '', 'ฝ่าย Med/Nonmed (ใช้เมื่อสร้าง TTA ใหม่)') : null;
     var how = fld('วิธีวาง/ข้อห้าม (สาขาจะเห็น)', 'textarea', c && c.how_to_place); how.rows = 2; d.appendChild(how.parentNode);
     var ret = fld('หลังสิ้นสุดให้ทำอย่างไร (สาขาจะเห็น)', 'textarea', c && c.return_to); ret.rows = 2; d.appendChild(ret.parentNode);
     // Branches: none chosen = every branch, like media campaigns.
@@ -1830,6 +1831,7 @@
       (savedId || agId ? Promise.resolve(null) : chooseAgreement(brand.value.trim(), from.value, to.value)).then(function (pick) {
       if (pick === false) { save.disabled = false; return; }
       if (pick) { b.agreement_id = pick; agId = pick; }
+      if (!b.id && !b.agreement_id) { if (!pur || !pur.value) { save.disabled = false; if (pur) badFields([[pur, 'เลือก Med หรือ Nonmed สำหรับ TTA ใหม่']]); return; } b.purchase = pur.value; }
       api('cashier_save', b).then(function (r) {
         savedId = r.id; told = told || r.notified; toldOnce = told; return pm.flush(r.id);
       }).then(function () { afterNote = !c && !agId ? ['บันทึกแล้ว รออนุมัติ TTA ก่อนจึงจะแจ้งคลังและแสดงให้สาขาเห็น', 'ok'] : [notify.checked && !told ? 'บันทึกแล้ว แต่แจ้งกลุ่มคลังไม่สำเร็จ กด "แจ้งคลังอีกครั้ง" ที่รายการเช่า' : notify.checked ? 'บันทึกแล้ว และแจ้งกลุ่มคลังแล้ว' : 'บันทึกแล้ว', notify.checked && !told ? 'err' : 'ok']; (formBack || cashier)(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
@@ -1852,7 +1854,7 @@
     dlg.appendChild(el('h2', 'sec', (sign ? 'รายการเช่าพื้นที่ ' + (l.sys_no || '') : 'รายการเช่าชั้นแคชเชียร์') + ' · ' + a.brand));
     var dl = el('dl', 'facts one');
     fact(dl, 'TTA', (a.tta_no || 'ยังไม่มีเลข TTA') + ' · ' + thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) + (a.status === 'pending' ? ' · รออนุมัติ' : ' · อนุมัติแล้ว'));
-    fact(dl, 'เวนเดอร์', a.vendor); fact(dl, 'มูลค่ารวมของ TTA', a.total != null ? baht(a.total) + ' บาท' : '');
+    fact(dl, 'เวนเดอร์', a.vendor); fact(dl, 'ฝ่าย', PURCHASE[a.purchase] || 'ยังไม่ระบุ Med/Nonmed'); fact(dl, 'มูลค่ารวมของ TTA', a.total != null ? baht(a.total) + ' บาท' : '');
     fact(dl, 'ช่วงเวลาของรายการนี้', thDate(l.start_date) + ' ถึง ' + thDate(l.end_date) + (l.status === 'pending' ? ' · รออนุมัติ' : ''));
     if (!sign) fact(dl, 'สาขา', (l.branch_list.length ? l.branch_list.join(', ') : 'สาขาตามแพ็กเกจ') + (l.house ? ' · House Brand' : ''));
     fact(dl, 'วิธีวาง/ข้อห้าม', l.how_to_place); fact(dl, 'หมายเหตุ', l.note || a.note);
@@ -1870,6 +1872,13 @@
     row.appendChild(back); dlg.appendChild(row);
     dlg.addEventListener('close', function () { dlg.remove(); });
     document.body.appendChild(dlg); dlg.showModal(); back.focus();
+  }
+  // Med / Nonmed team of a TTA (required for a new one)
+  var PURCHASE = { med: 'Med (ยา)', nonmed: 'Nonmed (ไม่ใช่ยา)' };
+  function purchaseSel(box, val, label) {
+    var l = el('label', 'f'), s = el('select', 'input'); l.appendChild(el('span', 't', label));
+    [['', 'เลือก...'], ['med', PURCHASE.med], ['nonmed', PURCHASE.nonmed]].forEach(function (o) { var x = el('option', '', o[1]); x.value = o[0]; s.appendChild(x); });
+    s.value = val || ''; l.appendChild(s); box.appendChild(l); return s;
   }
   function chooseAgreement(brand, from, to) {
     return api('agreement_match', { brand: brand, start_date: from, end_date: to }).catch(function () { return { agreements: [] }; }).then(function (r) {
@@ -2109,6 +2118,7 @@
     var tta = fld('เลข TTA', 'text', a.tta_no), vendor = fld('เวนเดอร์', 'text', a.vendor), brand = fld('แบรนด์', 'text', a.brand);
     ttaWatch(tta, a.id);
     var from = fld('เริ่ม', 'date', a.start_date), to = fld('สิ้นสุด', 'date', a.end_date), total = fld('มูลค่ารวม (บาท)', 'number', a.total); total.min = 0;
+    var pur = purchaseSel(g, a.purchase, 'ฝ่าย Med/Nonmed');
     d.appendChild(g);
     // A name not in the NAV list is still accepted, only flagged.
     var nav = null, vHint = el('span', 'hint'); vendor.parentNode.appendChild(vHint);
@@ -2176,7 +2186,7 @@
     var note = fld('หมายเหตุ', 'textarea', a.note); note.rows = 2; d.appendChild(note.parentNode);
     var row = el('div', 'row');
     var save = button('บันทึก', '', function () {
-      var miss = emptyOf([[tta, 'ใส่เลข TTA'], [brand, 'ใส่แบรนด์'], [from, 'ใส่วันเริ่ม'], [to, 'ใส่วันสิ้นสุด']]); if (miss.length) { badFields(miss); return; }
+      var miss = emptyOf([[tta, 'ใส่เลข TTA'], [brand, 'ใส่แบรนด์'], [from, 'ใส่วันเริ่ม'], [to, 'ใส่วันสิ้นสุด']].concat(a.id ? [] : [[pur, 'เลือก Med หรือ Nonmed']])); if (miss.length) { badFields(miss); return; }
       if (to.value < from.value) { badFields([[to, 'วันสิ้นสุดต้องไม่ก่อนวันเริ่ม']]); return; }
       var used = items.filter(function (x) { return x.item || x.amount !== ''; }), ibad = [];
       used.forEach(function (x) {
@@ -2186,7 +2196,7 @@
       });
       if (ibad.length) { badFields(ibad); return; }
       save.disabled = true;
-      api('agreement_save', { items: used.map(function (x) { return { item: x.item, amount: Number(x.amount), start_date: x.start_date || null, end_date: x.end_date || null, rate_id: x.rate_id, note: x.note || null }; }), id: a.id || undefined, tta_no: tta.value, vendor: vendor.value, vendor_no: vendorNo(), brand: brand.value, start_date: from.value, end_date: to.value, total: total.value === '' ? null : Number(total.value), designated: dz.getCodes(), note: note.value })
+      api('agreement_save', { items: used.map(function (x) { return { item: x.item, amount: Number(x.amount), start_date: x.start_date || null, end_date: x.end_date || null, rate_id: x.rate_id, note: x.note || null }; }), id: a.id || undefined, purchase: pur.value || undefined, tta_no: tta.value, vendor: vendor.value, vendor_no: vendorNo(), brand: brand.value, start_date: from.value, end_date: to.value, total: total.value === '' ? null : Number(total.value), designated: dz.getCodes(), note: note.value })
         .then(function (r) { afterNote = r.tta_dup ? ['บันทึก TTA แล้ว แต่เลข TTA นี้ซ้ำกับ TTA อื่น ตรวจเลขอีกครั้ง', 'err'] : ['บันทึก TTA แล้ว', 'ok']; contracts(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', contracts)); d.appendChild(row); v.appendChild(d);
@@ -2206,7 +2216,7 @@
     var mine = a.registrant_user === (sess.staff && sess.staff.u), waiting = a.status === 'pending' || review;
     box.appendChild(el('h3', '', (r.kind === 'deal' ? 'TTA ' : 'TTA ที่รายการนี้อยู่ ') + (a.tta_no || '')));
     var dl = el('dl', 'facts one');
-    fact(dl, 'เลข TTA', a.tta_no); fact(dl, 'เวนเดอร์', a.vendor); fact(dl, 'ช่วงเวลา', a.start_date ? thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) : '');
+    fact(dl, 'เลข TTA', a.tta_no); fact(dl, 'เวนเดอร์', a.vendor); fact(dl, 'ฝ่าย', PURCHASE[a.purchase] || 'ยังไม่ระบุ Med/Nonmed'); fact(dl, 'ช่วงเวลา', a.start_date ? thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) : '');
     fact(dl, 'มูลค่ารวม', a.total != null ? baht(a.total) + ' บาท' : ''); fact(dl, 'ผู้ลงทะเบียน', a.registrant_name);
     fact(dl, 'รายการอื่น', (a.items || []).map(function (x) { return x.item + ' ' + baht(x.amount) + ' บาท' + (x.start_date ? ' (' + thDate(x.start_date) + (x.end_date ? ' ถึง ' + thDate(x.end_date) : '') + ')' : ''); }).join(', '));
     fact(dl, 'อนุมัติโดย', a.approved_by && a.approved_by !== 'migrated' ? a.approved_by + (a.approved_at ? ' · ' + thDate(bkk(a.approved_at).slice(0, 10)) : '') : '');
@@ -2827,6 +2837,7 @@
     ttaWatch(agr, edit ? c.agreement_id : agId);
     if (renew && c.agreement_no) { agr.placeholder = 'เดิม: ' + c.agreement_no; agr.parentNode.appendChild(button('ใช้เลขเดิม', 'alt', function () { agr.value = c.agreement_no; })); }
     var adx = add(g2, 'วันหมดอายุโฆษณา', 'date', renew ? '' : c && c.ad_expiry), sup = add(g2, 'ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c && c.supplier_contact);
+    var pur = !savedId && !agId ? purchaseSel(g2, '', 'ฝ่าย Med/Nonmed (ใช้เมื่อสร้าง TTA ใหม่)') : null;
     function area(text, val) { var f = fld(text, 'textarea', val); f.i.rows = 2; d.appendChild(f.l); return f.i; }
     var how = area('วิธีวาง/ข้อห้าม (สาขาจะเห็น)', c && c.how_to_place), ret = area('หลังสิ้นสุดให้ทำอย่างไร (สาขาจะเห็น)', c && c.return_to), note = area('รายละเอียด/หมายเหตุ (แสดงในรายการเช่า)', c && c.note);
     // places: pick the branches first (one, a group, or every branch the supplier rents in), then the place in each; rent is per place per month
@@ -3143,6 +3154,7 @@
         (savedId || agId ? Promise.resolve(null) : chooseAgreement(brand.value.trim(), from.value, to.value)).then(function (pick) {
           if (pick === false) { save.disabled = false; return; }
           if (pick) { b.agreement_id = pick; agId = pick; }
+          if (!b.id && !b.agreement_id) { if (!pur || !pur.value) { save.disabled = false; if (pur) badFields([[pur, 'เลือก Med หรือ Nonmed สำหรับ TTA ใหม่']]); return; } b.purchase = pur.value; }
           api('sign_save', b).then(function (r) { savedId = r.id; flo.signsReq = null; return pm.flush(r.id); }).then(function () { var msg = edit ? 'บันทึกแล้ว' : agId ? 'บันทึกแล้ว TTA ต้องอนุมัติรายการนี้ก่อนจึงจะแจ้งคลังได้' : 'บันทึกแล้ว รออนุมัติ TTA ก่อนจึงจะแจ้งคลังและแสดงให้สาขาเห็น'; if (formBack) { afterNote = [msg, 'ok']; formBack(); } else { show(msg, 'ok'); loadFloor(holder); } })
             .catch(function (e) { save.disabled = false; show(e.code === 'slot_taken' ? 'ตำแหน่งเหล่านี้มีรายการเช่าอื่นอยู่ในช่วงวันที่ชนกัน: ' + e.data.slots.join(', ') + ' (เอาออกหรือเปลี่ยนวันที่)' : e.message, 'err'); });
         });
