@@ -1909,6 +1909,7 @@
     var g = el('div', 'grid');
     function fld(text, type, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el(type === 'textarea' ? 'textarea' : 'input', 'input'); if (type !== 'textarea') i.type = type; i.value = val == null ? '' : val; l.appendChild(i); g.appendChild(l); return i; }
     var tta = fld('เลข TTA', 'text', a.tta_no), vendor = fld('เวนเดอร์', 'text', a.vendor), brand = fld('แบรนด์', 'text', a.brand);
+    tta.parentNode.appendChild(ttaNextButton(tta, function () { return from.value; }));
     var from = fld('เริ่ม', 'date', a.start_date), to = fld('สิ้นสุด', 'date', a.end_date), total = fld('มูลค่ารวม (บาท)', 'number', a.total); total.min = 0;
     d.appendChild(g);
     // A name not in the NAV list is still accepted, only flagged.
@@ -1934,7 +1935,7 @@
       if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
       save.disabled = true;
       api('agreement_save', { id: a.id, tta_no: tta.value, vendor: vendor.value, vendor_no: vendorNo(), brand: brand.value, start_date: from.value, end_date: to.value, total: total.value === '' ? null : Number(total.value), designated: dz.getCodes(), note: note.value })
-        .then(function () { afterNote = ['บันทึกข้อตกลงแล้ว', 'ok']; contracts(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
+        .then(function (r) { afterNote = r.tta_dup ? ['บันทึกข้อตกลงแล้ว แต่เลข TTA นี้ซ้ำกับข้อตกลงอื่น ตรวจเลขอีกครั้ง', 'err'] : ['บันทึกข้อตกลงแล้ว', 'ok']; contracts(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', contracts)); d.appendChild(row); v.appendChild(d);
   }
@@ -2453,6 +2454,7 @@
       b.appendChild(hh);
       var dl = el('dl', 'facts one');
       fact(dl, 'ช่วงเวลา', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) + (c._raw ? ' (ตามวันหมดอายุโฆษณา)' : ''));
+      fact(dl, 'ชั้นที่เช่า', shelfText((c.slots || []).filter(function (x) { return x.slot_id === flo.sel; })[0] || {}));
       fact(dl, 'หลังสิ้นสุดให้ทำอย่างไร', c.return_to); fact(dl, 'วิธีวาง/ข้อห้าม', c.how_to_place);
       fact(dl, 'เวนเดอร์', c.vendor); fact(dl, 'ค่าเช่า', c.rent != null ? baht(c.rent) + ' บาท/เดือน' : ''); fact(dl, 'เลขที่สัญญา/TTA', c.agreement_no);
       fact(dl, 'เลขโฆษณา', c.ad_no ? c.ad_no + (c.ad_expiry ? ' (หมดอายุ ' + thDate(c.ad_expiry) + ')' : '') : ''); fact(dl, 'ติดต่อ', c.supplier_contact); fact(dl, 'หมายเหตุ', c.note);
@@ -2490,7 +2492,7 @@
       list.textContent = ''; more.textContent = '';
       var q = flo.signNeedle.trim().toLowerCase();
       var rows = mine.map(normEnd).filter(function (c) {
-        var codes = c.slots.filter(function (x) { return x.branch_code === flo.branch; }).map(function (x) { return x.code; }).join(' ');
+        var codes = c.slots.filter(function (x) { return x.branch_code === flo.branch; }).map(function (x) { var s = shelfText(x); return x.code + (s ? ' (' + s + ')' : ''); }).join(' ');
         return !q || (c.brand + ' ' + (c.vendor || '') + ' ' + codes).toLowerCase().indexOf(q) >= 0;
       });
       if (!rows.length) list.appendChild(el('p', 'empty-note', mine.length ? 'ไม่พบสัญญาที่ตรงกับคำค้น' : 'ยังไม่มีสัญญาป้ายในสาขานี้'));
@@ -2507,6 +2509,19 @@
     sb.oninput = function () { flo.signNeedle = sb.value; flo.signLimit = 15; paint(); }; paint();
     return card;
   }
+  // "Next number" beside an agreement-number field: MK + Buddhist year + running number of the start year (MK70/001 for 2027).
+  function ttaNextButton(input, startDate) {
+    return button('เลขถัดไป', 'alt', function () {
+      api('tta_next', { start_date: startDate() || undefined }).then(function (r) { input.value = r.tta_no; }).catch(function (e) { show(e.message, 'err'); });
+    });
+  }
+  // The shelves a contract takes at a place: key for the form ('' sign only, 'w' whole, 'f-t') and words for lists.
+  function shelfKey(x) { return x.whole ? 'w' : x.shelf_from ? x.shelf_from + '-' + x.shelf_to : ''; }
+  function shelfText(x) {
+    if (x.whole) return 'ทั้งตู้';
+    if (!x.shelf_from) return '';
+    return x.shelf_from === 1 ? 'ชั้นบน ' + x.shelf_to + ' ชั้น' : x.shelf_from === x.shelf_to ? 'ชั้นที่ ' + x.shelf_from : 'ชั้นที่ ' + x.shelf_from + '-' + x.shelf_to;
+  }
   function signForm(holder, c, presetSlot, renew) {
     rememberScroll();
     var savedId = c && !renew ? c.id : null, agId = formAgreement; formAgreement = null;
@@ -2520,14 +2535,18 @@
     d.appendChild(g); navAttach(d, brand, vendor);
     var g2 = el('div', 'grid'); d.appendChild(g2);
     var agr = add(g2, 'เลขที่สัญญา/TTA', 'text', renew ? '' : c && c.agreement_no), adn = add(g2, 'เลขโฆษณา', 'text', c && c.ad_no);
+    if (!edit) agr.parentNode.appendChild(ttaNextButton(agr, function () { return from.value; }));
     if (renew && c.agreement_no) { agr.placeholder = 'เดิม: ' + c.agreement_no; agr.parentNode.appendChild(button('ใช้เลขเดิม', 'alt', function () { agr.value = c.agreement_no; })); }
     var adx = add(g2, 'วันหมดอายุโฆษณา', 'date', renew ? '' : c && c.ad_expiry), sup = add(g2, 'ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c && c.supplier_contact);
     function area(text, val) { var f = fld(text, 'textarea', val); f.i.rows = 2; d.appendChild(f.l); return f.i; }
     var how = area('วิธีวาง/ข้อห้าม (สาขาจะเห็น)', c && c.how_to_place), ret = area('หลังสิ้นสุดให้ทำอย่างไร (สาขาจะเห็น)', c && c.return_to), note = area('รายละเอียด/หมายเหตุ (แสดงในรายการสัญญา)', c && c.note);
     // places: pick the branches first (one, a group, or every branch the supplier rents in), then the place in each; rent is per place per month
-    var rents = {}, sel = {}, info = {}, cache = {}, chosenB = [];
+    var rents = {}, takes = {}, sel = {}, info = {}, cache = {}, chosenB = [];
     function learn(x) { info[x.id] = x; return x; }
-    (c ? c.slots : []).forEach(function (x) { sel[x.slot_id] = true; rents[x.slot_id] = x.rent; learn({ id: x.slot_id, branch_code: x.branch_code, code: x.code, kind: x.kind }); });
+    // shelves of a Section: from the place list (slot_pick) or the open floor page; a header place not loaded yet gets 6 to choose from
+    function shelvesOf(id) { var x = info[id]; return x.shelves != null ? x.shelves : x.fixture ? x.fixture.shelves.length : x.kind === 'header' ? 6 : 0; }
+    function takeBody(id) { var v = takes[id] || '', m = v.split('-'); return v === 'w' ? { whole: true } : v ? { shelf_from: Number(m[0]), shelf_to: Number(m[1]) } : {}; }
+    (c ? c.slots : []).forEach(function (x) { sel[x.slot_id] = true; rents[x.slot_id] = x.rent; takes[x.slot_id] = shelfKey(x); learn({ id: x.slot_id, branch_code: x.branch_code, code: x.code, kind: x.kind }); });
     if (flo.data && flo.branch) cache[flo.branch] = flo.data.slots.filter(function (x) { return x.active && x.kind !== 'temp'; }).map(learn);
     if (presetSlot && info[presetSlot]) sel[presetSlot] = true;
     function slotsOf(b) { return cache[b] || []; }
@@ -2554,7 +2573,21 @@
           var ch = el('span', 'chip'), ri = el('input', 'input mini'); ri.type = 'number'; ri.min = 0; ri.placeholder = 'บาท/เดือน'; ri.value = rents[id] == null ? '' : rents[id];
           ri.setAttribute('aria-label', 'ค่าเช่า ' + b + ' ' + info[id].code); ri.oninput = function () { rents[id] = ri.value === '' ? null : Number(ri.value); };
           var x = el('button', 'chip-x', 'ลบ'); x.type = 'button'; x.setAttribute('aria-label', 'ลบ ' + info[id].code); x.onclick = function () { delete sel[id]; paintRows(); };
-          ch.appendChild(document.createTextNode(info[id].code + ' ')); ch.appendChild(ri); ch.appendChild(x); chips.appendChild(ch);
+          ch.appendChild(document.createTextNode(info[id].code + ' '));
+          var n = shelvesOf(id);
+          if (n) {
+            // which shelves this brand rents: the sign only, the top N, one lower shelf, or the whole fixture
+            var ts = el('select', 'input mini'); ts.setAttribute('aria-label', 'ชั้นที่เช่า ' + b + ' ' + info[id].code);
+            var opts = [['', 'ป้ายอย่างเดียว']], k;
+            for (k = 1; k <= n; k++) opts.push(['1-' + k, 'ชั้นบน ' + k + ' ชั้น']);
+            for (k = 2; k <= n; k++) opts.push([k + '-' + k, 'เฉพาะชั้นที่ ' + k]);
+            opts.push(['w', 'ทั้งตู้']);
+            if (takes[id] && !opts.some(function (o) { return o[0] === takes[id]; })) opts.push([takes[id], 'ชั้น ' + takes[id]]); // saved before the shelf count changed
+            opts.forEach(function (o) { var op = el('option', '', o[1]); op.value = o[0]; ts.appendChild(op); });
+            ts.value = takes[id] || ''; ts.onchange = function () { takes[id] = ts.value; };
+            ch.appendChild(ts);
+          }
+          ch.appendChild(ri); ch.appendChild(x); chips.appendChild(ch);
         });
         row.appendChild(chips);
         var add = el('input', 'input'), dl = el('datalist'); dl.id = 'sp-' + b; add.type = 'text'; add.setAttribute('list', dl.id); add.placeholder = '+ ตำแหน่งของ ' + b; add.setAttribute('aria-label', 'เพิ่มตำแหน่งของ ' + b);
@@ -2634,14 +2667,29 @@
     file.onchange = function () { var f = file.files[0]; if (!f) return; f.text().then(runImport); file.value = ''; };
     var csvBox = el('div', 'csvbox'); csvBox.appendChild(io); csvBox.appendChild(paste); csvBox.appendChild(file);
     sb.appendChild(csvBox);
-    sb.appendChild(bulk); sb.appendChild(rowsBox);
+    sb.appendChild(bulk);
+    // default rent from the yearly price table, for the places whose shelves are chosen
+    var quote = el('div', 'linker'); quote.appendChild(button('คิดค่าเช่าตามตารางราคา', 'alt', function () {
+      var ids = Object.keys(sel).filter(function (id) { return info[id] && chosenB.indexOf(info[id].branch_code) >= 0 && takes[id]; });
+      if (!from.value) { show('ใส่วันเริ่มก่อน ราคาใช้ตารางของปีที่เริ่มสัญญา', 'err'); return; }
+      if (!ids.length) { show('เลือกชั้นที่เช่า (ชั้นบน N ชั้น หรือทั้งตู้) ของตำแหน่งก่อน', 'err'); return; }
+      api('shelf_quote', { start_date: from.value, items: ids.map(function (id) { var o = takeBody(id); o.slot_id = Number(id); return o; }) }).then(function (r) {
+        var none = [];
+        r.prices.forEach(function (q) { if (q.price == null) none.push(info[q.slot_id].branch_code + ' ' + info[q.slot_id].code); else rents[q.slot_id] = q.price; });
+        paintRows();
+        show('ใส่ค่าเช่าจากตารางราคาปี ' + r.year + (r.draft ? ' (ฉบับร่าง)' : '') + ' ให้ ' + (r.prices.length - none.length) + ' ตำแหน่ง' +
+          (none.length ? ' ไม่มีราคาในตาราง ' + none.length + ' ตำแหน่ง: ' + none.slice(0, 8).join(', ') + (none.length > 8 ? ' ...' : '') : ''), none.length ? 'err' : 'ok');
+      }).catch(function (e) { show(e.message, 'err'); });
+    }));
+    quote.appendChild(el('span', 'sub', 'ใช้ราคาของปีที่เริ่มสัญญาและเกรดของสาขา แก้ตัวเลขเองได้หลังกด'));
+    sb.appendChild(quote); sb.appendChild(rowsBox);
     d.appendChild(sb);
     var pm = photoManager({ addAction: 'sign_photo_add', removeAction: 'sign_photo_remove' });
     d.appendChild(el('h3', '', 'รูปตัวอย่าง')); d.appendChild(pm.node);
     if (edit) api('sign_photos', { id: c.id }).then(function (r) { pm.setExisting(r.photos); }).catch(function () { /* the form works without the photos */ });
     var row = el('div', 'row');
     var save = button('บันทึก', '', function () {
-      var slots = Object.keys(sel).filter(function (id) { return info[id] && chosenB.indexOf(info[id].branch_code) >= 0; }).map(function (id) { return { slot_id: Number(id), rent: rents[id] == null ? null : rents[id] }; });
+      var slots = Object.keys(sel).filter(function (id) { return info[id] && chosenB.indexOf(info[id].branch_code) >= 0; }).map(function (id) { var o = takeBody(id); o.slot_id = Number(id); o.rent = rents[id] == null ? null : rents[id]; return o; });
       if (!brand.value.trim() || !from.value || !to.value) { show('ใส่แบรนด์ วันเริ่ม และวันสิ้นสุดก่อน', 'err'); return; }
       if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
       if (!slots.length) { show('เลือกสาขาและตำแหน่งที่เช่าอย่างน้อย 1 ตำแหน่ง', 'err'); return; }
