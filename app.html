@@ -294,11 +294,11 @@
     bad_target: 'แคมเปญที่เลือกผูกไม่ได้ (ยกเลิกแล้วหรือเป็นเคสจากคลัง)',
     'missing:ad': 'ยังไม่ได้ใส่เลขโฆษณาและวันหมดอายุ', 'missing:branches': 'ยังไม่ได้เลือกสาขา',
     self: 'อนุมัติข้อตกลงที่ตัวเองลงทะเบียนไม่ได้', bad_reason: 'ใส่เหตุผลก่อน', bad_note: 'พิมพ์ว่ารออะไรอยู่ก่อน', bad_due_date: 'เลือกวันที่ให้สาขาส่งรูปก่อน',
-    no_places: 'ยังอนุมัติไม่ได้ สัญญาป้ายในข้อตกลงนี้ยังไม่ได้ระบุตำแหน่ง (รอระบุตำแหน่ง) เปิดสัญญาแล้วเลือกตำแหน่งก่อน',
+    no_places: 'ยังอนุมัติไม่ได้ สัญญาพื้นที่ในข้อตกลงนี้ยังไม่ได้ระบุตำแหน่ง (รอระบุตำแหน่ง) เปิดสัญญาแล้วเลือกตำแหน่งก่อน',
     jt_off: 'ยังไม่ได้ตั้งการเชื่อม Job Tracker กรุณาแจ้งผู้ดูแลระบบ', no_branches: 'สัญญานี้ยังไม่มีสาขา', jt_refused: 'Job Tracker เปิดงานไม่สำเร็จ', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
     expired: 'เซสชันหมดอายุ กรุณาเข้าใหม่จากเมนู Job Tracker', bad_signature: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker',
     malformed: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker', reused: 'ลิงก์ถูกใช้แล้ว กรุณาเข้าใหม่จากเมนู Job Tracker',
-    forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', line_down: 'ส่งข้อความเข้ากลุ่มคลังไม่สำเร็จ ลองใหม่อีกครั้ง', slot_rented: 'ตำแหน่งนี้มีสัญญาป้ายที่ยังใช้งานอยู่ ยกเลิกหรือย้ายสัญญาก่อนจึงจะลบได้ (หรือแก้เป็นเลิกใช้)', code_in_use: 'ชื่อนี้เป็นตำแหน่งอื่น (หัวชั้น/กระจก) อยู่แล้วในสาขา ให้ใช้ชื่ออื่น', no_branches: 'ไม่พบรายชื่อสาขาให้สร้างตำแหน่ง', branch_not_in_campaign: 'แคมเปญนี้ไม่ได้ระบุสาขานี้ ผูกได้เฉพาะสาขาที่อยู่ในแคมเปญ', bad_slots: 'ตำแหน่งที่เลือกใช้ไม่ได้ (ถูกลบหรือเลิกใช้แล้ว)', bad_slot: 'รหัสตำแหน่งในไฟล์ไม่ถูกต้อง', bad_branches: 'รหัสสาขาไม่ถูกต้อง (รูปแบบ เช่น IC008)'
+    forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', line_down: 'ส่งข้อความเข้ากลุ่มคลังไม่สำเร็จ ลองใหม่อีกครั้ง', slot_rented: 'ตำแหน่งนี้มีสัญญาพื้นที่ที่ยังใช้งานอยู่ ยกเลิกหรือย้ายสัญญาก่อนจึงจะลบได้ (หรือแก้เป็นเลิกใช้)', code_in_use: 'ชื่อนี้เป็นตำแหน่งอื่น (หัวชั้น/กระจก) อยู่แล้วในสาขา ให้ใช้ชื่ออื่น', no_branches: 'ไม่พบรายชื่อสาขาให้สร้างตำแหน่ง', branch_not_in_campaign: 'แคมเปญนี้ไม่ได้ระบุสาขานี้ ผูกได้เฉพาะสาขาที่อยู่ในแคมเปญ', bad_slots: 'ตำแหน่งที่เลือกใช้ไม่ได้ (ถูกลบหรือเลิกใช้แล้ว)', bad_slot: 'รหัสตำแหน่งในไฟล์ไม่ถูกต้อง', bad_branches: 'รหัสสาขาไม่ถูกต้อง (รูปแบบ เช่น IC008)'
   };
   function errText(code) {
     if (ERR[code]) return ERR[code];
@@ -1747,7 +1747,7 @@
   var con = { rows: [], edit: {}, view: 'live', type: 'all', pay: 'all', needle: '', sel: null, limit: 30, canPay: false, canApprove: false, ags: [] };
   var formAgreement = null; // agreement id a new cashier/sign line joins; the form takes it when it opens
   var PAY_TH = { pending: 'ยังไม่ได้รับเงิน', partial: 'รับบางส่วน', paid: 'รับเงินแล้ว', none: 'ไม่เก็บเงิน' };
-  var CON_KIND = { cashier: 'ชั้นแคชเชียร์', sign: 'ป้ายหัวชั้น/กระจก' };
+  var CON_KIND = { cashier: 'ชั้นแคชเชียร์', sign: 'พื้นที่' };
   function contracts() {
     $('bar').hidden = true; show(''); $('view').textContent = ''; loading(); formBack = null;
     Promise.all([api('cashier_packages'), api('cashier_list'), api('sign_list'), api('agreement_list')]).then(guard(function (r) {
@@ -1809,7 +1809,7 @@
     var sb = el('input', 'input search'); sb.type = 'search'; sb.value = con.needle; sb.placeholder = 'ค้นหาแบรนด์ เวนเดอร์ เลขสัญญา หรือเลขโฆษณา'; sb.setAttribute('aria-label', 'ค้นหาสัญญา');
     bar.appendChild(sb); bar.appendChild(el('span', 'grow'));
     if (con.edit.cashier) bar.appendChild(button('+ สัญญาชั้นแคชเชียร์', '', function () { formBack = contracts; cashierForm(null); }));
-    if (con.edit.sign) bar.appendChild(button('+ สัญญาป้าย', '', function () { openSignFromContracts(null); }));
+    if (con.edit.sign) bar.appendChild(button('+ สัญญาพื้นที่', '', function () { openSignFromContracts(null); }));
     v.appendChild(bar);
     var fr = el('div', 'filterrow');
     function fgroup(label, sg) { var g = el('div', 'fgroup'); g.appendChild(el('span', 'cap', label)); g.appendChild(sg); fr.appendChild(g); }
@@ -2334,7 +2334,7 @@
     }
     grid.appendChild(card); grid.appendChild(detailPanel(holder));
     var secs = [['ผังร้าน', grid]];
-    if (isOffice()) secs.push(['สัญญาป้าย', signsCard(holder)]);
+    if (isOffice()) secs.push(['สัญญาพื้นที่', signsCard(holder)]);
     secs.push(['ตำแหน่งป้าย (' + d.slots.length + ')', slotsCard(holder)]);
     if (isOffice() && d.quota && d.quota.length) secs.push(['จุดโควตา', quotaCard(holder)]);
     var jump = el('nav', 'seg jumpbar'); jump.setAttribute('aria-label', 'ไปยังหัวข้อของสาขานี้'); holder.appendChild(jump);
@@ -2471,7 +2471,7 @@
       b.appendChild(hh);
       var dl = el('dl', 'facts one');
       fact(dl, 'ช่วงเวลา', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) + (c._raw ? ' (ตามวันหมดอายุโฆษณา)' : ''));
-      fact(dl, 'ชั้นที่เช่า', takeText((c.slots || []).filter(function (x) { return x.slot_id === flo.sel; })[0] || {}));
+      fact(dl, 'ที่เช่า', takeText((c.slots || []).filter(function (x) { return x.slot_id === flo.sel; })[0] || {}));
       fact(dl, 'หลังสิ้นสุดให้ทำอย่างไร', c.return_to); fact(dl, 'วิธีวาง/ข้อห้าม', c.how_to_place);
       fact(dl, 'เวนเดอร์', c.vendor); fact(dl, 'ค่าเช่า', c.rent != null ? baht(c.rent) + ' บาท/เดือน' : ''); fact(dl, 'เลขที่สัญญา/TTA', c.agreement_no);
       fact(dl, 'เลขโฆษณา', c.ad_no ? c.ad_no + (c.ad_expiry ? ' (หมดอายุ ' + thDate(c.ad_expiry) + ')' : '') : ''); fact(dl, 'ติดต่อ', c.supplier_contact); fact(dl, 'หมายเหตุ', c.note);
@@ -2497,10 +2497,10 @@
   }
   function signsCard(holder) {
     var d = flo.data, card = el('section', 'card');
-    card.appendChild(el('h2', 'sec', 'สัญญาป้ายของสาขานี้'));
+    card.appendChild(el('h2', 'sec', 'สัญญาพื้นที่ของสาขานี้'));
     var mine = flo.signs.filter(function (c) { return c.status === 'active' && c.slots.some(function (x) { return x.branch_code === flo.branch; }); })
       .sort(function (a, b) { return String(a.end_date).localeCompare(String(b.end_date)); });
-    var tb = el('div', 'toolbar'), sb = el('input', 'input search'); sb.type = 'search'; sb.value = flo.signNeedle; sb.placeholder = 'ค้นหาแบรนด์หรือรหัสตำแหน่ง'; sb.setAttribute('aria-label', 'ค้นหาสัญญาป้าย');
+    var tb = el('div', 'toolbar'), sb = el('input', 'input search'); sb.type = 'search'; sb.value = flo.signNeedle; sb.placeholder = 'ค้นหาแบรนด์หรือรหัสตำแหน่ง'; sb.setAttribute('aria-label', 'ค้นหาสัญญาพื้นที่');
     tb.appendChild(sb); tb.appendChild(el('span', 'grow'));
     if (d.can_edit) tb.appendChild(button('+ เพิ่มสัญญา', '', function () { signForm(holder, null); }));
     card.appendChild(tb);
@@ -2512,7 +2512,7 @@
         var codes = c.slots.filter(function (x) { return x.branch_code === flo.branch; }).map(function (x) { var s = takeText(x); return x.code + (s ? ' (' + s + ')' : ''); }).join(' ');
         return !q || (c.brand + ' ' + (c.vendor || '') + ' ' + codes).toLowerCase().indexOf(q) >= 0;
       });
-      if (!rows.length) list.appendChild(el('p', 'empty-note', mine.length ? 'ไม่พบสัญญาที่ตรงกับคำค้น' : 'ยังไม่มีสัญญาป้ายในสาขานี้'));
+      if (!rows.length) list.appendChild(el('p', 'empty-note', mine.length ? 'ไม่พบสัญญาที่ตรงกับคำค้น' : 'ยังไม่มีสัญญาพื้นที่ในสาขานี้'));
       rows.slice(0, flo.signLimit).forEach(function (c) {
         var mySlots = c.slots.filter(function (x) { return x.branch_code === flo.branch; }), r = el('button', 'trow signline'); r.type = 'button';
         r.appendChild(el('b', 'slot-code', c.brand)); r.appendChild(el('span', 'sub grow', mySlots.map(function (x) { return x.code; }).join(', ')));
@@ -2541,14 +2541,13 @@
   // The shelves a contract takes at a place: key for the form ('' sign only, 'w' whole, 'f-t') and words for lists.
   function shelfKey(x) { return x.whole ? 'w' : x.shelf_from ? x.shelf_from + '-' + x.shelf_to : ''; }
   function takeText(x) {
-    if (x.whole) return 'ทั้งตู้';
-    if (!x.shelf_from) return '';
-    return x.shelf_from === 1 ? 'ชั้นบน ' + x.shelf_to + ' ชั้น' : x.shelf_from === x.shelf_to ? 'ชั้นที่ ' + x.shelf_from : 'ชั้นที่ ' + x.shelf_from + '-' + x.shelf_to;
+    var s = x.whole ? 'ทั้งตู้' : !x.shelf_from ? '' : x.shelf_from === 1 ? 'ชั้นบน ' + x.shelf_to + ' ชั้น' : x.shelf_from === x.shelf_to ? 'ชั้นที่ ' + x.shelf_from : 'ชั้นที่ ' + x.shelf_from + '-' + x.shelf_to;
+    return [x.sign === false ? '' : 'ป้าย', s].filter(Boolean).join(' + ');
   }
   function signForm(holder, c, presetSlot, renew) {
     rememberScroll();
     var savedId = c && !renew ? c.id : null, agId = formAgreement; formAgreement = null;
-    var edit = c && !renew, d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', renew ? 'ต่อสัญญาป้าย ' + c.brand + ' (จาก ' + (c.sys_no || '') + ')' : c ? 'แก้ไขสัญญาป้าย' : 'เพิ่มสัญญาป้าย'));
+    var edit = c && !renew, d = el('section', 'card cform'); d.appendChild(el('h2', 'sec', renew ? 'ต่อสัญญาพื้นที่ ' + c.brand + ' (จาก ' + (c.sys_no || '') + ')' : c ? 'แก้ไขสัญญาพื้นที่' : 'เพิ่มสัญญาพื้นที่'));
     if (renew) d.appendChild(el('p', 'sub', 'คัดลอกสาขา ตำแหน่ง และค่าเช่ามาให้แล้ว ใส่วันที่ใหม่และเลขที่เอกสารใหม่ สัญญาเดิมยังอยู่เป็นประวัติ'));
     var g = el('div', 'grid');
     function fld(text, type, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el(type === 'textarea' ? 'textarea' : 'input', 'input'); if (type !== 'textarea') i.type = type; i.value = val || ''; l.appendChild(i); return { l: l, i: i }; }
@@ -2564,12 +2563,15 @@
     function area(text, val) { var f = fld(text, 'textarea', val); f.i.rows = 2; d.appendChild(f.l); return f.i; }
     var how = area('วิธีวาง/ข้อห้าม (สาขาจะเห็น)', c && c.how_to_place), ret = area('หลังสิ้นสุดให้ทำอย่างไร (สาขาจะเห็น)', c && c.return_to), note = area('รายละเอียด/หมายเหตุ (แสดงในรายการสัญญา)', c && c.note);
     // places: pick the branches first (one, a group, or every branch the supplier rents in), then the place in each; rent is per place per month
-    var rents = {}, takes = {}, sel = {}, info = {}, cache = {}, chosenB = [];
+    var rents = {}, takes = {}, signs = {}, sel = {}, info = {}, cache = {}, chosenB = [];
     function learn(x) { info[x.id] = x; return x; }
     // shelves of a Section: from the place list (slot_pick) or the open floor page; a header place not loaded yet gets 6 to choose from
     function shelvesOf(id) { var x = info[id]; return x.shelves != null ? x.shelves : x.fixture ? x.fixture.shelves.length : x.kind === 'header' ? 6 : 0; }
-    function takeBody(id) { var v = takes[id] || '', m = v.split('-'); return v === 'w' ? { whole: true } : v ? { shelf_from: Number(m[0]), shelf_to: Number(m[1]) } : {}; }
-    (c ? c.slots : []).forEach(function (x) { sel[x.slot_id] = true; rents[x.slot_id] = x.rent; takes[x.slot_id] = shelfKey(x); learn({ id: x.slot_id, branch_code: x.branch_code, code: x.code, kind: x.kind }); });
+    function takeBody(id) {
+      var v = takes[id] || '', m = v.split('-'), o = v === 'w' ? { whole: true } : v ? { shelf_from: Number(m[0]), shelf_to: Number(m[1]) } : {};
+      o.sign = signs[id] !== false; return o;
+    }
+    (c ? c.slots : []).forEach(function (x) { sel[x.slot_id] = true; rents[x.slot_id] = x.rent; takes[x.slot_id] = shelfKey(x); signs[x.slot_id] = x.sign !== false; learn({ id: x.slot_id, branch_code: x.branch_code, code: x.code, kind: x.kind }); });
     // the open floor page already has this branch's places; with dates set, load them again to learn which are free
     if (flo.data && flo.branch && !(from.value && to.value)) cache[flo.branch] = flo.data.slots.filter(function (x) { return x.active && x.kind !== 'temp'; }).map(learn);
     if (presetSlot && info[presetSlot]) sel[presetSlot] = true;
@@ -2584,17 +2586,24 @@
       });
     }
     // who holds a place in this contract's dates: '' when the dates are not set yet
-    function heldText(x) {
+    // 'free', 'part' (the sign or some shelves still free) or 'full'; '' when not known
+    function holdState(x) {
       if (!x.taken) return '';
-      if (!x.taken.length) return 'ว่าง';
-      var part = x.taken.every(function (h) { return h.shelf_from && !h.whole; });
-      return (part ? 'เช่าบางชั้น: ' : 'ไม่ว่าง: ') + x.taken.map(function (h) { var s = takeText(h); return h.brand + (s ? ' ' + s : ''); }).join(', ');
+      if (!x.taken.length) return 'free';
+      var signHeld = x.taken.some(function (h) { return h.sign; }), fr = freeShelves(x);
+      return signHeld && (!x.shelves || (fr && !fr.length)) ? 'full' : 'part';
+    }
+    function heldText(x) {
+      var st = holdState(x);
+      if (!st) return '';
+      if (st === 'free') return 'ว่าง';
+      return (st === 'part' ? 'เช่าบางส่วน: ' : 'ไม่ว่าง: ') + x.taken.map(function (h) { var s = takeText(h); return h.brand + (s ? ' ' + s : ''); }).join(', ');
     }
     // shelves of a place nobody holds (in the contract's dates, or now when they are not set); null: not a shelf place
     function freeShelves(x) {
       var n = x.shelves || 0, busy = {}, out = [], k;
       if (!n || !x.taken) return null;
-      x.taken.forEach(function (h) { var f = h.whole || !h.shelf_from ? 1 : h.shelf_from, l = h.whole || !h.shelf_from ? n : h.shelf_to; for (k = f; k <= l; k++) busy[k] = true; });
+      x.taken.forEach(function (h) { if (!h.whole && !h.shelf_from) return; var f = h.whole ? 1 : h.shelf_from, l = h.whole ? n : h.shelf_to; for (k = f; k <= l; k++) busy[k] = true; });
       for (k = 1; k <= n; k++) if (!busy[k]) out.push(k);
       return out;
     }
@@ -2603,18 +2612,21 @@
       while (i < ks.length) { var j = i; while (j + 1 < ks.length && ks[j + 1] === ks[j] + 1) j++; out.push(i === j ? String(ks[i]) : ks[i] + '-' + ks[j]); i = j + 1; }
       return out.join(', ');
     }
-    // does taking `key` ('' sign only, 'w' whole, 'f-t' shelves) collide with someone holding the place
+    // do the shelves `key` ('' none, 'w' whole, 'f-t') collide with someone's shelves at the place (signs are apart)
     function clashes(key, x) {
-      if (!x.taken || !x.taken.length) return false;
-      if (!key || key === 'w') return true;
+      if (!key || !x.taken) return false;
+      var shelfHolds = x.taken.filter(function (h) { return h.whole || h.shelf_from; });
+      if (key === 'w') return shelfHolds.length > 0;
       var m = key.split('-'), f = Number(m[0]), l = Number(m[1]);
-      return x.taken.some(function (h) { return h.whole || !h.shelf_from || (h.shelf_from <= l && f <= h.shelf_to); });
+      return shelfHolds.some(function (h) { return h.whole || (h.shelf_from <= l && f <= h.shelf_to); });
     }
-    // a place partly held: start with its first free shelf instead of "sign only", which would collide
+    // a new place takes the sign, unless someone holds it; then it starts on the first free shelf
     function addPlace(x) {
       sel[x.id] = true;
-      var fr = freeShelves(x);
-      if (!takes[x.id] && fr && fr.length && fr.length < x.shelves) takes[x.id] = fr[0] + '-' + fr[0];
+      if (signs[x.id] !== undefined) return;
+      var signHeld = (x.taken || []).some(function (h) { return h.sign; }), fr = freeShelves(x);
+      signs[x.id] = !signHeld;
+      if (signHeld && !takes[x.id] && fr && fr.length) takes[x.id] = fr[0] + '-' + fr[0];
     }
     var planUrl = {};
     // The plan of one branch in a centred dialog; picking a dot updates the form behind it at once.
@@ -2633,7 +2645,7 @@
         box.textContent = '';
         if (!planUrl[b]) { box.appendChild(el('p', 'sub', 'สาขานี้ยังไม่มีรูปผัง เลือกจากช่องพิมพ์รหัสแทน')); return; }
         var dated = !!(from.value && to.value);
-        box.appendChild(el('p', 'hint', dated ? 'กดจุดเพื่อเพิ่มหรือเอาออก ชี้ที่จุดเพื่อดูรายละเอียด สีม่วง = ว่าง สีส้ม = เช่าแล้วบางชั้น สีแดง = ไม่ว่างในช่วงวันของสัญญานี้'
+        box.appendChild(el('p', 'hint', dated ? 'กดจุดเพื่อเพิ่มหรือเอาออก ชี้ที่จุดเพื่อดูรายละเอียด สีม่วง = ว่าง สีส้ม = เช่าแล้วบางส่วน (ป้ายหรือบางชั้น) สีแดง = ไม่ว่างในช่วงวันของสัญญานี้'
           : 'ยังไม่ได้ใส่วันเริ่มและวันสิ้นสุด สีบอกสัญญาที่ยังไม่หมดอายุ ใส่วันที่เพื่อดูว่าว่างในช่วงของสัญญานี้ไหม ชี้ที่จุดเพื่อดูรายละเอียด'));
         // what the pointed dot is and who holds it, like the side panel of the floor page
         var about = el('div', 'dotinfo'); about.setAttribute('aria-live', 'polite'); about.appendChild(el('span', 'sub', 'ชี้ที่จุด (หรือกด Tab ไปที่จุด) เพื่อดูรายละเอียด'));
@@ -2647,8 +2659,11 @@
             var s = takeText(h);
             about.appendChild(el('p', '', h.brand + (s ? ' (' + s + ')' : '') + (h.start_date ? ' · ' + thDate(h.start_date) + ' ถึง ' + thDate(h.end_date) : '') + (h.status === 'pending' ? ' · รออนุมัติ' : '')));
           });
-          var fr = x.taken && x.taken.length ? freeShelves(x) : null;
-          if (fr) about.appendChild(el('p', '', fr.length ? 'ชั้นที่ยังว่าง: ชั้น ' + shelfRanges(fr) + ' จาก ' + x.shelves + ' ชั้น' : 'ไม่มีชั้นว่าง'));
+          if (x.taken && x.taken.length) {
+            var fr = freeShelves(x);
+            about.appendChild(el('p', '', 'ป้ายหัวชั้น: ' + (x.taken.some(function (h) { return h.sign; }) ? 'มีผู้เช่าแล้ว' : 'ว่าง')));
+            if (fr) about.appendChild(el('p', '', fr.length ? 'ชั้นที่ยังว่าง: ชั้น ' + shelfRanges(fr) + ' จาก ' + x.shelves + ' ชั้น' : 'ไม่มีชั้นว่าง'));
+          }
         }
         // a warning about the dot just pressed, shown in the dialog rather than at the top of the page behind it
         function warn(x, text) { tell(x); about.insertBefore(el('p', 'warnline', text), about.firstChild); }
@@ -2656,7 +2671,7 @@
         var off = 0;
         slotsOf(b).forEach(function (x) {
           if (x.x == null || x.y == null) { off++; return; }
-          var full = x.taken && x.taken.some(function (h) { return !h.shelf_from || h.whole; }), part = x.taken && x.taken.length && !full;
+          var st = holdState(x), full = st === 'full', part = st === 'part';
           var p = el('button', 'pin' + pinDot(x.code) + (full ? ' taken' : part ? ' rent' : '') + (sel[x.id] ? ' sel' : ''), x.code); p.type = 'button';
           p.style.left = x.x + '%'; p.style.top = x.y + '%';
           var why = [x.code, x.category, heldText(x)].filter(Boolean).join(' · '); p.setAttribute('aria-label', why + (sel[x.id] ? ' (เลือกแล้ว)' : ''));
@@ -2667,7 +2682,7 @@
             var adding = !sel[x.id];
             if (adding) addPlace(x); else delete sel[x.id];
             paintRows(); draw();
-            if (adding && x.taken && x.taken.length) warn(x, dated ? 'เพิ่ม ' + x.code + ' แล้ว จุดนี้มีผู้เช่าบางชั้น เลือกชั้นที่ยังว่างในแถวของสาขา'
+            if (adding && x.taken && x.taken.length) warn(x, dated ? 'เพิ่ม ' + x.code + ' แล้ว จุดนี้มีผู้เช่าบางส่วน ตรวจป้ายและชั้นที่เลือกในแถวของสาขา'
               : 'เพิ่ม ' + x.code + ' แล้ว แต่ตอนนี้มีสัญญาอยู่ ใส่วันที่ของสัญญานี้เพื่อตรวจว่าว่างไหม');
             else if (adding) tell(x);
           };
@@ -2703,9 +2718,14 @@
           ch.appendChild(document.createTextNode(info[id].code + ' '));
           var n = shelvesOf(id);
           if (n) {
-            // which shelves this brand rents: the sign only, the top N, one lower shelf, or the whole fixture
+            // the sign and the shelves are rented apart: the sign box, then no shelves / the top N / one lower shelf / the whole fixture
+            var dated0 = !!(from.value && to.value), signHeld = (info[id].taken || []).some(function (h) { return h.sign; });
+            var sl = el('label', 'check'), sc = el('input'); sc.type = 'checkbox'; sc.checked = signs[id] !== false;
+            sc.setAttribute('aria-label', 'เช่าป้ายหัวชั้น ' + b + ' ' + info[id].code); sc.onchange = function () { signs[id] = sc.checked; };
+            if (dated0 && signHeld && !sc.checked) sc.disabled = true;
+            sl.appendChild(sc); sl.appendChild(document.createTextNode(dated0 && signHeld ? 'ป้าย (มีผู้เช่าแล้ว)' : 'ป้าย')); ch.appendChild(sl);
             var ts = el('select', 'input mini'); ts.setAttribute('aria-label', 'ชั้นที่เช่า ' + b + ' ' + info[id].code);
-            var opts = [['', 'ป้ายอย่างเดียว']], k;
+            var opts = [['', 'ไม่เช่าชั้น']], k;
             for (k = 1; k <= n; k++) opts.push(['1-' + k, 'ชั้นบน ' + k + ' ชั้น']);
             for (k = 2; k <= n; k++) opts.push([k + '-' + k, 'เฉพาะชั้นที่ ' + k]);
             opts.push(['w', 'ทั้งตู้']);
@@ -2795,7 +2815,7 @@
     }
     io.appendChild(button('ส่งออก CSV', 'alt', function () {
       var rowsOut = chosenPairs(); if (!rowsOut.length) rowsOut = [['IC002', '', 'OA01', '']];
-      saveCsv('สัญญาป้าย' + (edit && c.sys_no ? '_' + c.sys_no : '') + '.csv', [['สาขา', 'ชื่อสาขา', 'รหัสตำแหน่ง', 'ค่าเช่า/เดือน']].concat(rowsOut));
+      saveCsv('สัญญาพื้นที่' + (edit && c.sys_no ? '_' + c.sys_no : '') + '.csv', [['สาขา', 'ชื่อสาขา', 'รหัสตำแหน่ง', 'ค่าเช่า/เดือน']].concat(rowsOut));
     }));
     io.appendChild(button('นำเข้าจากไฟล์ CSV', 'alt', function () { file.click(); }));
     io.appendChild(button('นำเข้าจากที่วาง', 'alt', function () { runImport(paste.value); }));
@@ -2827,6 +2847,8 @@
       var slots = Object.keys(sel).filter(function (id) { return info[id] && chosenB.indexOf(info[id].branch_code) >= 0; }).map(function (id) { var o = takeBody(id); o.slot_id = Number(id); o.rent = rents[id] == null ? null : rents[id]; return o; });
       if (!brand.value.trim() || !from.value || !to.value) { show('ใส่แบรนด์ วันเริ่ม และวันสิ้นสุดก่อน', 'err'); return; }
       if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
+      var empty = slots.filter(function (s) { return !s.sign && !s.whole && !s.shelf_from; }).map(function (s) { return info[s.slot_id].branch_code + ' ' + info[s.slot_id].code; });
+      if (empty.length) { show('เลือกป้ายหรือชั้นที่เช่าของ ' + empty.slice(0, 8).join(', '), 'err'); return; }
       if (!slots.length && !confirm('ยังไม่ได้เลือกตำแหน่ง\n\nบันทึกเป็น "รอระบุตำแหน่ง" ได้ ข้อตกลงจะยังอนุมัติไม่ได้จนกว่าจะกลับมาเลือกตำแหน่ง\n\nบันทึกต่อไหม?')) return;
       save.disabled = true;
       var b = { brand: brand.value, vendor: vendor.value, start_date: from.value, end_date: to.value, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value,
@@ -3163,7 +3185,7 @@
     });
     var tb = el('div', 'toolbar'); tb.appendChild(seg); v.appendChild(tb);
     if (setTab === 'cashier') { cashierSettings(v); return; }
-    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและสัญญาป้าย', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการสัญญาป้ายได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติสัญญาจัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกสัญญาป้ายได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); spaceSettings(v); branchProfiles(v); priceTable(v); return; }
+    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและสัญญาพื้นที่', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการสัญญาพื้นที่ได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติสัญญาจัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกสัญญาพื้นที่ได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); spaceSettings(v); branchProfiles(v); priceTable(v); return; }
     var fd = fold('ประเภทตำแหน่งสื่อ', 'เพดานต่อสาขา เพิ่มประเภทใหม่ได้', true), card = fd.body; v.appendChild(fd.node); card.classList.add('tset');
     card.appendChild(el('p', 'hint', 'เพดาน = จำนวนสื่อสูงสุดต่อสาขาในช่วงวันที่ชนกัน เว้นว่าง = ไม่จำกัด ประเภทที่ปิดการใช้งานจะไม่ให้เลือกตอนลงทะเบียน แต่แคมเปญเดิมยังอยู่'));
     var body = el('div'); card.appendChild(body);
@@ -3281,7 +3303,7 @@
     cols.appendChild(todo); host.appendChild(cols);
     host.appendChild(cashierTimeline(cashHome));
     host.appendChild(cashierDueCard(cashHome));
-    host.appendChild(cashierDueCard(signHome, 'ป้ายหัวชั้น/กระจก'));
+    host.appendChild(cashierDueCard(signHome, 'สัญญาพื้นที่'));
   }
   // Cashier contracts as timeline rows; a branch only sees its own, and nothing opens for a branch.
   function cashierTimeline(contracts) {
@@ -3322,7 +3344,7 @@
     host.appendChild(timelineCard(all.filter(function (c) { return c.status === 'approved'; }), branchOpen));
     host.appendChild(cashierTimeline(cashHome));
     host.appendChild(cashierDueCard(cashHome));
-    host.appendChild(cashierDueCard(signHome, 'ป้ายหัวชั้น/กระจก'));
+    host.appendChild(cashierDueCard(signHome, 'สัญญาพื้นที่'));
     var box = el('div'); host.appendChild(box); renderBranchBox(box);
   }
 
