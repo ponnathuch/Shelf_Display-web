@@ -811,10 +811,11 @@
     var b = $('bar'); b.textContent = ''; b.hidden = false;
     var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'กรองตามสถานะ');
     TABS.forEach(function (t) {
-      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(tab === t[0]));
+      // the LINE filter lists every status, so no status tab is the one shown while it is on
+      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(!lineOnly && tab === t[0]));
       var hot = (t[0] === 'pending' && urgentCount()) || (t[0] === 'approved' && all.some(incomplete));
       x.appendChild(el('span', 'n' + (hot ? ' hot' : ''), String(countOf(t[0]))));
-      x.onclick = function () { tab = t[0]; renderOffice(); }; seg.appendChild(x);
+      x.onclick = function () { tab = t[0]; lineOnly = false; renderOffice(); }; seg.appendChild(x);
     });
     b.appendChild(seg);
     var sb = el('input', 'input search'); sb.type = 'search'; sb.value = needle;
@@ -824,7 +825,7 @@
     var nl = all.filter(fromLine).length;
     var lf = el('button', 'seg-solo', 'อนุมัติจาก LINE'); lf.type = 'button'; lf.setAttribute('aria-pressed', String(lineOnly));
     lf.appendChild(el('span', 'n' + (nl ? ' hot' : ''), String(nl)));
-    lf.onclick = function () { lineOnly = !lineOnly; lf.setAttribute('aria-pressed', String(lineOnly)); renderList(); };
+    lf.onclick = function () { lineOnly = !lineOnly; renderOffice(); };
     b.appendChild(lf); b.appendChild(el('span', 'grow'));
     b.appendChild(button('+ ลงทะเบียนแคมเปญ', '', function () { form(null); }));
   }
@@ -862,8 +863,9 @@
     }
     if (!rows.length) { v.appendChild(el('p', 'empty', term ? 'ไม่พบแคมเปญที่ตรงกับคำค้น' : tab === 'pending' ? 'ไม่มีแคมเปญรออนุมัติ' : 'ไม่มีรายการ')); return; }
     rows.forEach(function (c) {
-      var primary = tab === 'pending' && isApprover();
-      var acts = [button(primary ? 'ตรวจและอนุมัติ' : 'เปิดดู', primary ? '' : 'alt', function () { detail(c.id); })];
+      // the button follows the campaign's own state, not the tab (the LINE filter and a search mix states)
+      var review = c.status === 'pending' && isApprover(), fill = !review && fromLine(c) && incomplete(c);
+      var acts = [button(review ? 'ตรวจและอนุมัติ' : fill ? 'กรอกข้อมูลเพิ่ม' : 'เปิดดู', review || fill ? '' : 'alt', function () { detail(c.id); })];
       if (canWait(c)) acts.push(waitButton(c, function () { loadOffice(true); }));
       v.appendChild(card(c, { office: true, pick: canDelete ? { checked: !!picked[c.id], onChange: function (on) { if (on) picked[c.id] = true; else delete picked[c.id]; renderList(); } } : null, actions: acts }));
     });
@@ -4391,7 +4393,7 @@
   function modules() {
     var r = sess.staff.role;
     if (r === 'WAREHOUSE') return [{ id: 'home', label: 'ค้นหา', icon: 'home' }];
-    if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'floor', label: 'ผังร้าน', icon: 'floor' }];
+    if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม (Dashboard)', icon: 'home' }, { id: 'floor', label: 'ผังร้าน (Store Layout)', icon: 'floor' }];
     var m = [{ id: 'home', label: 'ภาพรวม (Dashboard)', icon: 'home' }, { id: 'media', label: 'สื่อ (Media)', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์ (Cashier Shelf)', icon: 'cashier' }, { id: 'floor', label: 'ผังร้าน (Store Layout)', icon: 'floor' }, { id: 'contracts', label: 'TTA (Trade Agreements)', icon: 'contract' }, { id: 'inventory', label: 'พื้นที่ขาย (Inventory)', icon: 'shelf' }];
     if (isApprover() || isContract()) m.push({ id: 'settings', label: 'ตั้งค่า', icon: 'gear' });
     return m;
