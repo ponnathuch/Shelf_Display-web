@@ -175,7 +175,10 @@
   .brow .bhead { flex: 0 0 var(--size-cell-wide); display: flex; flex-direction: column; }
   .brow > .input { flex: 1 1 var(--size-cell); }
   .input.mini { width: var(--size-cell); }
-  label.f > .btn { margin-top: var(--space-2); } /* a helper button under its field (next number, reuse old number) */
+  label.f > .btn, .ttanote .chip { margin-top: var(--space-2); }
+  .ttanote { display: block; }
+  .planpick { margin-top: var(--space-3); }
+  .planpick .pin.dot { cursor: pointer; } /* a helper button under its field (next number, reuse old number) */
   .missgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--size-cell-wide), 1fr)); gap: var(--space-2); max-height: var(--size-scroll); overflow-y: auto; margin-top: var(--space-3); }
   .missgrid .tile { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--c-line); border-radius: var(--radius-l); background: var(--c-surface); font: inherit; color: inherit; text-align: left; cursor: pointer; }
   .missgrid .tile:hover { background: var(--c-brand-soft); }
@@ -1694,7 +1697,7 @@
     d.appendChild(g); navAttach(d, brand, vendor);
     var g2 = el('div', 'grid'); d.appendChild(g2);
     function fld2(text, type, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el('input', 'input'); i.type = type; i.value = val || ''; l.appendChild(i); g2.appendChild(l); return i; }
-    var agr = fld2('เลขที่สัญญา/TTA', 'text', c && c.agreement_no), adn = fld2('เลขโฆษณา', 'text', c && c.ad_no);
+    var agr = fld2('เลขที่สัญญา/TTA', 'text', c && c.agreement_no), adn = fld2('เลขโฆษณา', 'text', c && c.ad_no); ttaWatch(agr, c && c.agreement_id);
     var adx = fld2('วันหมดอายุโฆษณา', 'date', c && c.ad_expiry), sup = fld2('ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c && c.supplier_contact);
     var how = fld('วิธีวาง/ข้อห้าม (สาขาจะเห็น)', 'textarea', c && c.how_to_place); how.rows = 2; d.appendChild(how.parentNode);
     var ret = fld('หลังสิ้นสุดให้ทำอย่างไร (สาขาจะเห็น)', 'textarea', c && c.return_to); ret.rows = 2; d.appendChild(ret.parentNode);
@@ -1911,7 +1914,7 @@
     var g = el('div', 'grid');
     function fld(text, type, val) { var l = el('label', 'f'); l.appendChild(el('span', 't', text)); var i = el(type === 'textarea' ? 'textarea' : 'input', 'input'); if (type !== 'textarea') i.type = type; i.value = val == null ? '' : val; l.appendChild(i); g.appendChild(l); return i; }
     var tta = fld('เลข TTA', 'text', a.tta_no), vendor = fld('เวนเดอร์', 'text', a.vendor), brand = fld('แบรนด์', 'text', a.brand);
-    tta.parentNode.appendChild(ttaNextButton(tta, function () { return from.value; }));
+    ttaWatch(tta, a.id);
     var from = fld('เริ่ม', 'date', a.start_date), to = fld('สิ้นสุด', 'date', a.end_date), total = fld('มูลค่ารวม (บาท)', 'number', a.total); total.min = 0;
     d.appendChild(g);
     // A name not in the NAV list is still accepted, only flagged.
@@ -2511,10 +2514,16 @@
     sb.oninput = function () { flo.signNeedle = sb.value; flo.signLimit = 15; paint(); }; paint();
     return card;
   }
-  // "Next number" beside an agreement-number field: MK + Buddhist year + running number of the start year (MK70/001 for 2027).
-  function ttaNextButton(input, startDate) {
-    return button('เลขถัดไป', 'alt', function () {
-      api('tta_next', { start_date: startDate() || undefined }).then(function (r) { input.value = r.tta_no; }).catch(function (e) { show(e.message, 'err'); });
+  // Agreement numbers come from marketing or purchasing: when one is typed, say if another live agreement already has it.
+  // except = the agreement this form belongs to (its own number is not a repeat).
+  function ttaWatch(input, except) {
+    var note = el('span', 'ttanote'); note.setAttribute('role', 'status'); input.parentNode.appendChild(note);
+    input.addEventListener('change', function () {
+      var v = input.value.trim(); note.textContent = ''; if (!v) return;
+      api('tta_check', { tta_no: v, except: except || null }).then(function (r) {
+        if (input.value.trim() !== v || !r.used.length) return;
+        note.appendChild(el('span', 'chip warn', 'เลขนี้ใช้แล้วกับข้อตกลง ' + r.used.map(function (u) { return u.brand; }).join(', ') + ' ตรวจเลขอีกครั้งก่อนบันทึก'));
+      }).catch(function () {});
     });
   }
   // The shelves a contract takes at a place: key for the form ('' sign only, 'w' whole, 'f-t') and words for lists.
@@ -2537,7 +2546,7 @@
     d.appendChild(g); navAttach(d, brand, vendor);
     var g2 = el('div', 'grid'); d.appendChild(g2);
     var agr = add(g2, 'เลขที่สัญญา/TTA', 'text', renew ? '' : c && c.agreement_no), adn = add(g2, 'เลขโฆษณา', 'text', c && c.ad_no);
-    if (!edit) agr.parentNode.appendChild(ttaNextButton(agr, function () { return from.value; }));
+    ttaWatch(agr, edit ? c.agreement_id : agId);
     if (renew && c.agreement_no) { agr.placeholder = 'เดิม: ' + c.agreement_no; agr.parentNode.appendChild(button('ใช้เลขเดิม', 'alt', function () { agr.value = c.agreement_no; })); }
     var adx = add(g2, 'วันหมดอายุโฆษณา', 'date', renew ? '' : c && c.ad_expiry), sup = add(g2, 'ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c && c.supplier_contact);
     function area(text, val) { var f = fld(text, 'textarea', val); f.i.rows = 2; d.appendChild(f.l); return f.i; }
@@ -2549,18 +2558,62 @@
     function shelvesOf(id) { var x = info[id]; return x.shelves != null ? x.shelves : x.fixture ? x.fixture.shelves.length : x.kind === 'header' ? 6 : 0; }
     function takeBody(id) { var v = takes[id] || '', m = v.split('-'); return v === 'w' ? { whole: true } : v ? { shelf_from: Number(m[0]), shelf_to: Number(m[1]) } : {}; }
     (c ? c.slots : []).forEach(function (x) { sel[x.slot_id] = true; rents[x.slot_id] = x.rent; takes[x.slot_id] = shelfKey(x); learn({ id: x.slot_id, branch_code: x.branch_code, code: x.code, kind: x.kind }); });
-    if (flo.data && flo.branch) cache[flo.branch] = flo.data.slots.filter(function (x) { return x.active && x.kind !== 'temp'; }).map(learn);
+    // the open floor page already has this branch's places; with dates set, load them again to learn which are free
+    if (flo.data && flo.branch && !(from.value && to.value)) cache[flo.branch] = flo.data.slots.filter(function (x) { return x.active && x.kind !== 'temp'; }).map(learn);
     if (presetSlot && info[presetSlot]) sel[presetSlot] = true;
     function slotsOf(b) { return cache[b] || []; }
     // fetch the places of branches not loaded yet, in one call
     function need(list) {
       var miss = list.filter(function (b) { return !cache[b]; });
       if (!miss.length) return Promise.resolve();
-      return api('slot_pick', { branches: miss }).then(function (r) {
+      return api('slot_pick', { branches: miss, start_date: from.value || undefined, end_date: to.value || undefined, except: savedId || undefined }).then(function (r) {
         miss.forEach(function (b) { cache[b] = []; });
         r.slots.forEach(function (x) { cache[x.branch_code].push(learn(x)); });
       });
     }
+    // who holds a place in this contract's dates: '' when the dates are not set yet
+    function heldText(x) {
+      if (!x.taken) return '';
+      if (!x.taken.length) return 'ว่าง';
+      var part = x.taken.every(function (h) { return h.shelf_from && !h.whole; });
+      return (part ? 'เช่าบางชั้น: ' : 'ไม่ว่าง: ') + x.taken.map(function (h) { var s = takeText(h); return h.brand + (s ? ' ' + s : ''); }).join(', ');
+    }
+    var planOpen = {}, planUrl = {};
+    function planPick(b) {
+      var box = el('div', 'planpick');
+      function draw() {
+        box.textContent = '';
+        if (!planUrl[b]) { box.appendChild(el('p', 'sub', 'สาขานี้ยังไม่มีรูปผัง เลือกจากช่องพิมพ์รหัสแทน')); return; }
+        if (!from.value || !to.value) box.appendChild(el('p', 'hint', 'ใส่วันเริ่มและวันสิ้นสุดก่อน ผังจึงบอกได้ว่าจุดไหนว่าง'));
+        else box.appendChild(el('p', 'hint', 'กดจุดเพื่อเพิ่มหรือเอาออก ชี้ที่จุดเพื่อดูรหัส สีม่วง = ว่าง สีส้ม = เช่าแล้วบางชั้น สีแดง = ไม่ว่างในช่วงวันนี้'));
+        var wrap = el('div', 'pinwrap'), im = el('img', 'floor-img'); im.src = planUrl[b]; im.alt = 'ผังร้าน ' + b; wrap.appendChild(im);
+        var off = 0;
+        slotsOf(b).forEach(function (x) {
+          if (x.x == null || x.y == null) { off++; return; }
+          var full = x.taken && x.taken.some(function (h) { return !h.shelf_from || h.whole; }), part = x.taken && x.taken.length && !full;
+          var p = el('button', 'pin' + pinDot(x.code) + (full ? ' taken' : part ? ' rent' : '') + (sel[x.id] ? ' sel' : ''), x.code); p.type = 'button';
+          p.style.left = x.x + '%'; p.style.top = x.y + '%';
+          var why = [x.code, x.category, heldText(x)].filter(Boolean).join(' · '); p.title = why; p.setAttribute('aria-label', why + (sel[x.id] ? ' (เลือกแล้ว)' : ''));
+          p.onclick = function () {
+            if (!sel[x.id] && full) { show(x.code + ' ' + heldText(x), 'err'); return; }
+            if (sel[x.id]) delete sel[x.id]; else sel[x.id] = true;
+            paintRows();
+          };
+          wrap.appendChild(p);
+        });
+        box.appendChild(wrap);
+        if (off) box.appendChild(el('p', 'sub', off + ' ตำแหน่งยังไม่ได้ปักหมุดบนผัง เลือกจากช่องพิมพ์รหัสแทน'));
+      }
+      if (b in planUrl) draw();
+      else {
+        box.appendChild(el('p', 'sub', 'กำลังโหลดผัง...'));
+        api('plan_image', { branch: b }).then(function (r) { planUrl[b] = r.image_url; draw(); }).catch(function (e) { box.textContent = ''; show(e.message, 'err'); });
+      }
+      return box;
+    }
+    // the dates decide which places are free: load the places again when they change
+    function reloadPlaces() { if (!chosenB.length) return; cache = {}; need(chosenB).then(paintRows).catch(function (e) { show(e.message, 'err'); }); }
+    from.addEventListener('change', reloadPlaces); to.addEventListener('change', reloadPlaces);
     var sb = el('fieldset', 'card'); sb.appendChild(el('legend', '', 'สาขาและตำแหน่งที่เช่า'));
     var nameOf = function (b) { var u = units.filter(function (x) { return x.code === b; })[0]; return u ? u.name : ''; };
     var bulk = el('div', 'linker'), bc = el('input', 'input'), br = el('input', 'input'), rowsBox = el('div', 'boxscroll');
@@ -2593,12 +2646,16 @@
         });
         row.appendChild(chips);
         var add = el('input', 'input'), dl = el('datalist'); dl.id = 'sp-' + b; add.type = 'text'; add.setAttribute('list', dl.id); add.placeholder = '+ ตำแหน่งของ ' + b; add.setAttribute('aria-label', 'เพิ่มตำแหน่งของ ' + b);
-        slotsOf(b).filter(function (x) { return !sel[x.id]; }).forEach(function (x) { var o = el('option'); o.value = x.code; o.label = [x.name, KIND_TH[x.kind]].filter(Boolean).join(' · '); dl.appendChild(o); });
+        slotsOf(b).filter(function (x) { return !sel[x.id]; }).forEach(function (x) { var o = el('option'); o.value = x.code; o.label = [x.category || x.name, KIND_TH[x.kind], heldText(x)].filter(Boolean).join(' · '); dl.appendChild(o); });
         add.onchange = function () {
           var q = add.value.trim().toUpperCase(), m = slotsOf(b).filter(function (x) { return x.code.toUpperCase() === q; })[0];
           if (m) { sel[m.id] = true; paintRows(); } else if (q) show('สาขา ' + b + ' ไม่มีตำแหน่ง ' + q + ' (หัวชั้น กระจก หรือป้ายแขวนที่ใช้งานอยู่)', 'err');
         };
-        row.appendChild(add); row.appendChild(dl); rowsBox.appendChild(row);
+        row.appendChild(add); row.appendChild(dl);
+        // pick on the plan: for whoever does not remember the Section codes
+        head.appendChild(button(planOpen[b] ? 'ซ่อนผัง' : 'เลือกจากผัง', 'alt', function () { planOpen[b] = !planOpen[b]; paintRows(); }));
+        if (planOpen[b]) row.appendChild(planPick(b));
+        rowsBox.appendChild(row);
       });
     }
     var picker = branchPicker(sb, (c ? c.slots.map(function (x) { return x.branch_code; }) : [flo.branch].filter(Boolean)).filter(function (v, i, a) { return a.indexOf(v) === i; }), function (codes) {
