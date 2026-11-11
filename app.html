@@ -1366,23 +1366,104 @@
           var sq = el('input', 'input cap'); sq.type = 'number'; sq.min = 1; sq.step = 'any'; sq.value = p.sqm == null ? '' : p.sqm; sq.placeholder = 'ตร.ม.'; sq.setAttribute('aria-label', 'ตร.ม. ของ ' + u.code); sq.disabled = !d.can_edit;
           var gr = pick('เกรดปี ' + profYear + ' ของ ' + u.code, ['A', 'B'], grade[u.code + profYear], 'เกรด');
           r.appendChild(el('b', 'slot-code', u.code)); r.appendChild(el('span', 'sub grow', u.name)); r.appendChild(ch); r.appendChild(sz); r.appendChild(sq); r.appendChild(gr);
-          // The list is long and the page message sits at the top, so the button itself reports the result.
-          var sv = button('บันทึก', 'alt', function () {
+          if (d.can_edit) r.appendChild(saveButton('บันทึก', 'alt', function () {
             var b = { branch: u.code, chain: ch.value, size: sz.value || null, sqm: sq.value === '' ? null : Number(sq.value), year: profYear, grade: gr.value || null };
-            function done(text) { sv.textContent = text; sv.disabled = false; setTimeout(function () { sv.textContent = 'บันทึก'; }, 2500); }
-            sv.disabled = true; sv.textContent = 'กำลังบันทึก';
-            api('branch_profile_save', b).then(function () {
+            return api('branch_profile_save', b).then(function () {
               prof[u.code] = { branch_code: u.code, chain: b.chain, size_label: b.size, sqm: b.sqm }; grade[u.code + profYear] = b.grade; count();
-              show('บันทึก ' + u.code + ' แล้ว', 'ok'); done('บันทึกแล้ว');
-            }).catch(function (e) { show(e.message, 'err'); done('ไม่สำเร็จ'); });
-          });
-          if (d.can_edit) r.appendChild(sv);
+              show('บันทึก ' + u.code + ' แล้ว', 'ok');
+            });
+          }));
           list.appendChild(r);
         });
         if (!d.branches.length) list.appendChild(el('p', 'empty-note', 'ยังไม่มีรายชื่อสาขา'));
       }
       paint();
     }).catch(function (e) { show(e.message, 'err'); });
+  }
+  // A save button for a row of a long list: the page message sits at the top, out of sight, so the button reports the result.
+  // run() returns the promise of the save.
+  function saveButton(label, cls, run) {
+    var b = button(label, cls, function () {
+      function done(text) { b.textContent = text; b.disabled = false; setTimeout(function () { b.textContent = label; }, 2500); }
+      b.disabled = true; b.textContent = 'กำลังบันทึก';
+      run().then(function () { done('บันทึกแล้ว'); }).catch(function (e) { show(e.message, 'err'); done('ไม่สำเร็จ'); });
+    });
+    return b;
+  }
+  // Yearly price table (design v3 Q34): the default price when an agreement is made. Shelf items are priced by shelves
+  // counted from the top, other items by one amount with a unit. A year stays a draft until the user confirms it.
+  var rateYear = new Date().getFullYear();
+  function priceTable(v) {
+    var f = fold('ตารางราคารายปี', 'ราคาตั้งต้นของชั้นวางและรายการอื่น แยกตามปีและเกรด', false), fb = f.body; v.appendChild(f.node);
+    fb.appendChild(el('p', 'hint', 'ราคานี้เป็นค่าตั้งต้นตอนทำข้อตกลง แก้ยอดในข้อตกลงได้ ชั้นวางคิดตามจำนวนชั้นนับจากบน: ชั้นบน N ชั้นราคาเดียว แล้วบวกราคาของแต่ละชั้นถัดไป ส่วน Stack และ Tourist ใส่ราคาของแต่ละชั้นคั่นด้วยจุลภาค'));
+    var bar = el('div', 'trow'), ys = el('select', 'input sortsel'), st = el('span', 'grow'), act = el('span'), list = el('div'); ys.setAttribute('aria-label', 'ปีของตารางราคา');
+    bar.appendChild(ys); bar.appendChild(st); bar.appendChild(act); fb.appendChild(bar); fb.appendChild(list);
+    function num(i) { return i.value === '' ? null : Number(i.value); }
+    function box(r, label, val, tag) {
+      var i = el('input', 'input cap'); i.type = 'number'; i.min = 0; i.step = 'any'; i.value = val == null ? '' : Number(val); i.setAttribute('aria-label', label + ' ' + tag);
+      r.appendChild(el('span', 'sub', label)); r.appendChild(i); return i;
+    }
+    function load() {
+      api('rates').then(function (d) {
+        var years = {}; d.rates.forEach(function (x) { years[x.year] = 1; }); years[rateYear] = 1;
+        ys.textContent = ''; Object.keys(years).sort().forEach(function (y) { var o = el('option', '', 'ราคาปี ' + y); o.value = y; ys.appendChild(o); });
+        ys.value = String(rateYear); ys.onchange = function () { rateYear = Number(ys.value); paint(); };
+        function paint() {
+          var rows = d.rates.filter(function (x) { return x.year === rateYear; }), draft = rows.some(function (x) { return x.draft; });
+          st.textContent = ''; act.textContent = ''; list.textContent = '';
+          if (draft) { st.appendChild(el('span', 'chip warn', 'ร่าง ยังไม่ยืนยัน')); if (d.can_edit) act.appendChild(confirmBtn(rows)); }
+          else st.appendChild(el('span', 'sub', rows.length ? 'ยืนยันแล้ว ' + rows.length + ' รายการ' : 'ยังไม่มีราคาของปีนี้'));
+          [['shelf', 'ชั้นวาง'], ['other', 'รายการอื่น (สื่อ อบรม ชั้นของเวนเดอร์)']].forEach(function (g) {
+            var part = rows.filter(function (x) { return x.kind === g[0]; }); if (!part.length && g[0] === 'shelf') return;
+            list.appendChild(el('h3', 'sec', g[1]));
+            part.forEach(function (x) { list.appendChild(rateRow(x)); });
+            if (g[0] === 'other' && d.can_edit) list.appendChild(newRow(draft));
+          });
+        }
+        function confirmBtn(rows) {
+          return button('ยืนยันราคาปี ' + rateYear, '', function () {
+            if (!confirm('ยืนยันราคาปี ' + rateYear + ' ทั้ง ' + rows.length + ' รายการ และถอดป้าย "ร่าง"?')) return;
+            api('rates_confirm', { year: rateYear }).then(function () { rows.forEach(function (x) { x.draft = false; }); show('ยืนยันราคาปี ' + rateYear + ' แล้ว', 'ok'); paint(); }).catch(function (e) { show(e.message, 'err'); });
+          });
+        }
+        function rateRow(x) {
+          var r = el('div', 'trow'), name = el('b', 'grow', x.item + (x.grade ? ' · เกรด ' + x.grade : '')), tag = x.item + (x.grade ? ' เกรด ' + x.grade : '');
+          r.appendChild(name);
+          var tn, tp, np, sp, mm, un;
+          if (x.kind === 'shelf') {
+            if (x.shelf_prices) {
+              sp = el('input', 'input'); sp.type = 'text'; sp.value = x.shelf_prices.map(Number).join(', '); sp.setAttribute('aria-label', 'ราคาของแต่ละชั้น ' + tag);
+              r.appendChild(el('span', 'sub', 'ราคาแต่ละชั้น')); r.appendChild(sp);
+            } else { tn = box(r, 'ชั้นบน (ชั้น)', x.top_n, tag); tn.min = 1; tn.step = 1; tp = box(r, 'ราคา', x.top_price, tag); np = box(r, 'ถัดไปชั้นละ', x.next_price, tag); }
+          }
+          var wp = box(r, x.kind === 'shelf' ? 'ทั้งตู้' : 'ราคา', x.whole_price, tag);
+          if (x.kind === 'shelf') { mm = box(r, 'ขั้นต่ำ (เดือน)', x.min_months, tag); mm.min = 1; mm.step = 1; r.appendChild(el('span', 'sub', x.unit)); }
+          else { un = el('input', 'input'); un.type = 'text'; un.maxLength = 40; un.value = x.unit; un.setAttribute('aria-label', 'หน่วยของ ' + tag); r.appendChild(un); }
+          var l = el('label', 'check'), on = el('input'); on.type = 'checkbox'; on.checked = x.on_sale !== false; l.appendChild(on); l.appendChild(document.createTextNode('เปิดขาย')); r.appendChild(l);
+          if (!d.can_edit) { [tn, tp, np, sp, wp, mm, un, on].forEach(function (i) { if (i) i.disabled = true; }); return r; }
+          r.appendChild(saveButton('บันทึก', 'alt', function () {
+            var prices = sp ? sp.value.split(/[ ,]+/).filter(Boolean).map(Number) : null;
+            if (prices && (!prices.length || prices.some(function (n) { return !(n >= 0); }))) return Promise.reject(new Error('ราคาของแต่ละชั้นต้องเป็นตัวเลขคั่นด้วยจุลภาค'));
+            var b = { id: x.id, top_n: tn ? num(tn) : x.top_n, top_price: tp ? num(tp) : null, next_price: np ? num(np) : null, shelf_prices: prices, whole_price: num(wp),
+              unit: un ? un.value.trim() : x.unit, min_months: mm ? num(mm) : x.min_months, max_brands: x.max_brands, excluded_sizes: x.excluded_sizes || [], on_sale: on.checked, note: x.note };
+            return api('rate_save', b).then(function () { Object.keys(b).forEach(function (k) { x[k] = b[k]; }); show('บันทึกราคา ' + tag + ' แล้ว', 'ok'); });
+          }));
+          return r;
+        }
+        function newRow(draft) {
+          var r = el('div', 'trow'), nm = el('input', 'input'); nm.type = 'text'; nm.maxLength = 80; nm.placeholder = 'รายการใหม่ เช่น ค่าเปิดเวนเดอร์'; nm.setAttribute('aria-label', 'ชื่อรายการใหม่'); r.appendChild(nm);
+          var pr = box(r, 'ราคา', null, 'ของรายการใหม่'), un = el('input', 'input'); un.type = 'text'; un.maxLength = 40; un.placeholder = 'หน่วย เช่น ต่อครั้ง'; un.setAttribute('aria-label', 'หน่วยของรายการใหม่'); r.appendChild(un);
+          r.appendChild(button('เพิ่ม', '', function () {
+            if (!nm.value.trim() || !un.value.trim()) { show('ใส่ชื่อรายการและหน่วยก่อน', 'err'); return; }
+            api('rate_save', { year: rateYear, item: nm.value.trim(), kind: 'other', whole_price: num(pr), unit: un.value.trim(), draft: draft })
+              .then(function () { show('เพิ่มรายการแล้ว', 'ok'); load(); }).catch(function (e) { show(e.code === 'rate_exists' ? 'ปีนี้มีรายการชื่อนี้แล้ว' : e.message, 'err'); });
+          }));
+          return r;
+        }
+        paint();
+      }).catch(function (e) { show(e.message, 'err'); });
+    }
+    load();
   }
   // The branch's quota spaces (cashier counter, storefront signs): how many it has, editable for contract approvers.
   function quotaCard(holder) {
@@ -2787,7 +2868,7 @@
     });
     var tb = el('div', 'toolbar'); tb.appendChild(seg); v.appendChild(tb);
     if (setTab === 'cashier') { cashierSettings(v); return; }
-    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและสัญญาป้าย', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการสัญญาป้ายได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติสัญญาจัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกสัญญาป้ายได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); spaceSettings(v); branchProfiles(v); return; }
+    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและสัญญาป้าย', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการสัญญาป้ายได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติสัญญาจัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกสัญญาป้ายได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); spaceSettings(v); branchProfiles(v); priceTable(v); return; }
     var fd = fold('ประเภทตำแหน่งสื่อ', 'เพดานต่อสาขา เพิ่มประเภทใหม่ได้', true), card = fd.body; v.appendChild(fd.node); card.classList.add('tset');
     card.appendChild(el('p', 'hint', 'เพดาน = จำนวนสื่อสูงสุดต่อสาขาในช่วงวันที่ชนกัน เว้นว่าง = ไม่จำกัด ประเภทที่ปิดการใช้งานจะไม่ให้เลือกตอนลงทะเบียน แต่แคมเปญเดิมยังอยู่'));
     var body = el('div'); card.appendChild(body);
