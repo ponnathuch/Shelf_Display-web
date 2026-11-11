@@ -258,6 +258,18 @@
   .frontrent p { margin: var(--space-1) 0 0; }
   .frontrent .chip { margin-left: var(--space-2); }
   .fronttl button.part { background: var(--c-brand-soft); }
+  /* Inventory > Availability: branches x kinds, darker = more free for the whole period */
+  .invtl td { text-align: center; }
+  .invtl td.lbl, .invtl th.lbl { text-align: left; }
+  .invtl button { min-width: calc(var(--size-target) * 1.6); padding: var(--space-1); line-height: 1.2; }
+  .invtl button small { display: block; color: var(--c-ink-2); }
+  .invtl button.h1 { background: var(--c-brand-soft); }
+  .invtl button.h2, .invtl button.h3 { background: var(--c-brand-line); }
+  .invtl button.h3 { font-weight: bold; }
+  .invtl button[aria-pressed="true"] { outline: 2px solid var(--c-brand-strong); outline-offset: 1px; }
+  .invtl .none { color: var(--c-ink-2); }
+  .invfilters { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
+  .invfilters label.f { min-width: 0; }
   .fronttl button.full { background: var(--c-err-soft); color: var(--c-err); font-weight: bold; }
   .fronttl button[aria-pressed=true] { border-color: var(--c-brand); box-shadow: 0 0 0 1px var(--c-brand); }
   .pastebox textarea.input { display: block; width: 100%; min-height: var(--size-thumb); resize: vertical; margin-top: var(--space-2); }
@@ -1840,6 +1852,192 @@
     row.appendChild(save); row.appendChild(button('ยกเลิก', '', function () { (formBack || renderCashier)(); })); d.appendChild(row); v.appendChild(d);
   }
 
+  // ---------- Inventory: what is free to sell in every branch for a whole period (design v3 P1-P23) ----------
+  // Availability = branches x kinds; a cell counts places free all period (Sections: whole / some shelves) and opens the
+  // list on the right with sign size and default price. Pending agreements hold places too. Office only (prices).
+  var inv = { from: '', to: '', off: {}, grade: '', size: '', chain: '', q: '', data: null, keep: null };
+  var INV_KIND = { sign: 'ป้ายหัวชั้น', glass: 'กระจก', cashier: 'แคชเชียร์', hang: 'ป้ายแขวน', front: 'ป้ายหน้าร้าน' };
+  function invCols(d) {
+    var seen = {}, cols = [];
+    d.places.forEach(function (p) { if (p.type) seen[p.type] = true; });
+    d.types.forEach(function (x) { if (seen[x.name]) { cols.push({ key: 'T:' + x.name, label: x.name, type: x.name }); delete seen[x.name]; } });
+    Object.keys(seen).forEach(function (n) { cols.push({ key: 'T:' + n, label: n, type: n }); }); // a type switched off still has Sections
+    ['sign', 'glass', 'cashier', 'hang', 'front'].forEach(function (k) { cols.push({ key: k, label: INV_KIND[k] }); });
+    return cols;
+  }
+  // one branch, one column: total, free (Sections: every shelf free), part (some shelves free) and its places
+  function invCell(d, b, col) {
+    if (col.key === 'cashier') return { total: b.cashier_n || 0, free: Math.max(0, (b.cashier_n || 0) - (b.cashier_used || 0)), part: 0, places: [] };
+    var ps = (d.byBranch[b.code] || []).filter(function (p) { return col.type ? p.type === col.type : col.key === 'sign' ? p.kind === 'header' : p.kind === col.key; });
+    var free = 0, part = 0;
+    ps.forEach(function (p) {
+      if (col.type) { if (p.free.length === p.shelves) free++; else if (p.free.length) part++; }
+      else if (col.key === 'sign' ? p.sign_free : !p.taken.length) free++;
+    });
+    return { total: ps.length, free: free, part: part, places: ps };
+  }
+  function invOpen(p) { return p.type ? p.free.length > 0 : p.kind === 'header' ? p.sign_free : !p.taken.length; }
+  function runs(ks) { // [1,2,3,5] -> [[1,3],[5,5]]
+    var out = [], i = 0;
+    while (i < ks.length) { var j = i; while (j + 1 < ks.length && ks[j + 1] === ks[j] + 1) j++; out.push([ks[i], ks[j]]); i = j + 1; }
+    return out;
+  }
+  function runText(r) { return r[0] === r[1] ? String(r[0]) : r[0] + '-' + r[1]; }
+  function invFreeText(p) {
+    if (!p.type) return 'ว่าง';
+    return p.free.length === p.shelves ? 'ว่างทั้งตู้ (' + p.shelves + ' ชั้น)' : 'ว่างชั้น ' + runs(p.free).map(runText).join(', ') + ' จาก ' + p.shelves + ' ชั้น';
+  }
+  function invPriceText(p) {
+    var parts = [];
+    if (p.price_whole != null) parts.push((p.type ? 'ทั้งตู้ ' : '') + baht(p.price_whole));
+    else if (p.type && p.price_free != null) parts.push('ชั้น ' + runText(runs(p.free)[0]) + ' ' + baht(p.price_free)); // whole free: the whole price says it
+    return parts.length ? parts.join(' · ') + ' บาท/เดือน' : '';
+  }
+  function inventory() {
+    var v = $('view'); v.textContent = ''; show('');
+    var tb = el('div', 'card invfilters');
+    function dateF(text, val) { var l = el('label', 'f'), i = el('input', 'input'); i.type = 'date'; i.value = val; l.appendChild(el('span', 't', text)); l.appendChild(i); tb.appendChild(l); return i; }
+    var from = dateF('ว่างตั้งแต่', inv.from), to = dateF('ถึง', inv.to);
+    var body = el('div'); v.appendChild(el('h2', 'sec', 'ว่าง (Availability)'));
+    v.appendChild(el('p', 'hint', 'นับเฉพาะจุดที่ว่างตลอดช่วงวันที่เลือก รายการเช่าที่รออนุมัติถือว่าจองแล้ว ราคาเป็นราคาตั้งต้นจากตารางราคาตามเกรดสาขา'));
+    v.appendChild(tb); v.appendChild(body);
+    function load() {
+      if (from.value && to.value && to.value < from.value) { badFields([[to, 'วันสิ้นสุดต้องไม่ก่อนวันเริ่ม']]); return; }
+      body.textContent = ''; body.appendChild(el('p', 'sub', 'กำลังโหลด...'));
+      api('avail', from.value && to.value ? { start_date: from.value, end_date: to.value } : {}).then(guard(function (d) {
+        d.byBranch = {}; d.places.forEach(function (p) { (d.byBranch[p.branch_code] = d.byBranch[p.branch_code] || []).push(p); });
+        inv.data = d; inv.from = from.value = d.start_date; inv.to = to.value = d.end_date; invPaint(body, tb);
+      })).catch(function (e) { body.textContent = ''; show(e.message, 'err'); });
+    }
+    from.onchange = to.onchange = function () { if (from.value && to.value) load(); };
+    if (inv.data && inv.data.start_date === inv.from && inv.data.end_date === inv.to) invPaint(body, tb); else load();
+  }
+  function invPaint(body, tb) {
+    var d = inv.data, cols = invCols(d);
+    Array.prototype.slice.call(tb.querySelectorAll('.invx')).forEach(function (x) { x.remove(); });
+    function sel(text, key, opts) {
+      var l = el('label', 'f invx'), s = el('select', 'input'); l.appendChild(el('span', 't', text));
+      [['', 'ทั้งหมด']].concat(opts).forEach(function (o) { var x = el('option', '', o[1]); x.value = o[0]; s.appendChild(x); });
+      s.value = inv[key]; s.onchange = function () { inv[key] = s.value; invPaint(body, tb); }; l.appendChild(s); tb.appendChild(l);
+    }
+    var uniq = function (k) { var m = {}; d.branches.forEach(function (b) { if (b[k]) m[b[k]] = true; }); return Object.keys(m).sort().map(function (x) { return [x, x]; }); };
+    sel('เกรด', 'grade', [['A', 'A'], ['B', 'B (รวมสาขาที่ยังไม่มีเกรด)']]); sel('ขนาด', 'size', uniq('size')); sel('เครือ', 'chain', uniq('chain'));
+    var ql = el('label', 'f invx'), q = el('input', 'input search'); q.type = 'search'; q.value = inv.q; q.placeholder = 'รหัสหรือชื่อสาขา';
+    ql.appendChild(el('span', 't', 'ค้นหาสาขา')); ql.appendChild(q); tb.appendChild(ql);
+    var kseg = el('div', 'seg invx'); kseg.setAttribute('role', 'group'); kseg.setAttribute('aria-label', 'ชนิดพื้นที่ที่แสดง');
+    cols.forEach(function (c) {
+      var x = el('button', '', c.label); x.type = 'button'; x.setAttribute('aria-pressed', String(!inv.off[c.key]));
+      x.onclick = function () { inv.off[c.key] = !inv.off[c.key]; invPaint(body, tb); }; kseg.appendChild(x);
+    });
+    tb.appendChild(kseg);
+    var xb = button('ส่งออกรายการว่าง (CSV)', 'alt', function () { invExport(rowsNow(), shown); }); xb.classList.add('invx'); tb.appendChild(xb);
+    var shown = cols.filter(function (c) { return !inv.off[c.key]; });
+    function rowsNow() {
+      var n = inv.q.trim().toUpperCase();
+      return d.branches.filter(function (b) {
+        return (!inv.grade || (b.grade || 'B') === inv.grade) && (!inv.size || b.size === inv.size) && (!inv.chain || b.chain === inv.chain) &&
+          (!n || b.code.indexOf(n) >= 0 || String(b.name || '').toUpperCase().indexOf(n) >= 0);
+      });
+    }
+    function draw() {
+      body.textContent = '';
+      var rows = rowsNow();
+      // counters (sheet "All 2026" of the old file): Sections by grade, and every other kind's free places
+      var k = { whole: { A: 0, B: 0 }, part: { A: 0, B: 0 }, full: { A: 0, B: 0 } }, other = 0;
+      rows.forEach(function (b) {
+        var g = b.grade || 'B';
+        shown.forEach(function (c) {
+          var x = invCell(d, b, c);
+          if (c.type) { k.whole[g] += x.free; k.part[g] += x.part; k.full[g] += x.total - x.free - x.part; } else other += x.free;
+        });
+      });
+      var ab = function (o) { return 'เกรด A ' + o.A + ' · เกรด B ' + o.B; }, noop = function () {};
+      var kp = el('div', 'kpi');
+      kp.appendChild(kpiCard('Section ว่างทั้งตู้', k.whole.A + k.whole.B, ab(k.whole), 'ok', noop));
+      kp.appendChild(kpiCard('Section ว่างบางชั้น', k.part.A + k.part.B, ab(k.part), '', noop));
+      kp.appendChild(kpiCard('Section เช่าเต็มแล้ว', k.full.A + k.full.B, ab(k.full), '', noop));
+      kp.appendChild(kpiCard('จุดอื่นที่ว่าง', other, 'ป้ายหัวชั้น กระจก แคชเชียร์ ป้ายแขวน ป้ายหน้าร้าน', '', noop));
+      body.appendChild(kp);
+      if (d.draft) body.appendChild(el('p', 'hint', 'ตารางราคาปี ' + (d.year + 543) + ' ยังเป็นร่าง ราคาที่แสดงอาจเปลี่ยน'));
+      var card = el('section', 'card'); body.appendChild(card);
+      card.appendChild(el('p', 'sub', rows.length + ' สาขา · ช่องแสดง ว่าง/ทั้งหมด ตัวเล็กคือ Section ที่ว่างบางชั้น · สียิ่งเข้มยิ่งว่างมาก · กดช่องเพื่อดูรายการทางขวา'));
+      if (!rows.length) { card.appendChild(el('p', 'empty-note', 'ไม่พบสาขาตามตัวกรอง')); return; }
+      var lay = el('div', 'frontgrid'), wrap = el('div', 'tlwrap'), tbl = el('table', 'fronttl invtl'), th = el('thead'), hr = el('tr'), tbody = el('tbody');
+      var side = el('aside', 'frontside'); side.setAttribute('aria-live', 'polite');
+      ['สาขา', 'เกรด', 'ขนาด'].forEach(function (h) { var x = el('th', 'lbl', h); x.scope = 'col'; hr.appendChild(x); });
+      shown.forEach(function (c) { var x = el('th', '', c.label); x.scope = 'col'; hr.appendChild(x); });
+      th.appendChild(hr); tbl.appendChild(th);
+      var on = null, cells = {};
+      function pick(b, c) {
+        var bt = cells[b.code + '|' + c.key]; if (!bt) return;
+        if (on) on.setAttribute('aria-pressed', 'false'); on = bt; bt.setAttribute('aria-pressed', 'true'); inv.keep = { b: b.code, c: c.key };
+        var x = invCell(d, b, c); side.textContent = '';
+        side.appendChild(el('h3', '', b.code + ' ' + (b.name || '') + ' · ' + c.label));
+        side.appendChild(el('p', 'sub', 'เกรด ' + (b.grade || 'B (ยังไม่มีเกรด)') + (b.size ? ' · ขนาด ' + b.size : '') + ' · ว่าง ' + x.free + (x.part ? ' · ว่างบางชั้น ' + x.part : '') + ' จาก ' + x.total));
+        if (c.key === 'cashier') { side.appendChild(el('p', '', 'โควตา ' + x.total + ' ชั้น · ในช่วงนี้มีแบรนด์พร้อมกันมากที่สุด ' + (b.cashier_used || 0) + ' แบรนด์')); return; }
+        var list = x.places.filter(invOpen);
+        if (!list.length) side.appendChild(el('p', 'empty-note', x.total ? 'ไม่มีจุดที่ว่างตลอดช่วงนี้' : 'สาขานี้ยังไม่มีจุดชนิดนี้ในระบบ'));
+        list.forEach(function (p) {
+          var box = el('div', 'frontsign'), hd = el('div'); hd.appendChild(el('b', '', p.code));
+          if (p.category) hd.appendChild(document.createTextNode(' · ' + p.category));
+          if (p.confirmed === false) { var ch = el('span', 'chip warn', 'ยังไม่ยืนยันชั้น'); ch.style.marginLeft = 'var(--space-2)'; hd.appendChild(ch); }
+          box.appendChild(hd);
+          box.appendChild(el('p', 'sub', invFreeText(p)));
+          if (p.spec) box.appendChild(el('p', 'sub', 'ป้าย: ' + p.spec));
+          var pr = invPriceText(p); if (pr) box.appendChild(el('p', 'sub', 'ราคาตั้งต้น: ' + pr));
+          if (p.taken.length) box.appendChild(el('p', 'sub', 'เช่าแล้ว: ' + p.taken.map(function (h) { var s = takeText(h); return h.brand + (s ? ' (' + s + ')' : '') + (h.status === 'pending' ? ' รออนุมัติ' : ''); }).join(', ')));
+          box.appendChild(button('ดูผัง', 'alt', function () {
+            inv.keep = { b: b.code, c: c.key, y: window.scrollY };
+            flo.branch = b.code; flo.sel = p.id; flo.mode = 'branch'; flo.view = p.kind === 'glass' ? 'glass' : p.kind === 'hang' ? 'hang' : 'active';
+            flo.backTo = { label: 'กลับไปพื้นที่ว่าง', fn: function () { go('inventory'); } }; go('floor');
+          }));
+          side.appendChild(box);
+        });
+      }
+      rows.forEach(function (b) {
+        var tr = el('tr'), rh = el('th', 'lbl'); rh.scope = 'row'; rh.appendChild(el('b', '', b.code)); rh.appendChild(el('div', 'sub', b.name || '')); tr.appendChild(rh);
+        tr.appendChild(el('td', 'lbl', b.grade || '–')); tr.appendChild(el('td', 'lbl', b.size || '–'));
+        var noSec = !(d.byBranch[b.code] || []).some(function (p) { return p.kind === 'header'; });
+        shown.forEach(function (c) {
+          var td = el('td'), x = invCell(d, b, c);
+          if (!x.total) { td.appendChild(el('span', 'none', '–')); td.title = (c.type || c.key === 'sign') && noSec ? 'ยังไม่มีข้อมูล Section ของสาขานี้' : 'ไม่มีจุดชนิดนี้'; tr.appendChild(td); return; }
+          var r = x.free / x.total, bt = el('button', r >= 0.67 ? 'h3' : r >= 0.34 ? 'h2' : r > 0 || x.part ? 'h1' : '');
+          bt.type = 'button'; bt.appendChild(document.createTextNode(x.free + '/' + x.total)); if (x.part) bt.appendChild(el('small', '', '+' + x.part + ' บางชั้น'));
+          bt.setAttribute('aria-pressed', 'false');
+          bt.setAttribute('aria-label', b.code + ' ' + c.label + ' ว่าง ' + x.free + ' จาก ' + x.total + (x.part ? ' ว่างบางชั้น ' + x.part : ''));
+          bt.onclick = function () { pick(b, c); }; cells[b.code + '|' + c.key] = bt;
+          td.appendChild(bt); tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody); wrap.appendChild(tbl); lay.appendChild(wrap); lay.appendChild(side); card.appendChild(lay);
+      var keep = inv.keep, col = keep && shown.filter(function (c) { return c.key === keep.c; })[0], row = keep && rows.filter(function (b) { return b.code === keep.b; })[0];
+      if (col && row && cells[row.code + '|' + col.key]) {
+        pick(row, col);
+        if (keep.y != null) requestAnimationFrame(function () { window.scrollTo(0, keep.y); var c0 = cells[row.code + '|' + col.key]; c0.scrollIntoView({ block: 'nearest', inline: 'nearest' }); c0.focus({ preventScroll: true }); });
+        inv.keep = { b: keep.b, c: keep.c };
+      } else side.appendChild(el('p', 'empty-note', 'กดช่องในตารางเพื่อดูจุดที่ว่าง ขนาดป้าย และราคา'));
+    }
+    q.oninput = function () { inv.q = q.value; draw(); };
+    draw();
+  }
+  // Free places as a CSV for Excel (one row per place; the cashier as one row per branch), to send to a vendor
+  function invExport(rows, cols) {
+    var d = inv.data, out = [['สาขา', 'ชื่อสาขา', 'เกรด', 'ขนาด', 'เครือ', 'ชนิด', 'รหัส', 'หมวดสินค้า', 'จำนวนชั้น', 'ที่ว่าง', 'ป้าย (ขนาด/วัสดุ)', 'ราคาทั้งตู้/จุด (บาท/เดือน)', 'ราคาชั้นที่ว่างชุดแรก (บาท/เดือน)', 'หมายเหตุ']];
+    rows.forEach(function (b) {
+      cols.forEach(function (c) {
+        var x = invCell(d, b, c), head = [b.code, b.name || '', b.grade || '', b.size || '', b.chain || '', c.label];
+        if (c.key === 'cashier') { if (x.free) out.push(head.concat(['', '', x.total, 'ว่าง ' + x.free + ' ชั้น', '', '', '', ''])); return; }
+        x.places.filter(invOpen).forEach(function (p) {
+          out.push(head.concat([p.code, p.category || '', p.shelves || '', c.key === 'sign' ? 'ป้ายหัวชั้นว่าง' : invFreeText(p), p.spec || '',
+            p.price_whole != null ? p.price_whole : '', p.type && p.price_free != null ? p.price_free : '', p.confirmed === false ? 'ยังไม่ยืนยันจำนวนชั้น' : '']));
+        });
+      });
+    });
+    if (out.length === 1) { show('ไม่มีจุดว่างตามตัวกรองที่เลือก', 'err'); return; }
+    saveCsv('พื้นที่ว่าง_' + d.start_date + '_' + d.end_date + '.csv', out);
+  }
+
   // ---------- settings ----------
   // ---------- contracts: one ledger of cashier-shelf and sign contracts (office only) ----------
   // Reading, searching and the money view live here; editing opens the same forms the other modules use and comes back.
@@ -2518,54 +2716,17 @@
       if (BRANCH_RE.test(flo.branch)) loadFloor(mine); else mine.appendChild(el('p', 'empty-note', 'ไม่พบรหัสสาขาของคุณ'));
       return;
     }
-    if (flo.backTo) { // came from a campaign: one click back to it
-      var bk = flo.backTo, back = button('← กลับไปแคมเปญ ' + (bk.code || ''), 'alt', function () { flo.backTo = null; openDetail(bk.id); }); back.classList.add('backbtn'); v.appendChild(back);
+    if (flo.backTo) { // came from a campaign or the Inventory page: one click back to it
+      var bk = flo.backTo, back = button('← ' + (bk.label || 'กลับไปแคมเปญ ' + (bk.code || '')), 'alt', function () { flo.backTo = null; if (bk.fn) bk.fn(); else openDetail(bk.id); }); back.classList.add('backbtn'); v.appendChild(back);
     }
     var tb = el('div', 'toolbar'), inp = el('input', 'input search'), dl = el('datalist'); dl.id = 'flo-list';
     inp.type = 'text'; inp.setAttribute('list', 'flo-list'); inp.placeholder = 'พิมพ์รหัสหรือชื่อสาขา เช่น IC002'; inp.setAttribute('aria-label', 'เลือกสาขา'); inp.value = flo.branch;
     units.filter(function (u) { return u.is_branch; }).forEach(function (u) { var o = el('option'); o.value = u.code; o.label = u.name; dl.appendChild(o); });
-    var mseg = el('div', 'seg'); mseg.setAttribute('role', 'group'); mseg.setAttribute('aria-label', 'มุมมอง');
-    [['branch', 'ผังรายสาขา'], ['free', 'พื้นที่ว่างทุกสาขา']].forEach(function (t) {
-      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(flo.mode === t[0])); x.onclick = function () { flo.mode = t[0]; floor(); }; mseg.appendChild(x);
-    });
-    tb.appendChild(mseg); if (flo.mode === 'free') inp.hidden = true; tb.appendChild(inp); tb.appendChild(dl); v.appendChild(tb);
+    tb.appendChild(inp); tb.appendChild(dl); v.appendChild(tb);
     var holder = el('div'); v.appendChild(holder);
-    if (flo.mode === 'free') { freeView(holder); return; }
     function go2() { var c = inp.value.trim().toUpperCase(); if (BRANCH_RE.test(c)) { if (c !== flo.branch) { flo.pinning = null; flo.sel = null; } flo.branch = c; loadFloor(holder); } }
     inp.onchange = go2; inp.onkeydown = function (e) { if (e.key === 'Enter') go2(); };
     if (flo.branch) loadFloor(holder); else holder.appendChild(el('p', 'empty-note', 'เลือกสาขาเพื่อดูผังร้านและตำแหน่งป้าย'));
-  }
-  // Sales view: how many header and glass places are free in each branch on a date.
-  function freeView(holder) {
-    holder.textContent = ''; holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
-    api('slot_free', flo.freeOn ? { on: flo.freeOn } : {}).then(function (d) {
-      holder.textContent = ''; flo.freeOn = d.on;
-      var tb = el('div', 'toolbar'), l = el('label', 'f'), di = el('input', 'input'); di.type = 'date'; di.value = d.on; l.appendChild(el('span', 't', 'ว่างในวันที่')); l.appendChild(di);
-      di.onchange = function () { if (di.value) { flo.freeOn = di.value; freeView(holder); } };
-      var sb = el('input', 'input search'); sb.type = 'search'; sb.placeholder = 'ค้นหารหัสสาขา'; sb.setAttribute('aria-label', 'ค้นหาสาขา');
-      tb.appendChild(l); tb.appendChild(sb); holder.appendChild(tb);
-      var sum = function (k) { return d.branches.reduce(function (n, b) { return n + b[k]; }, 0); };
-      var k = el('div', 'kpi');
-      k.appendChild(kpiCard('หัวชั้นว่าง', sum('header_free'), 'จากทั้งหมด ' + sum('header_total') + ' ตำแหน่ง', 'ok', function () {}));
-      k.appendChild(kpiCard('ป้ายกระจกว่าง', sum('glass_free'), 'จากทั้งหมด ' + sum('glass_total') + ' ตำแหน่ง', 'ok', function () {}));
-      k.appendChild(kpiCard('สาขาที่มีตำแหน่งในระบบ', d.branches.length, 'นำเข้า Lock section แล้ว', '', function () {}));
-      holder.appendChild(k);
-      var card = el('section', 'card'), list = el('div'); card.appendChild(list); holder.appendChild(card);
-      function paint() {
-        list.textContent = ''; var q = sb.value.trim().toUpperCase();
-        var rows = d.branches.filter(function (b) { return !q || b.branch_code.indexOf(q) >= 0; }).sort(function (a, b) { return b.header_free + b.glass_free - a.header_free - a.glass_free; });
-        if (!rows.length) list.appendChild(el('p', 'empty-note', d.branches.length ? 'ไม่พบสาขา' : 'ยังไม่มีสาขาที่นำเข้าตำแหน่ง'));
-        rows.forEach(function (b) {
-          var r = el('button', 'trow signline'); r.type = 'button'; r.appendChild(el('b', 'slot-code', b.branch_code));
-          var u = units.filter(function (x) { return x.code === b.branch_code; })[0]; r.appendChild(el('span', 'sub grow', u ? u.name : ''));
-          r.appendChild(el('span', 'chip ok', 'หัวชั้นว่าง ' + b.header_free + '/' + b.header_total));
-          if (b.glass_total) r.appendChild(el('span', 'chip ok', 'กระจกว่าง ' + b.glass_free + '/' + b.glass_total));
-          r.onclick = function () { flo.branch = b.branch_code; flo.mode = 'branch'; flo.sel = null; flo.view = 'free'; floor(); };
-          list.appendChild(r);
-        });
-      }
-      sb.oninput = paint; paint();
-    }).catch(function (e) { holder.textContent = ''; show(e.message, 'err'); });
   }
   function loadFloor(holder) {
     navSeq++; holder.textContent = ''; holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
@@ -3810,7 +3971,7 @@
     var r = sess.staff.role;
     if (r === 'WAREHOUSE') return [{ id: 'home', label: 'ค้นหา', icon: 'home' }];
     if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'floor', label: 'ผังร้าน', icon: 'floor' }];
-    var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }, { id: 'floor', label: 'พื้นที่', icon: 'floor' }, { id: 'contracts', label: 'TTA และรายการเช่า', icon: 'contract' }];
+    var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }, { id: 'floor', label: 'พื้นที่', icon: 'floor' }, { id: 'contracts', label: 'TTA และรายการเช่า', icon: 'contract' }, { id: 'inventory', label: 'พื้นที่ขาย (Inventory)', icon: 'shelf' }];
     if (isApprover() || isContract()) m.push({ id: 'settings', label: 'ตั้งค่า', icon: 'gear' });
     return m;
   }
@@ -3844,7 +4005,7 @@
     var id = (location.hash || '#/home').slice(2).split('/')[0];
     if (!modules().some(function (m) { return m.id === id; })) id = 'home';
     navSeq++; setCurrent(id); $('app').classList.remove('open'); $('bar').hidden = true; show('');
-    if (id === 'media') loadOffice(); else if (id === 'cashier') cashier(); else if (id === 'floor') floor(); else if (id === 'contracts') contracts(); else if (id === 'settings') settings(); else showHome();
+    if (id === 'media') loadOffice(); else if (id === 'cashier') cashier(); else if (id === 'floor') floor(); else if (id === 'contracts') contracts(); else if (id === 'inventory') inventory(); else if (id === 'settings') settings(); else showHome();
   }
 
   // ---------- start ----------
