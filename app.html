@@ -166,8 +166,8 @@
   .pin.rent { background: var(--c-warn); }
   .pin.taken { background: var(--c-err); }
   /* A Section whose code is printed on the plan is marked by a dot, so neighbours do not cover each other; the code shows on hover, focus or selection. */
-  .pin.dot { width: var(--size-icon); height: var(--size-icon); min-width: 0; padding: 0; font-size: 0; }
-  .pin.dot:hover, .pin.dot:focus-visible, .pin.dot.sel { width: auto; height: auto; min-width: var(--space-5); padding: 0 var(--space-1); font-size: var(--fs-xs); z-index: 2; }
+  .pin.dot { width: var(--size-icon); height: var(--size-icon); min-width: 0; padding: 0; font-size: 0; opacity: 0.55; } /* see-through: the printed code stays readable under it */
+  .pin.dot:hover, .pin.dot:focus-visible, .pin.dot.sel { opacity: 1; width: auto; height: auto; min-width: var(--space-5); padding: 0 var(--space-1); font-size: var(--fs-xs); z-index: 2; }
   .backbtn { margin-bottom: var(--space-3); }
   .boxscroll { max-height: calc(var(--size-scroll) * 2); overflow-y: auto; margin-top: var(--space-3); }
   .boxscroll .row + h3 { margin-top: var(--space-4); }
