@@ -178,15 +178,15 @@
   label.f > .btn, .ttanote .chip { margin-top: var(--space-2); }
   .ttanote { display: block; }
   /* the contract form's "pick on the plan", centred over the page */
-  .plandlg { width: calc(100vw - 2 * var(--space-6)); max-width: var(--max-page-image); max-height: calc(100vh - 2 * var(--space-6)); padding: var(--space-4) var(--space-5);
+  .plandlg { width: calc(100vw - 2 * var(--space-6)); max-width: var(--max-page-image); height: calc(100vh - 2 * var(--space-6)); padding: var(--space-4) var(--space-5);
     border: 1px solid var(--c-line); border-radius: var(--radius-m); background: var(--c-surface); color: var(--c-ink); overflow: auto; }
   .plandlg::backdrop { background: var(--c-scrim); opacity: 0.5; }
   .plandlg .dlghead { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
   .plandlg .dlghead h2 { flex: 1; margin: 0; }
-  .dotinfo { min-height: calc(2 * var(--size-target-lg)); margin-bottom: var(--space-3); padding: var(--space-2) var(--space-3);
+  .dotinfo { height: calc(3 * var(--size-target-lg)); overflow-y: auto; margin-bottom: var(--space-3); padding: var(--space-2) var(--space-3);
     border: 1px solid var(--c-line); border-radius: var(--radius-s); background: var(--c-surface-2); }
   .dotinfo p { margin: var(--space-1) 0 0; }
-  .dotinfo .warnline { color: var(--c-err); font-weight: bold; }
+  .dotinfo .warnline, .clashtext { color: var(--c-err); font-weight: bold; }
   .planpick .pin.dot { cursor: pointer; } /* a helper button under its field (next number, reuse old number) */
   .missgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--size-cell-wide), 1fr)); gap: var(--space-2); max-height: var(--size-scroll); overflow-y: auto; margin-top: var(--space-3); }
   .missgrid .tile { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--c-line); border-radius: var(--radius-l); background: var(--c-surface); font: inherit; color: inherit; text-align: left; cursor: pointer; }
@@ -1744,7 +1744,7 @@
   // ---------- settings ----------
   // ---------- contracts: one ledger of cashier-shelf and sign contracts (office only) ----------
   // Reading, searching and the money view live here; editing opens the same forms the other modules use and comes back.
-  var con = { rows: [], edit: {}, view: 'live', type: 'all', pay: 'all', needle: '', sel: null, limit: 30, canPay: false, canApprove: false, ags: [] };
+  var con = { rows: [], edit: {}, view: 'live', type: 'all', what: 'all', pay: 'all', needle: '', sel: null, limit: 30, canPay: false, canApprove: false, ags: [] };
   var formAgreement = null; // agreement id a new cashier/sign line joins; the form takes it when it opens
   var PAY_TH = { pending: 'ยังไม่ได้รับเงิน', partial: 'รับบางส่วน', paid: 'รับเงินแล้ว', none: 'ไม่เก็บเงิน' };
   var CON_KIND = { cashier: 'ชั้นแคชเชียร์', sign: 'พื้นที่' };
@@ -1770,11 +1770,17 @@
   }
   // Waiting for approval: the line or its agreement is pending, or the agreement changed since it was approved.
   function isWait(r) { return r.c.status === 'pending' || !!(r.ag && (r.ag.status === 'pending' || r.ag.needs_review)); }
+  // what a space contract rents: 'sign' any header sign, 'shelf' any shelves, 'none' no places yet
+  function rentsWhat(c, what) {
+    if (what === 'none') return !c.slots.length;
+    return c.slots.some(function (x) { return what === 'sign' ? x.sign : x.whole || !!x.shelf_from; });
+  }
   function conRows() {
     var q = con.needle.trim().toLowerCase();
     return con.rows.filter(function (r) {
       var st = cashState(r.c);
       if (con.type !== 'all' && r.kind !== con.type) return false;
+      if (con.type === 'sign' && con.what !== 'all' && !rentsWhat(r.c, con.what)) return false;
       if (con.pay !== 'all' && (r.pay || 'pending') !== con.pay) return false;
       if (con.view === 'wait') { if (!isWait(r) || st === 'cancelled') return false; }
       else if (r.c.status === 'pending' || (con.view === 'soon' ? !(st === 'live' && daysTo(r.c.end_date) <= 30) : st !== con.view)) return false;
@@ -1802,6 +1808,10 @@
     [['all', 'ทั้งหมด'], ['cashier', CON_KIND.cashier], ['sign', CON_KIND.sign]].forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.type === t[0])); x.onclick = function () { con.type = t[0]; con.limit = 30; renderContracts(); }; tseg.appendChild(x);
     });
+    var wseg = el('div', 'seg'); wseg.setAttribute('role', 'group'); wseg.setAttribute('aria-label', 'กรองตามสิ่งที่เช่า');
+    [['all', 'ทั้งหมด'], ['sign', 'เช่าป้าย'], ['shelf', 'เช่าชั้นวาง'], ['none', 'รอระบุตำแหน่ง']].forEach(function (t) {
+      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.what === t[0])); x.onclick = function () { con.what = t[0]; con.limit = 30; renderContracts(); }; wseg.appendChild(x);
+    });
     var pseg = el('div', 'seg'); pseg.setAttribute('role', 'group'); pseg.setAttribute('aria-label', 'กรองตามการรับเงินจากเวนเดอร์');
     if (con.canPay) [['all', 'ทั้งหมด'], ['pending', PAY_TH.pending], ['partial', PAY_TH.partial], ['paid', PAY_TH.paid], ['none', PAY_TH.none]].forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.pay === t[0])); x.onclick = function () { con.pay = t[0]; con.limit = 30; renderContracts(); }; pseg.appendChild(x);
@@ -1813,7 +1823,7 @@
     v.appendChild(bar);
     var fr = el('div', 'filterrow');
     function fgroup(label, sg) { var g = el('div', 'fgroup'); g.appendChild(el('span', 'cap', label)); g.appendChild(sg); fr.appendChild(g); }
-    fgroup('สถานะสัญญา', seg); fgroup('ประเภทสัญญา', tseg); if (con.canPay) fgroup('การรับเงินจากเวนเดอร์', pseg);
+    fgroup('สถานะสัญญา', seg); fgroup('ประเภทสัญญา', tseg); if (con.type === 'sign') fgroup('สิ่งที่เช่า', wseg); if (con.canPay) fgroup('การรับเงินจากเวนเดอร์', pseg);
     v.appendChild(fr);
     var grid = el('div', 'floorgrid'), card = el('section', 'card floorplan'), list = el('div'), more = el('div', 'row'), side = el('aside', 'card floorpanel');
     card.appendChild(list); card.appendChild(more); grid.appendChild(card); grid.appendChild(side); v.appendChild(grid);
@@ -2065,10 +2075,11 @@
     p.appendChild(dl);
     if (con.canPay && r.ag) agPayPanel(p, r.ag);
     if (r.kind === 'sign') {
-      var by = {}; c.slots.forEach(function (x) { (by[x.branch_code] = by[x.branch_code] || []).push(x.code); });
-      var pl = el('div', 'boxscroll'); pl.appendChild(el('h3', '', 'ตำแหน่งที่เช่า'));
-      Object.keys(by).sort().forEach(function (b) { pl.appendChild(el('p', 'sub', b + ': ' + by[b].join(', '))); });
-      p.appendChild(pl);
+      var by = {}; c.slots.forEach(function (x) { var s = takeText(x); (by[x.branch_code] = by[x.branch_code] || []).push(x.code + (s ? ' (' + s + ')' : '')); });
+      var nb = Object.keys(by).length, pl = el('details', 'hist'); pl.open = nb <= 3;
+      pl.appendChild(el('summary', '', 'ตำแหน่งที่เช่า' + (c.slots.length ? ' · ' + nb + ' สาขา · ' + c.slots.length + ' ตำแหน่ง' : ' · ยังไม่ระบุ')));
+      var pb = el('div', 'boxscroll'); Object.keys(by).sort().forEach(function (b) { pb.appendChild(el('p', 'sub', b + ': ' + by[b].join(', '))); });
+      pl.appendChild(pb); p.appendChild(pl);
     } else if (c.branches && c.branches.length) {
       var bl = el('div', 'boxscroll'); bl.appendChild(el('h3', '', 'สาขา')); bl.appendChild(el('p', 'sub', c.branches.join(', '))); p.appendChild(bl);
     }
@@ -2723,7 +2734,15 @@
             var sl = el('label', 'check'), sc = el('input'); sc.type = 'checkbox'; sc.checked = signs[id] !== false;
             sc.setAttribute('aria-label', 'เช่าป้ายหัวชั้น ' + b + ' ' + info[id].code); sc.onchange = function () { signs[id] = sc.checked; };
             if (dated0 && signHeld && !sc.checked) sc.disabled = true;
-            sl.appendChild(sc); sl.appendChild(document.createTextNode(dated0 && signHeld ? 'ป้าย (มีผู้เช่าแล้ว)' : 'ป้าย')); ch.appendChild(sl);
+            // say who holds the sign; without the contract's dates the box stays open (that contract may end first) but says so
+            var signBy = (info[id].taken || []).filter(function (h) { return h.sign; }).map(function (h) { return h.brand; }).join(', '), stx = el('span');
+            var signNote = function () {
+              stx.className = sc.checked && signHeld ? 'clashtext' : '';
+              stx.textContent = !signHeld ? 'ป้าย' : sc.checked ? (dated0 ? 'ป้าย (ชนกับ ' + signBy + ')' : 'ป้าย (ตอนนี้ ' + signBy + ' เช่าอยู่ ใส่วันที่เพื่อตรวจ)')
+                : (dated0 ? 'ป้าย (มีผู้เช่าแล้ว: ' + signBy + ')' : 'ป้าย (ตอนนี้ ' + signBy + ' เช่าอยู่)');
+            };
+            sc.onchange = function () { signs[id] = sc.checked; signNote(); };
+            signNote(); sl.appendChild(sc); sl.appendChild(stx); ch.appendChild(sl);
             var ts = el('select', 'input mini'); ts.setAttribute('aria-label', 'ชั้นที่เช่า ' + b + ' ' + info[id].code);
             var opts = [['', 'ไม่เช่าชั้น']], k;
             for (k = 1; k <= n; k++) opts.push(['1-' + k, 'ชั้นบน ' + k + ' ชั้น']);
