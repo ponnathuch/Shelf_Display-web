@@ -186,6 +186,7 @@
   .dotinfo { min-height: calc(2 * var(--size-target-lg)); margin-bottom: var(--space-3); padding: var(--space-2) var(--space-3);
     border: 1px solid var(--c-line); border-radius: var(--radius-s); background: var(--c-surface-2); }
   .dotinfo p { margin: var(--space-1) 0 0; }
+  .dotinfo .warnline { color: var(--c-err); font-weight: bold; }
   .planpick .pin.dot { cursor: pointer; } /* a helper button under its field (next number, reuse old number) */
   .missgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--size-cell-wide), 1fr)); gap: var(--space-2); max-height: var(--size-scroll); overflow-y: auto; margin-top: var(--space-3); }
   .missgrid .tile { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--c-line); border-radius: var(--radius-l); background: var(--c-surface); font: inherit; color: inherit; text-align: left; cursor: pointer; }
@@ -2589,6 +2590,32 @@
       var part = x.taken.every(function (h) { return h.shelf_from && !h.whole; });
       return (part ? 'เช่าบางชั้น: ' : 'ไม่ว่าง: ') + x.taken.map(function (h) { var s = takeText(h); return h.brand + (s ? ' ' + s : ''); }).join(', ');
     }
+    // shelves of a place nobody holds (in the contract's dates, or now when they are not set); null: not a shelf place
+    function freeShelves(x) {
+      var n = x.shelves || 0, busy = {}, out = [], k;
+      if (!n || !x.taken) return null;
+      x.taken.forEach(function (h) { var f = h.whole || !h.shelf_from ? 1 : h.shelf_from, l = h.whole || !h.shelf_from ? n : h.shelf_to; for (k = f; k <= l; k++) busy[k] = true; });
+      for (k = 1; k <= n; k++) if (!busy[k]) out.push(k);
+      return out;
+    }
+    function shelfRanges(ks) { // [1,2,3,5] -> "1-3, 5"
+      var out = [], i = 0;
+      while (i < ks.length) { var j = i; while (j + 1 < ks.length && ks[j + 1] === ks[j] + 1) j++; out.push(i === j ? String(ks[i]) : ks[i] + '-' + ks[j]); i = j + 1; }
+      return out.join(', ');
+    }
+    // does taking `key` ('' sign only, 'w' whole, 'f-t' shelves) collide with someone holding the place
+    function clashes(key, x) {
+      if (!x.taken || !x.taken.length) return false;
+      if (!key || key === 'w') return true;
+      var m = key.split('-'), f = Number(m[0]), l = Number(m[1]);
+      return x.taken.some(function (h) { return h.whole || !h.shelf_from || (h.shelf_from <= l && f <= h.shelf_to); });
+    }
+    // a place partly held: start with its first free shelf instead of "sign only", which would collide
+    function addPlace(x) {
+      sel[x.id] = true;
+      var fr = freeShelves(x);
+      if (!takes[x.id] && fr && fr.length && fr.length < x.shelves) takes[x.id] = fr[0] + '-' + fr[0];
+    }
     var planUrl = {};
     // The plan of one branch in a centred dialog; picking a dot updates the form behind it at once.
     function openPlan(b) {
@@ -2620,7 +2647,11 @@
             var s = takeText(h);
             about.appendChild(el('p', '', h.brand + (s ? ' (' + s + ')' : '') + (h.start_date ? ' · ' + thDate(h.start_date) + ' ถึง ' + thDate(h.end_date) : '') + (h.status === 'pending' ? ' · รออนุมัติ' : '')));
           });
+          var fr = x.taken && x.taken.length ? freeShelves(x) : null;
+          if (fr) about.appendChild(el('p', '', fr.length ? 'ชั้นที่ยังว่าง: ชั้น ' + shelfRanges(fr) + ' จาก ' + x.shelves + ' ชั้น' : 'ไม่มีชั้นว่าง'));
         }
+        // a warning about the dot just pressed, shown in the dialog rather than at the top of the page behind it
+        function warn(x, text) { tell(x); about.insertBefore(el('p', 'warnline', text), about.firstChild); }
         var wrap = el('div', 'pinwrap'), im = el('img', 'floor-img'); im.src = planUrl[b]; im.alt = 'ผังร้าน ' + b; wrap.appendChild(im);
         var off = 0;
         slotsOf(b).forEach(function (x) {
@@ -2632,9 +2663,13 @@
           p.onmouseenter = p.onfocus = function () { tell(x); };
           p.onclick = function () {
             // without the contract's dates a held place may still be free later: the save checks it
-            if (!sel[x.id] && full && dated) { show(x.code + ' ' + heldText(x), 'err'); return; }
-            if (sel[x.id]) delete sel[x.id]; else sel[x.id] = true;
+            if (!sel[x.id] && full && dated) { warn(x, x.code + ' ไม่ว่างในช่วงวันของสัญญานี้ เลือกจุดอื่น'); return; }
+            var adding = !sel[x.id];
+            if (adding) addPlace(x); else delete sel[x.id];
             paintRows(); draw();
+            if (adding && x.taken && x.taken.length) warn(x, dated ? 'เพิ่ม ' + x.code + ' แล้ว จุดนี้มีผู้เช่าบางชั้น เลือกชั้นที่ยังว่างในแถวของสาขา'
+              : 'เพิ่ม ' + x.code + ' แล้ว แต่ตอนนี้มีสัญญาอยู่ ใส่วันที่ของสัญญานี้เพื่อตรวจว่าว่างไหม');
+            else if (adding) tell(x);
           };
           wrap.appendChild(p);
         });
@@ -2675,7 +2710,12 @@
             for (k = 2; k <= n; k++) opts.push([k + '-' + k, 'เฉพาะชั้นที่ ' + k]);
             opts.push(['w', 'ทั้งตู้']);
             if (takes[id] && !opts.some(function (o) { return o[0] === takes[id]; })) opts.push([takes[id], 'ชั้น ' + takes[id]]); // saved before the shelf count changed
-            opts.forEach(function (o) { var op = el('option', '', o[1]); op.value = o[0]; ts.appendChild(op); });
+            var dated = !!(from.value && to.value), held = info[id];
+            opts.forEach(function (o) {
+              var op = el('option', '', o[1]); op.value = o[0];
+              if (dated && o[0] !== takes[id] && clashes(o[0], held)) { op.disabled = true; op.textContent += ' (ไม่ว่าง)'; }
+              ts.appendChild(op);
+            });
             ts.value = takes[id] || ''; ts.onchange = function () { takes[id] = ts.value; };
             ch.appendChild(ts);
           }
@@ -2686,7 +2726,7 @@
         slotsOf(b).filter(function (x) { return !sel[x.id]; }).forEach(function (x) { var o = el('option'); o.value = x.code; o.label = [x.category || x.name, KIND_TH[x.kind], heldText(x)].filter(Boolean).join(' · '); dl.appendChild(o); });
         add.onchange = function () {
           var q = add.value.trim().toUpperCase(), m = slotsOf(b).filter(function (x) { return x.code.toUpperCase() === q; })[0];
-          if (m) { sel[m.id] = true; paintRows(); } else if (q) show('สาขา ' + b + ' ไม่มีตำแหน่ง ' + q + ' (หัวชั้น กระจก หรือป้ายแขวนที่ใช้งานอยู่)', 'err');
+          if (m) { addPlace(m); paintRows(); } else if (q) show('สาขา ' + b + ' ไม่มีตำแหน่ง ' + q + ' (หัวชั้น กระจก หรือป้ายแขวนที่ใช้งานอยู่)', 'err');
         };
         row.appendChild(add); row.appendChild(dl);
         // pick on the plan: for whoever does not remember the Section codes
