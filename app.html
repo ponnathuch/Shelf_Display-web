@@ -165,6 +165,9 @@
     border: var(--outline-w) solid var(--c-surface); font-size: var(--fs-xs); line-height: 1.4; cursor: pointer; touch-action: none; }
   .pin.rent { background: var(--c-warn); }
   .pin.taken { background: var(--c-err); }
+  /* A Section whose code is printed on the plan is marked by a dot, so neighbours do not cover each other; the code shows on hover, focus or selection. */
+  .pin.dot { width: var(--size-icon); height: var(--size-icon); min-width: 0; padding: 0; font-size: 0; }
+  .pin.dot:hover, .pin.dot:focus-visible, .pin.dot.sel { width: auto; height: auto; min-width: var(--space-5); padding: 0 var(--space-1); font-size: var(--fs-xs); z-index: 2; }
   .backbtn { margin-bottom: var(--space-3); }
   .boxscroll { max-height: calc(var(--size-scroll) * 2); overflow-y: auto; margin-top: var(--space-3); }
   .boxscroll .row + h3 { margin-top: var(--space-4); }
@@ -2284,6 +2287,7 @@
     var grid = el('div', 'floorgrid'), card = el('section', 'card floorplan'); card.appendChild(el('h2', 'sec', 'ผังร้าน ' + flo.branch));
     if (lay && lay.image_url) {
       card.appendChild(planWithPins(holder, lay.image_url));
+      card.appendChild(el('p', 'hint', 'จุดสีคือตำแหน่งบนผัง ชี้หรือกดที่จุดเพื่อดูรหัสและรายละเอียด'));
       if (flo.pinning) {
         var pb = el('p', 'hint pinning'), ps = d.slots.filter(function (x) { return x.id === flo.pinning; })[0];
         pb.appendChild(document.createTextNode('กดบนผังเพื่อวางหมุดของ ' + (ps ? ps.code : '') + ' '));
@@ -2297,6 +2301,11 @@
       var row = el('div', 'row');
       row.appendChild(button('อัปโหลดผัง / ข้อมูลร้าน', 'alt', function () { layoutForm(holder); }));
       if (lay.image_url) row.appendChild(button('ปักหมุดอัตโนมัติ (AI)', 'alt', function () { autoPin(holder); }));
+      if (flo.repin && lay.image_url) {
+        // a new plan image was just saved: the pins still sit where they were on the old one
+        flo.repin = false; var rp = el('p', 'hint pinning'); rp.appendChild(document.createTextNode('ผังเปลี่ยนแล้ว หมุดเดิมอาจไม่ตรงตำแหน่ง '));
+        rp.appendChild(button('ปักหมุดใหม่ทั้งหมดด้วย AI', '', function () { autoPin(holder, true); })); card.appendChild(rp);
+      }
       var fi = el('input'); fi.type = 'file'; fi.accept = '.xlsx'; fi.hidden = true;
       fi.onchange = function () { if (fi.files[0]) importXlsx(fi.files[0], holder); fi.value = ''; };
       row.appendChild(button('นำเข้าจากไฟล์ Lock section (.xlsx)', 'alt', function () { fi.click(); })); row.appendChild(fi);
@@ -2317,7 +2326,8 @@
     });
   }
   // Auto-pin: the AI reads the Section codes off the plan and proposes a pin for each; nothing is saved until the editor accepts.
-  function autoPin(holder) {
+  // all = start with every Section chosen (after a new plan the old pins belong to the old image).
+  function autoPin(holder, all) {
     var url = flo.data.layout.image_url;
     show('กำลังให้ AI อ่านรหัสบนผัง อาจใช้เวลาถึง 1 นาที...');
     api('floor_autopin', { branch: flo.branch }).then(function (r) {
@@ -2325,8 +2335,8 @@
       if (!r.pins.length) { show('AI ไม่พบรหัส Section ของสาขานี้บนผัง ปักหมุดเองได้ตามเดิม', 'err'); return; }
       var d = el('section', 'card'), had = r.pins.filter(function (p) { return p.had; }).length;
       d.appendChild(el('h2', 'sec', 'ปักหมุดอัตโนมัติ ' + flo.branch));
-      d.appendChild(el('p', '', 'AI พบ ' + r.pins.length + ' จาก ' + (r.pins.length + r.missing.length) + ' ตำแหน่ง ตรวจหมุดบนผังด้านล่างก่อนบันทึก หมุดที่คลาดเคลื่อนลากแก้ได้ภายหลัง'));
-      var only = el('input'); only.type = 'checkbox'; only.checked = true;
+      d.appendChild(el('p', '', 'AI พบ ' + r.pins.length + ' จาก ' + (r.pins.length + r.missing.length) + ' ตำแหน่ง ตรวจว่าจุดวางตรงรหัสบนผังก่อนบันทึก (ชี้ที่จุดเพื่อดูรหัส) จุดที่คลาดเคลื่อนลากแก้ได้ภายหลัง'));
+      var only = el('input'); only.type = 'checkbox'; only.checked = !all;
       if (had) { var l = el('label', 'check'); l.appendChild(only); l.appendChild(document.createTextNode('ปักเฉพาะตำแหน่งที่ยังไม่มีหมุด (' + had + ' ตำแหน่งมีหมุดอยู่แล้ว จะไม่ถูกย้าย)')); d.appendChild(l); }
       var wrap = el('div', 'pinwrap'), im = el('img', 'floor-img'); im.src = url; im.alt = 'ผังร้าน ' + flo.branch + ' พร้อมหมุดที่เสนอ'; wrap.appendChild(im); d.appendChild(wrap);
       if (r.missing.length) d.appendChild(el('p', 'hint', 'ไม่พบบนผัง ต้องปักเอง (' + r.missing.length + '): ' + r.missing.join(', ')));
@@ -2339,7 +2349,7 @@
       function paint() {
         Array.prototype.slice.call(wrap.querySelectorAll('.pin')).forEach(function (n) { wrap.removeChild(n); });
         var list = chosen();
-        list.forEach(function (p) { var s = el('span', 'pin', p.code); s.style.left = p.x + '%'; s.style.top = p.y + '%'; wrap.appendChild(s); });
+        list.forEach(function (p) { var s = el('span', 'pin' + pinDot(p.code), p.code); s.style.left = p.x + '%'; s.style.top = p.y + '%'; wrap.appendChild(s); });
         go.textContent = 'ใช้หมุดเหล่านี้ (' + list.length + ')'; go.disabled = !list.length;
       }
       only.onchange = paint; paint();
@@ -2347,6 +2357,8 @@
       holder.textContent = ''; holder.appendChild(d);
     }).catch(function (e) { show(e.message, 'err'); });
   }
+  // Codes like OA01 are printed on the plan, so their pin is a dot; a place named by hand (ประตูทางเข้า) keeps its name on the pin.
+  function pinDot(code) { return /^[A-Z]{1,4}\d{1,3}$/.test(code) ? ' dot' : ''; }
   // The plan image with one pin per placed, active place. Editors drag a pin to move it, or place a chosen place by tapping the plan.
   function planWithPins(holder, url) {
     var d = flo.data, wrap = el('div', 'pinwrap'), im = el('img', 'floor-img'); im.src = url; im.alt = 'ผังร้าน ' + flo.branch; im.draggable = false; wrap.appendChild(im);
@@ -2362,7 +2374,7 @@
       };
     }
     d.slots.filter(function (sl) { return sl.active && sl.x != null && sl.y != null; }).forEach(function (sl) {
-      var pin = el('button', 'pin' + (signNow(sl) ? ' taken' : sl.kind === 'temp' ? ' tmp' : sl.tenant === 'rent' ? ' rent' : '') + (flo.sel === sl.id ? ' sel' : ''), sl.code); pin.type = 'button';
+      var pin = el('button', 'pin' + pinDot(sl.code) + (signNow(sl) ? ' taken' : sl.kind === 'temp' ? ' tmp' : sl.tenant === 'rent' ? ' rent' : '') + (flo.sel === sl.id ? ' sel' : ''), sl.code); pin.type = 'button';
       pin.style.left = sl.x + '%'; pin.style.top = sl.y + '%'; pin.setAttribute('aria-label', 'ตำแหน่ง ' + sl.code);
       var drag = null;
       pin.onpointerdown = function (e) {
@@ -2812,7 +2824,7 @@
       pre.then(function (img) {
         var b = { branch: flo.branch, sqm: sqm.value, size_label: size.value, pog_type: pog.value, store_type: st.value }; if (img) b.image = img;
         return api('floor_layout_save', b);
-      }).then(function () { show('บันทึกผังแล้ว', 'ok'); loadFloor(holder); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
+      }).then(function () { show('บันทึกผังแล้ว', 'ok'); flo.repin = !!fi.files[0]; loadFloor(holder); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
     holder.textContent = ''; holder.appendChild(d);
@@ -2836,7 +2848,7 @@
         var meta = { branch: flo.branch, sqm: lay.sqm, size_label: lay.size_label, pog_type: lay.pog_type, store_type: lay.store_type };
         (r.image ? toJpegBase64(r.image, 2000).then(function (b64) { meta.image = b64; return api('floor_layout_save', meta); }) : Promise.resolve())
           .then(function () { return api('floor_import', { branch: flo.branch, slots: r.slots }); })
-          .then(function (x) { show('นำเข้า ' + x.count + ' ตำแหน่งแล้ว', 'ok'); loadFloor(holder); })
+          .then(function (x) { show('นำเข้า ' + x.count + ' ตำแหน่งแล้ว', 'ok'); flo.repin = !!r.image; loadFloor(holder); })
           .catch(function (e) { go2.disabled = false; show(e.message + (e.data && e.data.code ? ': ' + e.data.code : ''), 'err'); });
       });
       row.appendChild(go2); row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
