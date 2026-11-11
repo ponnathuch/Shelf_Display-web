@@ -183,6 +183,9 @@
   .plandlg::backdrop { background: var(--c-scrim); opacity: 0.5; }
   .plandlg .dlghead { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
   .plandlg .dlghead h2 { flex: 1; margin: 0; }
+  .dotinfo { min-height: calc(2 * var(--size-target-lg)); margin-bottom: var(--space-3); padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--c-line); border-radius: var(--radius-s); background: var(--c-surface-2); }
+  .dotinfo p { margin: var(--space-1) 0 0; }
   .planpick .pin.dot { cursor: pointer; } /* a helper button under its field (next number, reuse old number) */
   .missgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--size-cell-wide), 1fr)); gap: var(--space-2); max-height: var(--size-scroll); overflow-y: auto; margin-top: var(--space-3); }
   .missgrid .tile { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--c-line); border-radius: var(--radius-l); background: var(--c-surface); font: inherit; color: inherit; text-align: left; cursor: pointer; }
@@ -290,6 +293,7 @@
     bad_target: 'แคมเปญที่เลือกผูกไม่ได้ (ยกเลิกแล้วหรือเป็นเคสจากคลัง)',
     'missing:ad': 'ยังไม่ได้ใส่เลขโฆษณาและวันหมดอายุ', 'missing:branches': 'ยังไม่ได้เลือกสาขา',
     self: 'อนุมัติข้อตกลงที่ตัวเองลงทะเบียนไม่ได้', bad_reason: 'ใส่เหตุผลก่อน', bad_note: 'พิมพ์ว่ารออะไรอยู่ก่อน', bad_due_date: 'เลือกวันที่ให้สาขาส่งรูปก่อน',
+    no_places: 'ยังอนุมัติไม่ได้ สัญญาป้ายในข้อตกลงนี้ยังไม่ได้ระบุตำแหน่ง (รอระบุตำแหน่ง) เปิดสัญญาแล้วเลือกตำแหน่งก่อน',
     jt_off: 'ยังไม่ได้ตั้งการเชื่อม Job Tracker กรุณาแจ้งผู้ดูแลระบบ', no_branches: 'สัญญานี้ยังไม่มีสาขา', jt_refused: 'Job Tracker เปิดงานไม่สำเร็จ', state: 'สถานะเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
     expired: 'เซสชันหมดอายุ กรุณาเข้าใหม่จากเมนู Job Tracker', bad_signature: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker',
     malformed: 'ลิงก์ไม่ถูกต้อง กรุณาเข้าใหม่จากเมนู Job Tracker', reused: 'ลิงก์ถูกใช้แล้ว กรุณาเข้าใหม่จากเมนู Job Tracker',
@@ -1756,7 +1760,8 @@
       r[2].contracts.map(normEnd).forEach(function (c) {
         var bs = {}, rent = 0, has = false;
         c.slots.forEach(function (x) { bs[x.branch_code] = true; if (x.rent != null) { rent += Number(x.rent); has = true; } });
-        con.rows.push({ kind: 'sign', key: 's' + c.id, c: c, ag: agById[c.agreement_id] || null, pay: (agById[c.agreement_id] || {}).pay_status || null, rent: has ? rent : null, scope: Object.keys(bs).length + ' สาขา · ' + c.slots.length + ' ตำแหน่ง' });
+        var nb = (c.wanted_branches || []).length;
+        con.rows.push({ kind: 'sign', key: 's' + c.id, c: c, ag: agById[c.agreement_id] || null, pay: (agById[c.agreement_id] || {}).pay_status || null, rent: has ? rent : null, scope: !c.slots.length ? 'รอระบุตำแหน่ง' + (nb ? ' · ' + nb + ' สาขา' : '') : Object.keys(bs).length + ' สาขา · ' + c.slots.length + ' ตำแหน่ง' });
       });
       if (!con.rows.some(function (x) { return x.key === con.sel; })) con.sel = null;
       renderContracts();
@@ -1819,6 +1824,7 @@
         b.appendChild(el('b', 'slot-code', r.c.brand)); b.appendChild(el('span', 'chip', CON_KIND[r.kind])); b.appendChild(el('span', 'sub grow', [r.c.vendor, r.scope, String(r.c.note || (r.ag && r.ag.note) || '').slice(0, 80)].filter(Boolean).join(' · ')));
         if (r.rent != null) b.appendChild(el('span', 'sub', baht(r.rent) + ' บาท/เดือน'));
         if (con.canPay) { var pk = r.pay || 'pending'; b.appendChild(el('span', 'chip ' + (pk === 'paid' ? 'ok' : pk === 'partial' ? 'warn' : ''), PAY_TH[pk])); }
+        if (r.kind === 'sign' && !r.c.slots.length) b.appendChild(el('span', 'chip warn', 'รอระบุตำแหน่ง'));
         if (r.c.status === 'pending' || (r.ag && r.ag.status === 'pending')) b.appendChild(el('span', 'chip warn', 'รออนุมัติ'));
         if (r.ag && r.ag.needs_review) b.appendChild(el('span', 'chip warn', 'ต้องอนุมัติใหม่'));
         var st = cashState(r.c), left = daysTo(r.c.end_date);
@@ -2599,8 +2605,22 @@
       function draw() {
         box.textContent = '';
         if (!planUrl[b]) { box.appendChild(el('p', 'sub', 'สาขานี้ยังไม่มีรูปผัง เลือกจากช่องพิมพ์รหัสแทน')); return; }
-        if (!from.value || !to.value) box.appendChild(el('p', 'hint', 'ใส่วันเริ่มและวันสิ้นสุดก่อน ผังจึงบอกได้ว่าจุดไหนว่าง'));
-        else box.appendChild(el('p', 'hint', 'กดจุดเพื่อเพิ่มหรือเอาออก ชี้ที่จุดเพื่อดูรหัส สีม่วง = ว่าง สีส้ม = เช่าแล้วบางชั้น สีแดง = ไม่ว่างในช่วงวันนี้'));
+        var dated = !!(from.value && to.value);
+        box.appendChild(el('p', 'hint', dated ? 'กดจุดเพื่อเพิ่มหรือเอาออก ชี้ที่จุดเพื่อดูรายละเอียด สีม่วง = ว่าง สีส้ม = เช่าแล้วบางชั้น สีแดง = ไม่ว่างในช่วงวันของสัญญานี้'
+          : 'ยังไม่ได้ใส่วันเริ่มและวันสิ้นสุด สีบอกสัญญาที่ยังไม่หมดอายุ ใส่วันที่เพื่อดูว่าว่างในช่วงของสัญญานี้ไหม ชี้ที่จุดเพื่อดูรายละเอียด'));
+        // what the pointed dot is and who holds it, like the side panel of the floor page
+        var about = el('div', 'dotinfo'); about.setAttribute('aria-live', 'polite'); about.appendChild(el('span', 'sub', 'ชี้ที่จุด (หรือกด Tab ไปที่จุด) เพื่อดูรายละเอียด'));
+        box.appendChild(about);
+        function tell(x) {
+          about.textContent = '';
+          about.appendChild(el('b', '', x.code + ' ')); about.appendChild(el('span', 'sub', [x.category, KIND_TH[x.kind]].filter(Boolean).join(' · ')));
+          if (sel[x.id]) about.appendChild(el('p', '', 'เลือกไว้ในสัญญานี้แล้ว'));
+          if (!x.taken || !x.taken.length) about.appendChild(el('p', '', dated ? 'ว่างในช่วงวันของสัญญานี้' : 'ว่าง ไม่มีสัญญาที่ยังไม่หมดอายุ'));
+          (x.taken || []).forEach(function (h) {
+            var s = takeText(h);
+            about.appendChild(el('p', '', h.brand + (s ? ' (' + s + ')' : '') + (h.start_date ? ' · ' + thDate(h.start_date) + ' ถึง ' + thDate(h.end_date) : '') + (h.status === 'pending' ? ' · รออนุมัติ' : '')));
+          });
+        }
         var wrap = el('div', 'pinwrap'), im = el('img', 'floor-img'); im.src = planUrl[b]; im.alt = 'ผังร้าน ' + b; wrap.appendChild(im);
         var off = 0;
         slotsOf(b).forEach(function (x) {
@@ -2608,9 +2628,11 @@
           var full = x.taken && x.taken.some(function (h) { return !h.shelf_from || h.whole; }), part = x.taken && x.taken.length && !full;
           var p = el('button', 'pin' + pinDot(x.code) + (full ? ' taken' : part ? ' rent' : '') + (sel[x.id] ? ' sel' : ''), x.code); p.type = 'button';
           p.style.left = x.x + '%'; p.style.top = x.y + '%';
-          var why = [x.code, x.category, heldText(x)].filter(Boolean).join(' · '); p.title = why; p.setAttribute('aria-label', why + (sel[x.id] ? ' (เลือกแล้ว)' : ''));
+          var why = [x.code, x.category, heldText(x)].filter(Boolean).join(' · '); p.setAttribute('aria-label', why + (sel[x.id] ? ' (เลือกแล้ว)' : ''));
+          p.onmouseenter = p.onfocus = function () { tell(x); };
           p.onclick = function () {
-            if (!sel[x.id] && full) { show(x.code + ' ' + heldText(x), 'err'); return; }
+            // without the contract's dates a held place may still be free later: the save checks it
+            if (!sel[x.id] && full && dated) { show(x.code + ' ' + heldText(x), 'err'); return; }
             if (sel[x.id]) delete sel[x.id]; else sel[x.id] = true;
             paintRows(); draw();
           };
@@ -2672,7 +2694,7 @@
         rowsBox.appendChild(row);
       });
     }
-    var picker = branchPicker(sb, (c ? c.slots.map(function (x) { return x.branch_code; }) : [flo.branch].filter(Boolean)).filter(function (v, i, a) { return a.indexOf(v) === i; }), function (codes) {
+    var picker = branchPicker(sb, (c ? c.slots.map(function (x) { return x.branch_code; }).concat(c.wanted_branches || []) : [flo.branch].filter(Boolean)).filter(function (v, i, a) { return a.indexOf(v) === i; }), function (codes) {
       chosenB = codes; rowsBox.textContent = ''; rowsBox.appendChild(el('p', 'sub', 'กำลังโหลดตำแหน่ง...'));
       need(codes).then(paintRows).catch(function (e) { show(e.message, 'err'); });
     });
@@ -2765,10 +2787,10 @@
       var slots = Object.keys(sel).filter(function (id) { return info[id] && chosenB.indexOf(info[id].branch_code) >= 0; }).map(function (id) { var o = takeBody(id); o.slot_id = Number(id); o.rent = rents[id] == null ? null : rents[id]; return o; });
       if (!brand.value.trim() || !from.value || !to.value) { show('ใส่แบรนด์ วันเริ่ม และวันสิ้นสุดก่อน', 'err'); return; }
       if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
-      if (!slots.length) { show('เลือกสาขาและตำแหน่งที่เช่าอย่างน้อย 1 ตำแหน่ง', 'err'); return; }
+      if (!slots.length && !confirm('ยังไม่ได้เลือกตำแหน่ง\n\nบันทึกเป็น "รอระบุตำแหน่ง" ได้ ข้อตกลงจะยังอนุมัติไม่ได้จนกว่าจะกลับมาเลือกตำแหน่ง\n\nบันทึกต่อไหม?')) return;
       save.disabled = true;
       var b = { brand: brand.value, vendor: vendor.value, start_date: from.value, end_date: to.value, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value,
-        supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, note: note.value, slots: slots };
+        supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, note: note.value, slots: slots, wanted_branches: chosenB };
       if (savedId) b.id = savedId; else if (renew) b.renewed_from = c.id;
       if (!savedId && agId) b.agreement_id = agId;
       api('sign_save', b).then(function (r) { savedId = r.id; flo.signsReq = null; return pm.flush(r.id); }).then(function () { var msg = edit || agId ? 'บันทึกแล้ว' : 'บันทึกแล้ว รออนุมัติข้อตกลงก่อนจึงจะแจ้งคลังและแสดงให้สาขาเห็น'; if (formBack) { afterNote = [msg, 'ok']; formBack(); } else { show(msg, 'ok'); loadFloor(holder); } })
