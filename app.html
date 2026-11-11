@@ -271,7 +271,8 @@
   var ERR = {
     'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
     'missing:dates': 'ยังไม่ได้ใส่วันเริ่ม และวันสิ้นสุด (หรือติ๊ก "ไม่มีวันหมดอายุ")', 'missing:agreement_no': 'ยังไม่ได้ใส่เลขที่สัญญา/TTA',
-    bad_query: 'พิมพ์คำค้นก่อน', ai_down: 'AI อ่านรูปไม่ได้ในตอนนี้ ลองพิมพ์ค้นหาแทน', search_limit: 'ค้นด้วยรูปครบจำนวนต่อวันแล้ว ลองพิมพ์ค้นหาแทน',
+    plan_ai_down: 'AI อ่านผังไม่ได้ในตอนนี้ ลองใหม่ภายหลัง หรือปักหมุดเอง', plan_limit: 'ใช้ AI ครบจำนวนต่อวันแล้ว ลองใหม่พรุ่งนี้ หรือปักหมุดเอง', no_plan: 'สาขานี้ยังไม่มีรูปผัง อัปโหลดผังก่อน',
+    bad_query: 'พิมพ์คำค้นก่อน',ai_down: 'AI อ่านรูปไม่ได้ในตอนนี้ ลองพิมพ์ค้นหาแทน', search_limit: 'ค้นด้วยรูปครบจำนวนต่อวันแล้ว ลองพิมพ์ค้นหาแทน',
     bad_photo: 'รูปนี้ใช้ไม่ได้ (ต้องเป็นรูปที่เปิดได้ และไม่ใหญ่เกินไป)', too_many_photos: 'ใส่รูปตัวอย่างได้ไม่เกิน 10 รูปต่อแคมเปญ',
     bad_target: 'แคมเปญที่เลือกผูกไม่ได้ (ยกเลิกแล้วหรือเป็นเคสจากคลัง)',
     'missing:ad': 'ยังไม่ได้ใส่เลขโฆษณาและวันหมดอายุ', 'missing:branches': 'ยังไม่ได้เลือกสาขา',
@@ -2295,6 +2296,7 @@
     if (d.can_edit) {
       var row = el('div', 'row');
       row.appendChild(button('อัปโหลดผัง / ข้อมูลร้าน', 'alt', function () { layoutForm(holder); }));
+      if (lay.image_url) row.appendChild(button('ปักหมุดอัตโนมัติ (AI)', 'alt', function () { autoPin(holder); }));
       var fi = el('input'); fi.type = 'file'; fi.accept = '.xlsx'; fi.hidden = true;
       fi.onchange = function () { if (fi.files[0]) importXlsx(fi.files[0], holder); fi.value = ''; };
       row.appendChild(button('นำเข้าจากไฟล์ Lock section (.xlsx)', 'alt', function () { fi.click(); })); row.appendChild(fi);
@@ -2313,6 +2315,37 @@
       s[1].classList.add('jumpto'); holder.appendChild(s[1]);
       var jb = el('button', '', s[0]); jb.type = 'button'; jb.onclick = function () { s[1].scrollIntoView(); }; jump.appendChild(jb);
     });
+  }
+  // Auto-pin: the AI reads the Section codes off the plan and proposes a pin for each; nothing is saved until the editor accepts.
+  function autoPin(holder) {
+    var url = flo.data.layout.image_url;
+    show('กำลังให้ AI อ่านรหัสบนผัง อาจใช้เวลาถึง 1 นาที...');
+    api('floor_autopin', { branch: flo.branch }).then(function (r) {
+      show('');
+      if (!r.pins.length) { show('AI ไม่พบรหัส Section ของสาขานี้บนผัง ปักหมุดเองได้ตามเดิม', 'err'); return; }
+      var d = el('section', 'card'), had = r.pins.filter(function (p) { return p.had; }).length;
+      d.appendChild(el('h2', 'sec', 'ปักหมุดอัตโนมัติ ' + flo.branch));
+      d.appendChild(el('p', '', 'AI พบ ' + r.pins.length + ' จาก ' + (r.pins.length + r.missing.length) + ' ตำแหน่ง ตรวจหมุดบนผังด้านล่างก่อนบันทึก หมุดที่คลาดเคลื่อนลากแก้ได้ภายหลัง'));
+      var only = el('input'); only.type = 'checkbox'; only.checked = true;
+      if (had) { var l = el('label', 'check'); l.appendChild(only); l.appendChild(document.createTextNode('ปักเฉพาะตำแหน่งที่ยังไม่มีหมุด (' + had + ' ตำแหน่งมีหมุดอยู่แล้ว จะไม่ถูกย้าย)')); d.appendChild(l); }
+      var wrap = el('div', 'pinwrap'), im = el('img', 'floor-img'); im.src = url; im.alt = 'ผังร้าน ' + flo.branch + ' พร้อมหมุดที่เสนอ'; wrap.appendChild(im); d.appendChild(wrap);
+      if (r.missing.length) d.appendChild(el('p', 'hint', 'ไม่พบบนผัง ต้องปักเอง (' + r.missing.length + '): ' + r.missing.join(', ')));
+      var row = el('div', 'row'), go = button('', '', function () {
+        go.disabled = true;
+        api('slot_pins_save', { branch: flo.branch, pins: chosen().map(function (p) { return { id: p.id, x: p.x, y: p.y }; }) })
+          .then(function (x) { show('ปักหมุด ' + x.count + ' ตำแหน่งแล้ว', 'ok'); loadFloor(holder); }).catch(function (e) { go.disabled = false; show(e.message, 'err'); });
+      });
+      function chosen() { return r.pins.filter(function (p) { return !(had && only.checked && p.had); }); }
+      function paint() {
+        Array.prototype.slice.call(wrap.querySelectorAll('.pin')).forEach(function (n) { wrap.removeChild(n); });
+        var list = chosen();
+        list.forEach(function (p) { var s = el('span', 'pin', p.code); s.style.left = p.x + '%'; s.style.top = p.y + '%'; wrap.appendChild(s); });
+        go.textContent = 'ใช้หมุดเหล่านี้ (' + list.length + ')'; go.disabled = !list.length;
+      }
+      only.onchange = paint; paint();
+      row.appendChild(go); row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
+      holder.textContent = ''; holder.appendChild(d);
+    }).catch(function (e) { show(e.message, 'err'); });
   }
   // The plan image with one pin per placed, active place. Editors drag a pin to move it, or place a chosen place by tapping the plan.
   function planWithPins(holder, url) {
