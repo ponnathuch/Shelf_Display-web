@@ -234,6 +234,16 @@
   .codes .bad { color: var(--c-err); font-weight: bold; }
   /* a field the user must fix: red frame and the reason right under it */
   .input.invalid { border-color: var(--c-err); box-shadow: 0 0 0 1px var(--c-err); background: var(--c-err-soft); }
+  /* storefront signs: branches x months, each cell the signs rented that month */
+  .tlwrap { max-height: calc(var(--size-scroll) * 2); overflow: auto; margin-top: var(--space-3); }
+  .fronttl { border-collapse: separate; border-spacing: 0; font-size: var(--fs-s); }
+  .fronttl th, .fronttl td { padding: var(--space-1); border-bottom: 1px solid var(--c-line); text-align: center; white-space: nowrap; background: var(--c-surface); }
+  .fronttl thead th { position: sticky; top: 0; z-index: 1; }
+  .fronttl th[scope=row], .fronttl thead th:first-child { position: sticky; left: 0; text-align: left; z-index: 2; }
+  .fronttl button { min-width: var(--size-target); min-height: var(--size-target); border: 1px solid var(--c-line); border-radius: var(--radius-s); background: var(--c-surface); color: var(--c-ink); font: inherit; cursor: pointer; }
+  .fronttl button.part { background: var(--c-brand-soft); }
+  .fronttl button.full { background: var(--c-err-soft); color: var(--c-err); font-weight: bold; }
+  .fronttl button[aria-pressed=true] { border-color: var(--c-brand); box-shadow: 0 0 0 1px var(--c-brand); }
   .fieldbad > .t { color: var(--c-err); font-weight: bold; }
   .fielderr { display: block; margin-top: var(--space-1); color: var(--c-err); font-size: var(--fs-s); font-weight: bold; }
   .codes .good { color: var(--c-ok); }
@@ -3261,7 +3271,7 @@
   }
 
   // ---------- home: the dashboard (office) or the store's own view (branch); the warehouse only searches ----------
-  var branchList = [], cashHome = [], signHome = [];
+  var branchList = [], cashHome = [], signHome = [], frontHome = {};
   var WEEKS = 10, FROM = -3;
   function gantt(rows, onOpen) {
     var span = WEEKS * 7, box = el('div', 'gantt'), head = el('div', 'g-row g-head');
@@ -3346,6 +3356,53 @@
     host.appendChild(cashierTimeline(cashHome));
     host.appendChild(cashierDueCard(cashHome));
     host.appendChild(cashierDueCard(signHome, 'สัญญาพื้นที่'));
+    host.appendChild(frontTimeline(signHome, frontHome));
+  }
+  // Storefront signs month by month for the next 12 months: each cell is how many of the branch's signs are rented in
+  // that month (contracts not cancelled; waiting ones count, as they hold the place). A click names the brands.
+  function frontTimeline(list, places) {
+    var card = el('section', 'card'), branches = Object.keys(places).sort();
+    card.appendChild(el('h2', 'sec', 'ป้ายหน้าร้าน: จุดที่เช่าแล้วรายเดือน (12 เดือน)'));
+    if (!branches.length) { card.appendChild(el('p', 'empty-note', 'ยังไม่มีจุดป้ายหน้าร้าน')); return card; }
+    var t0 = today(), y = Number(t0.slice(0, 4)), m0 = Number(t0.slice(5, 7)) - 1, months = [], i;
+    for (i = 0; i < 12; i++) {
+      var yy = y + Math.floor((m0 + i) / 12), mm = (m0 + i) % 12, first = yy + '-' + String(mm + 1).padStart(2, '0') + '-01';
+      var next = (mm === 11 ? yy + 1 : yy) + '-' + String(mm === 11 ? 1 : mm + 2).padStart(2, '0') + '-01';
+      months.push({ label: TH_M[mm] + ' ' + String((yy + 543) % 100), from: first, to: addDays(next, -1) });
+    }
+    var held = {};
+    list.forEach(function (c) {
+      if (c.status === 'cancelled' || !c.start_date || !c.end_date) return;
+      (c.slots || []).forEach(function (x) {
+        if (x.kind !== 'front') return;
+        months.forEach(function (mo, k) {
+          if (c.start_date <= mo.to && c.end_date >= mo.from) { var key = x.branch_code + '|' + k; (held[key] = held[key] || []).push({ brand: c.brand, code: x.code, wait: c.status === 'pending' }); }
+        });
+      });
+    });
+    var cap = 0, used = 0, openB = 0;
+    branches.forEach(function (b) { var n = (held[b + '|0'] || []).length; cap += places[b]; used += n; if (n < places[b]) openB++; });
+    card.appendChild(el('p', 'sub', 'เดือนนี้เช่าแล้ว ' + used + ' จาก ' + cap + ' จุด · ' + openB + ' สาขายังมีจุดว่าง · กดช่องเพื่อดูแบรนด์'));
+    var about = el('p', 'sub'); about.setAttribute('aria-live', 'polite');
+    var wrap = el('div', 'tlwrap'), tb = el('table', 'fronttl'), th = el('thead'), hr = el('tr'), body = el('tbody'), on = null;
+    hr.appendChild(el('th', '', 'สาขา')); months.forEach(function (mo) { hr.appendChild(el('th', '', mo.label)); });
+    th.appendChild(hr); tb.appendChild(th);
+    branches.forEach(function (b) {
+      var tr = el('tr'), rh = el('th', '', b); rh.scope = 'row'; tr.appendChild(rh);
+      months.forEach(function (mo, k) {
+        var hs = held[b + '|' + k] || [], n = places[b], td = el('td'), bt = el('button', hs.length >= n ? 'full' : hs.length ? 'part' : '', hs.length + '/' + n);
+        bt.type = 'button'; bt.setAttribute('aria-pressed', 'false'); bt.setAttribute('aria-label', b + ' ' + mo.label + ' เช่าแล้ว ' + hs.length + ' จาก ' + n + ' จุด');
+        bt.onclick = function () {
+          if (on) on.setAttribute('aria-pressed', 'false'); on = bt; bt.setAttribute('aria-pressed', 'true');
+          about.textContent = b + ' · ' + mo.label + ': ' + (hs.length ? hs.map(function (h) { return h.brand + ' (' + h.code + (h.wait ? ', รออนุมัติ' : '') + ')'; }).join(', ') : 'ว่างทุกจุด')
+            + (hs.length < n ? ' · ว่าง ' + (n - hs.length) + ' จุด' : '');
+        };
+        td.appendChild(bt); tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    tb.appendChild(body); wrap.appendChild(tb); card.appendChild(wrap); card.appendChild(about);
+    return card;
   }
   // Cashier contracts as timeline rows; a branch only sees its own, and nothing opens for a branch.
   function cashierTimeline(contracts) {
@@ -3403,7 +3460,7 @@
     var wait = el('p', 'sub', 'กำลังโหลด...'); dash.appendChild(wait);
     // The cashier timeline is extra: if it cannot load, the rest of the home page still shows.
     Promise.all([api('list', {}), api('cashier_list').catch(function () { return { contracts: [] }; }), api('sign_list').catch(function () { return { contracts: [] }; })]).then(guard(function (rs) {
-      var d = rs[0]; all = d.campaigns.map(normEnd); cashHome = rs[1].contracts.map(normEnd); signHome = rs[2].contracts.map(normEnd); dash.textContent = '';
+      var d = rs[0]; all = d.campaigns.map(normEnd); cashHome = rs[1].contracts.map(normEnd); signHome = rs[2].contracts.map(normEnd); frontHome = rs[2].front_places || {}; dash.textContent = '';
       if (isOffice()) officeDash(dash); else branchDash(dash);
     })).catch(guard(fail));
   }
