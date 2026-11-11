@@ -175,6 +175,7 @@
   .brow .bhead { flex: 0 0 var(--size-cell-wide); display: flex; flex-direction: column; }
   .brow > .input { flex: 1 1 var(--size-cell); }
   .input.mini { width: var(--size-cell); }
+  label.f > .btn { margin-top: var(--space-2); } /* a helper button under its field (next number, reuse old number) */
   .missgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--size-cell-wide), 1fr)); gap: var(--space-2); max-height: var(--size-scroll); overflow-y: auto; margin-top: var(--space-3); }
   .missgrid .tile { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--c-line); border-radius: var(--radius-l); background: var(--c-surface); font: inherit; color: inherit; text-align: left; cursor: pointer; }
   .missgrid .tile:hover { background: var(--c-brand-soft); }
@@ -274,6 +275,7 @@
   var ERR = {
     'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
     'missing:dates': 'ยังไม่ได้ใส่วันเริ่ม และวันสิ้นสุด (หรือติ๊ก "ไม่มีวันหมดอายุ")', 'missing:agreement_no': 'ยังไม่ได้ใส่เลขที่สัญญา/TTA',
+    hang_min: 'ป้ายแขวนต้องเช่าอย่างน้อย 3 เดือน ปรับวันสิ้นสุด หรือเอาตำแหน่งป้ายแขวนออก',
     plan_ai_down: 'AI อ่านผังไม่ได้ในตอนนี้ ลองใหม่ภายหลัง หรือปักหมุดเอง', plan_limit: 'ใช้ AI ครบจำนวนต่อวันแล้ว ลองใหม่พรุ่งนี้ หรือปักหมุดเอง', no_plan: 'สาขานี้ยังไม่มีรูปผัง อัปโหลดผังก่อน',
     bad_query: 'พิมพ์คำค้นก่อน',ai_down: 'AI อ่านรูปไม่ได้ในตอนนี้ ลองพิมพ์ค้นหาแทน', search_limit: 'ค้นด้วยรูปครบจำนวนต่อวันแล้ว ลองพิมพ์ค้นหาแทน',
     bad_photo: 'รูปนี้ใช้ไม่ได้ (ต้องเป็นรูปที่เปิดได้ และไม่ใหญ่เกินไป)', too_many_photos: 'ใส่รูปตัวอย่างได้ไม่เกิน 10 รูปต่อแคมเปญ',
@@ -2074,7 +2076,7 @@
 
   // ---------- floor plans and places ----------
   var flo = { mode: 'branch', freeOn: '', signLimit: 15, signNeedle: '', signs: [], branch: '', data: null, view: 'active', needle: '', sel: null, pinning: null };
-  var KIND_TH = { header: 'หัวชั้น', glass: 'กระจกหน้าร้าน', temp: 'สื่อชั่วคราว' }, TENANT_TH = { icare: 'iCare', rent: 'เช่า' };
+  var KIND_TH = { header: 'หัวชั้น', glass: 'กระจกหน้าร้าน', temp: 'สื่อชั่วคราว', hang: 'ป้ายแขวน' }, TENANT_TH = { icare: 'iCare', rent: 'เช่า' };
 
   // Minimal .xlsx reader (an .xlsx is a zip of XML files): enough for "Lock section_<branch>.xlsx".
   function zipEntries(buf) {
@@ -2594,7 +2596,7 @@
         slotsOf(b).filter(function (x) { return !sel[x.id]; }).forEach(function (x) { var o = el('option'); o.value = x.code; o.label = [x.name, KIND_TH[x.kind]].filter(Boolean).join(' · '); dl.appendChild(o); });
         add.onchange = function () {
           var q = add.value.trim().toUpperCase(), m = slotsOf(b).filter(function (x) { return x.code.toUpperCase() === q; })[0];
-          if (m) { sel[m.id] = true; paintRows(); } else if (q) show('สาขา ' + b + ' ไม่มีตำแหน่ง ' + q + ' (หัวชั้นหรือกระจกที่ใช้งานอยู่)', 'err');
+          if (m) { sel[m.id] = true; paintRows(); } else if (q) show('สาขา ' + b + ' ไม่มีตำแหน่ง ' + q + ' (หัวชั้น กระจก หรือป้ายแขวนที่ใช้งานอยู่)', 'err');
         };
         row.appendChild(add); row.appendChild(dl); rowsBox.appendChild(row);
       });
@@ -2707,7 +2709,7 @@
   function slotsCard(holder) {
     var d = flo.data, card = el('section', 'card'), all = d.slots;
     card.appendChild(el('h2', 'sec', 'ตำแหน่งป้าย (' + all.length + ')'));
-    var views = [['active', 'ใช้งาน', function (s) { return s.active && s.kind === 'header'; }], ['free', 'ว่างวันนี้', function (s) { return s.active && s.kind !== 'temp' && !signNow(s); }], ['retired', 'เลิกใช้', function (s) { return !s.active; }], ['glass', 'กระจกหน้าร้าน', function (s) { return s.active && s.kind === 'glass'; }], ['temp', 'สื่อชั่วคราว', function (s) { return s.active && s.kind === 'temp'; }]];
+    var views = [['active', 'ใช้งาน', function (s) { return s.active && s.kind === 'header'; }], ['free', 'ว่างวันนี้', function (s) { return s.active && s.kind !== 'temp' && !signNow(s); }], ['retired', 'เลิกใช้', function (s) { return !s.active; }], ['glass', 'กระจกหน้าร้าน', function (s) { return s.active && s.kind === 'glass'; }], ['temp', 'สื่อชั่วคราว', function (s) { return s.active && s.kind === 'temp'; }], ['hang', 'ป้ายแขวน', function (s) { return s.active && s.kind === 'hang'; }]];
     var tb = el('div', 'toolbar'), seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'กรองตำแหน่ง');
     views.forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(flo.view === t[0]));
@@ -2774,7 +2776,7 @@
   // Bulk edit of a branch's places: export the list, change it in Excel, import it back. Columns are found by their
   // header, so a sheet may carry only the columns to change; a place is matched by its code and new codes are added.
   var SLOT_COLS = [['code', 'รหัส'], ['name', 'ชื่อ'], ['category', 'หมวดสินค้า'], ['kind', 'ชนิด'], ['tenant', 'ผู้ใช้ตำแหน่ง'], ['active', 'ใช้งาน'], ['note', 'หมายเหตุ'], ['fixture_type', 'ประเภทชั้น'], ['shelves', 'จำนวนชั้น'], ['confirmed', 'ยืนยันจำนวนชั้น']];
-  var SLOT_KINDS = { header: 'หัวชั้น', glass: 'กระจก', temp: 'ชั่วคราว' }, SLOT_TENANTS = { icare: 'iCare', rent: 'เช่า' };
+  var SLOT_KINDS = { header: 'หัวชั้น', glass: 'กระจก', temp: 'ชั่วคราว', hang: 'ป้ายแขวน' }, SLOT_TENANTS = { icare: 'iCare', rent: 'เช่า' };
   function exportSlots() {
     var yn = function (b) { return b ? 'Y' : 'N'; };
     saveCsv('ตำแหน่ง_' + flo.branch + '.csv', [SLOT_COLS.map(function (c) { return c[1]; })].concat(flo.data.slots.map(function (s) {
@@ -2843,7 +2845,7 @@
     }
     var code = fld('รหัส (เช่น OA03 หรือ กระจกซ้าย)', s && s.code); if (s) code.readOnly = true;
     var name = fld('ชื่อ/คำอธิบาย', s && s.name), cat = fld('หมวดสินค้า', s && s.category);
-    var kind = sel('ชนิด', [['header', 'หัวชั้น'], ['glass', 'กระจกหน้าร้าน'], ['temp', 'ป้ายสื่อชั่วคราว (ผูกแคมเปญสื่อ)']], s ? s.kind : 'glass');
+    var kind = sel('ชนิด', [['header', 'หัวชั้น'], ['glass', 'กระจกหน้าร้าน'], ['temp', 'ป้ายสื่อชั่วคราว (ผูกแคมเปญสื่อ)'], ['hang', 'ป้ายแขวน (เช่าขั้นต่ำ 3 เดือน)']], s ? s.kind : 'glass');
     var tenant = sel('ผู้ใช้ตำแหน่ง', [['icare', 'iCare ติดเอง'], ['rent', 'ให้ซัพพลายเออร์เช่า']], s ? s.tenant : 'icare');
     var note = fld('หมายเหตุ', s && s.note); d.appendChild(g);
     // sign specs of this place: edit one size, add or remove a line
