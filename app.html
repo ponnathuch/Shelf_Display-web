@@ -324,6 +324,18 @@
   .ftname small { display: block; margin-top: var(--space-1); }
   .ftrow > .btn, .ftrow > label.check { align-self: center; }
   @media (max-width: 640px) { .ftrow { grid-template-columns: 1fr 1fr; } .ftname { grid-column: 1 / -1; } .ftrow.fthead { display: none; } }
+  /* Home page look: a soft brand wash, glass cards and a gentle entrance; the layout and content are unchanged */
+  .homefx { padding: var(--space-4); border-radius: var(--radius-m); background: linear-gradient(135deg, var(--c-brand-soft), var(--c-surface-2) 60%); }
+  .homefx .card { background: var(--c-surface); border: 1px solid var(--c-line); }
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .homefx .card { background: color-mix(in srgb, var(--c-surface) 78%, transparent); -webkit-backdrop-filter: blur(var(--space-3)); backdrop-filter: blur(var(--space-3)); }
+  }
+  .homefx .kpi-card:hover { border-color: var(--c-brand-line); }
+  @media (prefers-reduced-motion: no-preference) {
+    .homefx .card { animation: dashIn calc(var(--dur-fast) * 4) ease-out both; }
+    .homefx .kpi-card:nth-child(2) { animation-delay: var(--dur-fast); } .homefx .kpi-card:nth-child(3) { animation-delay: calc(var(--dur-fast) * 2); } .homefx .kpi-card:nth-child(4) { animation-delay: calc(var(--dur-fast) * 3); }
+  }
+  @keyframes dashIn { from { opacity: 0; transform: translateY(var(--space-2)); } to { opacity: 1; transform: none; } }
   .invfilters { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
   .invfilters label.f { min-width: 0; }
   .invfilters label.f, .invfilters .fgrp { margin-bottom: 0; }
@@ -4307,7 +4319,7 @@
   function showHome() {
     $('bar').hidden = true; show('');
     var v = $('view'); v.textContent = '';
-    var dash = el('div');
+    var dash = el('div', 'homefx');
     homeFind = findPanel(v, { onActive: function (on) { dash.hidden = on; }, onOpen: isOffice() ? openDetail : branchOpen });
     v.appendChild(dash);
     if (pendingQuery) { homeFind.run(pendingQuery); pendingQuery = ''; }
@@ -4380,7 +4392,7 @@
     var r = sess.staff.role;
     if (r === 'WAREHOUSE') return [{ id: 'home', label: 'ค้นหา', icon: 'home' }];
     if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'floor', label: 'ผังร้าน', icon: 'floor' }];
-    var m = [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'media', label: 'สื่อ', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }, { id: 'floor', label: 'พื้นที่', icon: 'floor' }, { id: 'contracts', label: 'TTA และรายการเช่า', icon: 'contract' }, { id: 'inventory', label: 'พื้นที่ขาย (Inventory)', icon: 'shelf' }];
+    var m = [{ id: 'home', label: 'ภาพรวม (Dashboard)', icon: 'home' }, { id: 'media', label: 'สื่อ (Media)', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }, { id: 'floor', label: 'ผังร้าน (Store Layout)', icon: 'floor' }, { id: 'contracts', label: 'TTA (Trade Agreements)', icon: 'contract' }, { id: 'inventory', label: 'พื้นที่ขาย (Inventory)', icon: 'shelf' }];
     if (isApprover() || isContract()) m.push({ id: 'settings', label: 'ตั้งค่า', icon: 'gear' });
     return m;
   }
