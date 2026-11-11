@@ -317,6 +317,13 @@
   .dtable.matrix td.tot, .dtable.matrix tfoot th { font-weight: bold; }
   .dtable.matrix tbody th small { display: block; font-weight: normal; color: var(--c-ink-2); }
   .dtable tfoot th, .dtable tfoot td { position: sticky; bottom: 0; background: var(--c-surface-2); }
+  /* settings: fixture types as an aligned grid */
+  .ftrow { display: grid; grid-template-columns: minmax(0, 2fr) var(--size-cell) minmax(0, 1fr) calc(var(--size-target) * 3) var(--size-fact); gap: var(--space-3); align-items: start; }
+  .ftrow.fthead { margin-bottom: var(--space-1); }
+  .ftrow > .input, .ftname .input { width: 100%; }
+  .ftname small { display: block; margin-top: var(--space-1); }
+  .ftrow > .btn, .ftrow > label.check { align-self: center; }
+  @media (max-width: 640px) { .ftrow { grid-template-columns: 1fr 1fr; } .ftname { grid-column: 1 / -1; } .ftrow.fthead { display: none; } }
   .invfilters { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
   .invfilters label.f { min-width: 0; }
   .invfilters label.f, .invfilters .fgrp { margin-bottom: 0; }
@@ -1453,15 +1460,17 @@
     var qf = fold('จุดโควตาต่อสาขา', 'ชั้นแคชเชียร์ (ค่าเริ่มต้น)', false), qb = qf.body; v.appendChild(qf.node);
     fb.appendChild(el('p', 'hint', 'Section ที่รหัสขึ้นต้นด้วยตัวอักษรในช่อง "รหัสพื้นที่" จะเป็นประเภทนี้เอง (เช่น OA01 คือ OA) เปลี่ยนเป็นประเภทอื่นได้ที่หน้าแก้ไขตำแหน่ง จำนวนชั้นเริ่มต้นใช้กับ Section ที่ยังไม่ได้กำหนดชั้นเอง'));
     var list = el('div'); fb.appendChild(list);
+    var fth = el('div', 'ftrow fthead'); ['ชื่อประเภท', 'ชั้นเริ่มต้น', 'รหัสพื้นที่ (ขึ้นต้นรหัส Section)', 'ใช้งาน', ''].forEach(function (x) { fth.appendChild(el('span', 'sub', x)); }); fb.insertBefore(fth, list);
     api('space_settings').then(function (d) {
       function trow(t) {
-        var fresh = !t, r = el('div', 'trow');
+        var fresh = !t, r = el('div', 'trow ftrow');
         var nm = el('input', 'input'); nm.type = 'text'; nm.maxLength = 60; nm.value = fresh ? '' : t.name; nm.placeholder = 'ชื่อประเภทใหม่ เช่น ชั้นตู้แช่'; nm.setAttribute('aria-label', 'ชื่อประเภทชั้นวาง');
         var sh = el('input', 'input cap'); sh.type = 'number'; sh.min = 1; sh.max = 20; sh.value = fresh ? 4 : t.default_shelves; sh.setAttribute('aria-label', 'จำนวนชั้นเริ่มต้น');
         var px = el('input', 'input'); px.type = 'text'; px.value = fresh ? '' : (t.area_prefixes || []).join(', '); px.placeholder = 'รหัสพื้นที่ เช่น OA'; px.setAttribute('aria-label', 'รหัสพื้นที่ คั่นด้วยจุลภาค');
         var l = el('label', 'check'), on = el('input'); on.type = 'checkbox'; on.checked = fresh ? true : t.active !== false; l.appendChild(on); l.appendChild(document.createTextNode('ใช้งาน'));
-        r.appendChild(nm); r.appendChild(el('span', 'sub', 'ชั้น')); r.appendChild(sh); r.appendChild(px); r.appendChild(l);
-        if (!fresh && INV_ALIAS[t.name]) r.appendChild(el('span', 'sub', 'แสดงบนจอเป็น ' + INV_ALIAS[t.name] + ' (ชื่อนี้ใช้กับไฟล์นำเข้า)'));
+        // one grid for every row, so the columns line up; a note under the name never pushes the other cells
+        var nc = el('div', 'ftname'); nc.appendChild(nm); if (!fresh && INV_ALIAS[t.name]) nc.appendChild(el('small', 'sub', 'แสดงบนจอเป็น ' + INV_ALIAS[t.name] + ' (ชื่อนี้ใช้กับไฟล์นำเข้า)'));
+        r.appendChild(nc); r.appendChild(sh); r.appendChild(px); r.appendChild(l);
         if (d.can_edit) r.appendChild(button(fresh ? 'เพิ่ม' : 'บันทึก', fresh ? '' : 'alt', function () {
           var b = { name: nm.value.trim(), default_shelves: Number(sh.value), area_prefixes: px.value.split(/[ ,]+/).filter(Boolean), active: on.checked };
           if (!b.name) { show('ใส่ชื่อประเภทก่อน', 'err'); return; }
