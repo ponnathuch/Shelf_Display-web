@@ -2454,7 +2454,7 @@
       b.appendChild(hh);
       var dl = el('dl', 'facts one');
       fact(dl, 'ช่วงเวลา', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) + (c._raw ? ' (ตามวันหมดอายุโฆษณา)' : ''));
-      fact(dl, 'ชั้นที่เช่า', shelfText((c.slots || []).filter(function (x) { return x.slot_id === flo.sel; })[0] || {}));
+      fact(dl, 'ชั้นที่เช่า', takeText((c.slots || []).filter(function (x) { return x.slot_id === flo.sel; })[0] || {}));
       fact(dl, 'หลังสิ้นสุดให้ทำอย่างไร', c.return_to); fact(dl, 'วิธีวาง/ข้อห้าม', c.how_to_place);
       fact(dl, 'เวนเดอร์', c.vendor); fact(dl, 'ค่าเช่า', c.rent != null ? baht(c.rent) + ' บาท/เดือน' : ''); fact(dl, 'เลขที่สัญญา/TTA', c.agreement_no);
       fact(dl, 'เลขโฆษณา', c.ad_no ? c.ad_no + (c.ad_expiry ? ' (หมดอายุ ' + thDate(c.ad_expiry) + ')' : '') : ''); fact(dl, 'ติดต่อ', c.supplier_contact); fact(dl, 'หมายเหตุ', c.note);
@@ -2492,7 +2492,7 @@
       list.textContent = ''; more.textContent = '';
       var q = flo.signNeedle.trim().toLowerCase();
       var rows = mine.map(normEnd).filter(function (c) {
-        var codes = c.slots.filter(function (x) { return x.branch_code === flo.branch; }).map(function (x) { var s = shelfText(x); return x.code + (s ? ' (' + s + ')' : ''); }).join(' ');
+        var codes = c.slots.filter(function (x) { return x.branch_code === flo.branch; }).map(function (x) { var s = takeText(x); return x.code + (s ? ' (' + s + ')' : ''); }).join(' ');
         return !q || (c.brand + ' ' + (c.vendor || '') + ' ' + codes).toLowerCase().indexOf(q) >= 0;
       });
       if (!rows.length) list.appendChild(el('p', 'empty-note', mine.length ? 'ไม่พบสัญญาที่ตรงกับคำค้น' : 'ยังไม่มีสัญญาป้ายในสาขานี้'));
@@ -2517,7 +2517,7 @@
   }
   // The shelves a contract takes at a place: key for the form ('' sign only, 'w' whole, 'f-t') and words for lists.
   function shelfKey(x) { return x.whole ? 'w' : x.shelf_from ? x.shelf_from + '-' + x.shelf_to : ''; }
-  function shelfText(x) {
+  function takeText(x) {
     if (x.whole) return 'ทั้งตู้';
     if (!x.shelf_from) return '';
     return x.shelf_from === 1 ? 'ชั้นบน ' + x.shelf_to + ' ชั้น' : x.shelf_from === x.shelf_to ? 'ชั้นที่ ' + x.shelf_from : 'ชั้นที่ ' + x.shelf_from + '-' + x.shelf_to;
