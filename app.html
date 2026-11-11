@@ -257,6 +257,8 @@
   .agdlg { height: fit-content; max-width: calc(var(--size-pane) * 2); }
   .agdlg > .btn { display: block; width: 100%; margin-top: var(--space-2); text-align: left; }
   .agdlg .row { margin-top: var(--space-4); }
+  .conacts { margin: var(--space-2) 0 var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--c-line); }
+  .paybox > .boxscroll { margin-top: 0; }
   .fieldbad > .t { color: var(--c-err); font-weight: bold; }
   .fielderr { display: block; margin-top: var(--space-1); color: var(--c-err); font-size: var(--fs-s); font-weight: bold; }
   .codes .good { color: var(--c-ok); }
@@ -1964,7 +1966,7 @@
   function openSignFromContracts(c, renew) { flo.branch = ''; flo.data = null; formBack = contracts; signForm($('view'), c, undefined, renew); }
   // Vendor money of one agreement (payments received and dues expected): approvers and finance only; the server sends it to no one else
   function agPayPanel(p, a) {
-    var box = el('section', 'boxscroll'), list = (a.payments || []).map(function (x) { return { dp_no: x.dp_no || '', received_on: x.received_on || '', amount: x.amount == null ? '' : x.amount, memo_no: x.memo_no || '', note: x.note || '' }; });
+    var fold = el('details', 'hist paybox'), box = el('section', 'boxscroll'), list = (a.payments || []).map(function (x) { return { dp_no: x.dp_no || '', received_on: x.received_on || '', amount: x.amount == null ? '' : x.amount, memo_no: x.memo_no || '', note: x.note || '' }; });
     var dues = (a.dues || []).map(function (x) { return { id: x.id, due_on: x.due_on || '', amount: x.amount == null ? '' : x.amount, note: x.note || '' }; });
     var stSel = el('select', 'input'); Object.keys(PAY_TH).forEach(function (k) { var o = el('option', '', PAY_TH[k]); o.value = k; if (k === (a.pay_status || 'pending')) o.selected = true; stSel.appendChild(o); });
     box.appendChild(el('h3', '', 'การรับเงินของข้อตกลง (ผู้อนุมัติสัญญาและการเงิน)')); var sl = el('label', 'f'); sl.appendChild(el('span', 't', 'สถานะ')); sl.appendChild(stSel); box.appendChild(sl);
@@ -2012,7 +2014,9 @@
       var dueBody = dues.map(function (x) { var o = { due_on: x.due_on, amount: x.amount === '' ? null : Number(x.amount), note: x.note }; if (x.id) o.id = x.id; return o; });
       api('agreement_pay_save', { id: a.id, pay_status: stSel.value, payments: pays, dues: dueBody }).then(function () { afterNote = ['บันทึกการรับเงินแล้ว', 'ok']; contracts(); }).catch(function (e) { show(e.message, 'err'); });
     }));
-    box.appendChild(row); p.appendChild(box);
+    box.appendChild(row);
+    fold.appendChild(el('summary', '', 'การรับเงินและงวด · ' + PAY_TH[a.pay_status || 'pending'] + ' · รับแล้ว ' + baht(a.received || 0) + ' บาท · ' + (a.dues || []).length + ' งวด'));
+    fold.appendChild(box); p.appendChild(fold);
   }
   // Loaded once per page; a failure (lists not pushed yet) leaves the form as plain text boxes.
   var navCache = null;
@@ -2288,7 +2292,8 @@
         if (!confirm('ยกเลิกสัญญา ' + c.brand + ' ?')) return;
         api(r.kind === 'cashier' ? 'cashier_cancel' : 'sign_cancel', { id: c.id }).then(contracts).catch(function (e) { show(e.message, 'err'); });
       }));
-      p.appendChild(row);
+      // the contract's own buttons sit right under its name, above the agreement, so they are found without scrolling
+      row.classList.add('conacts'); p.insertBefore(row, head.nextSibling);
     }
   }
 
