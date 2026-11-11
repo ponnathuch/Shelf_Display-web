@@ -2600,18 +2600,8 @@
       chosenB.slice().sort().forEach(function (b) { Object.keys(sel).filter(function (id) { return info[id] && info[id].branch_code === b; }).forEach(function (id) { out.push([b, nameOf(b), info[id].code, rents[id] == null ? '' : rents[id]]); }); });
       return out;
     }
-    function toCsv(rowsIn) { return '\ufeff' + rowsIn.map(function (r) { return r.map(function (v) { v = String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','); }).join('\r\n'); }
     function parseTable(text) {
-      return text.replace(/^\ufeff/, '').split(/\r?\n/).map(function (ln) {
-        if (ln.indexOf('\t') >= 0) return ln.split('\t').map(function (x) { return x.trim(); });
-        var out = [], cur = '', q = false;
-        for (var i = 0; i < ln.length; i++) {
-          var ch = ln[i];
-          if (q) { if (ch === '"' && ln[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
-          else if (ch === '"') q = true; else if (ch === ',') { out.push(cur.trim()); cur = ''; } else cur += ch;
-        }
-        out.push(cur.trim()); return out;
-      }).filter(function (r) { return BRANCH_RE.test((r[0] || '').toUpperCase()); })
+      return csvRows(text).filter(function (r) { return BRANCH_RE.test((r[0] || '').toUpperCase()); })
         .map(function (r) { return r.length >= 4 && !/^[\d.,]*$/.test(r[2]) ? { b: r[0], code: r[2], rent: r[3] } : { b: r[0], code: r[1], rent: r[2] }; });
     }
     function runImport(text) {
@@ -2635,7 +2625,6 @@
         show('นำเข้า ' + n + ' ตำแหน่ง' + (bad.length ? ' ข้าม ' + bad.length + ' แถว: ' + bad.slice(0, 8).join(', ') + (bad.length > 8 ? ' ...' : '') : ''), bad.length ? 'err' : 'ok');
       }).catch(function (e) { show(e.message, 'err'); });
     }
-    function saveCsv(name, rowsIn) { var a = el('a'); a.href = URL.createObjectURL(new Blob([toCsv(rowsIn)], { type: 'text/csv;charset=utf-8' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
     io.appendChild(button('ส่งออก CSV', 'alt', function () {
       var rowsOut = chosenPairs(); if (!rowsOut.length) rowsOut = [['IC002', '', 'OA01', '']];
       saveCsv('สัญญาป้าย' + (edit && c.sys_no ? '_' + c.sys_no : '') + '.csv', [['สาขา', 'ชื่อสาขา', 'รหัสตำแหน่ง', 'ค่าเช่า/เดือน']].concat(rowsOut));
@@ -2678,7 +2667,10 @@
     });
     var sb = el('input', 'input search'); sb.type = 'search'; sb.value = flo.needle; sb.placeholder = 'ค้นหารหัสหรือหมวด'; sb.setAttribute('aria-label', 'ค้นหาตำแหน่ง');
     tb.appendChild(seg); tb.appendChild(sb); tb.appendChild(el('span', 'grow'));
-    if (d.can_edit) tb.appendChild(button('+ เพิ่มตำแหน่ง', '', function () { slotForm(holder, null); }));
+    if (d.can_edit) {
+      tb.appendChild(button('ส่งออก CSV', 'alt', exportSlots)); tb.appendChild(button('นำเข้า CSV', 'alt', function () { rememberScroll(); importSlots(holder); }));
+      tb.appendChild(button('+ เพิ่มตำแหน่ง', '', function () { slotForm(holder, null); }));
+    }
     card.appendChild(tb);
     var list = el('div'); card.appendChild(list);
     function paint() {
@@ -2715,6 +2707,81 @@
     }
     sb.oninput = function () { flo.needle = sb.value; paint(); }; paint();
     return card;
+  }
+  // A table as CSV text Excel opens with Thai intact (BOM), and back: one array per line, from CSV or from cells pasted out of Excel (tabs).
+  function toCsv(rowsIn) { return '\ufeff' + rowsIn.map(function (r) { return r.map(function (v) { v = String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','); }).join('\r\n'); }
+  function saveCsv(name, rowsIn) { var a = el('a'); a.href = URL.createObjectURL(new Blob([toCsv(rowsIn)], { type: 'text/csv;charset=utf-8' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+  function csvRows(text) {
+    return text.replace(/^\ufeff/, '').split(/\r?\n/).map(function (ln) {
+      if (ln.indexOf('\t') >= 0) return ln.split('\t').map(function (x) { return x.trim(); });
+      var out = [], cur = '', q = false;
+      for (var i = 0; i < ln.length; i++) {
+        var ch = ln[i];
+        if (q) { if (ch === '"' && ln[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+        else if (ch === '"') q = true; else if (ch === ',') { out.push(cur.trim()); cur = ''; } else cur += ch;
+      }
+      out.push(cur.trim()); return out;
+    });
+  }
+  // Bulk edit of a branch's places: export the list, change it in Excel, import it back. Columns are found by their
+  // header, so a sheet may carry only the columns to change; a place is matched by its code and new codes are added.
+  var SLOT_COLS = [['code', 'รหัส'], ['name', 'ชื่อ'], ['category', 'หมวดสินค้า'], ['kind', 'ชนิด'], ['tenant', 'ผู้ใช้ตำแหน่ง'], ['active', 'ใช้งาน'], ['note', 'หมายเหตุ'], ['fixture_type', 'ประเภทชั้น'], ['shelves', 'จำนวนชั้น'], ['confirmed', 'ยืนยันจำนวนชั้น']];
+  var SLOT_KINDS = { header: 'หัวชั้น', glass: 'กระจก', temp: 'ชั่วคราว' }, SLOT_TENANTS = { icare: 'iCare', rent: 'เช่า' };
+  function exportSlots() {
+    var yn = function (b) { return b ? 'Y' : 'N'; };
+    saveCsv('ตำแหน่ง_' + flo.branch + '.csv', [SLOT_COLS.map(function (c) { return c[1]; })].concat(flo.data.slots.map(function (s) {
+      var f = s.fixture;
+      return [s.code, s.name || '', s.category || '', SLOT_KINDS[s.kind] || s.kind, SLOT_TENANTS[s.tenant] || s.tenant, yn(s.active), s.note || '', f ? f.type_name : '', f ? f.shelves.length : '', f ? yn(f.confirmed) : ''];
+    })));
+  }
+  // Table text -> rows for slots_bulk_save, or throws with the reason. Only columns present in the header are sent.
+  function slotRowsFrom(text) {
+    if (text.indexOf('\ufffd') >= 0) throw new Error('อ่านภาษาไทยในไฟล์ไม่ได้ ให้บันทึกเป็น "CSV UTF-8" หรือคัดลอกตารางจาก Excel มาวางแทน');
+    var tbl = csvRows(text).filter(function (r) { return r.some(Boolean); }), head = tbl.shift() || [];
+    var at = {}; SLOT_COLS.forEach(function (c) { var i = head.indexOf(c[1]); if (i >= 0) at[c[0]] = i; });
+    if (at.code === undefined) throw new Error('ไม่พบคอลัมน์ "รหัส" ในแถวแรก ใช้ไฟล์ที่ส่งออกจากหน้านี้เป็นต้นแบบ');
+    var back = function (map, v) { var k = Object.keys(map).filter(function (x) { return map[x] === v || x === v.toLowerCase(); })[0]; if (!k) throw new Error('ค่า "' + v + '" ใช้ไม่ได้ ใช้ ' + Object.keys(map).map(function (x) { return map[x]; }).join(' / ')); return k; };
+    var bool = function (v) { if (/^(y|yes|true|1|ใช่)$/i.test(v)) return true; if (/^(n|no|false|0|ไม่)$/i.test(v)) return false; throw new Error('ค่า "' + v + '" ใช้ไม่ได้ ใช้ Y หรือ N'); };
+    return tbl.map(function (r, n) {
+      var o = {}, get = function (k) { return at[k] === undefined ? undefined : (r[at[k]] || '').trim(); };
+      try {
+        o.code = get('code'); if (!o.code) throw new Error('ไม่มีรหัส');
+        ['name', 'category', 'note', 'fixture_type'].forEach(function (k) { if (get(k) !== undefined) o[k] = get(k); });
+        if (get('kind')) o.kind = back(SLOT_KINDS, get('kind'));
+        if (get('tenant')) o.tenant = back(SLOT_TENANTS, get('tenant'));
+        if (get('active')) o.active = bool(get('active'));
+        if (get('confirmed')) o.confirmed = bool(get('confirmed'));
+        if (get('shelves') !== undefined) { o.shelves = get('shelves') === '' ? null : Number(get('shelves')); if (o.shelves !== null && !(o.shelves >= 1 && o.shelves <= 20 && o.shelves % 1 === 0)) throw new Error('จำนวนชั้นต้องเป็น 1 ถึง 20'); }
+      } catch (e) { throw new Error('แถว ' + (n + 2) + (o.code ? ' (' + o.code + ')' : '') + ': ' + e.message); }
+      return o;
+    });
+  }
+  function importSlots(holder) {
+    var d = el('section', 'card cform'), have = {}; flo.data.slots.forEach(function (s) { have[s.code.toUpperCase()] = true; });
+    d.appendChild(el('h2', 'sec', 'นำเข้ารายการตำแหน่ง ' + flo.branch));
+    d.appendChild(el('p', 'hint', 'ส่งออกรายการก่อน แก้ใน Excel แล้วนำเข้ากลับ ระบบจับคู่ด้วยคอลัมน์ "รหัส" รหัสที่ยังไม่มีจะถูกเพิ่ม คอลัมน์ที่ลบออกจากไฟล์จะไม่ถูกแก้ ช่องที่เว้นว่างจะถูกล้างค่า หมุดบนผังไม่เปลี่ยน'));
+    var paste = el('textarea', 'input'), file = el('input'), out = el('div'), rows = null;
+    paste.rows = 6; paste.placeholder = 'หรือคัดลอกตารางจาก Excel (รวมแถวหัวคอลัมน์) มาวางที่นี่'; paste.setAttribute('aria-label', 'วางตารางตำแหน่งจาก Excel');
+    file.type = 'file'; file.accept = '.csv,.txt'; file.hidden = true;
+    var go = button('นำเข้า', '', function () {
+      go.disabled = true;
+      api('slots_bulk_save', { branch: flo.branch, rows: rows }).then(function (x) { show('นำเข้า ' + x.count + ' ตำแหน่งแล้ว (เพิ่มใหม่ ' + x.added + ')', 'ok'); loadFloor(holder); })
+        .catch(function (e) { go.disabled = false; show(e.code === 'bad_type' ? 'ไม่พบประเภทชั้นของ ' + e.data.code + ' ในหน้าตั้งค่า' : e.code === 'bad_slot' ? 'รหัส ' + e.data.code + ' ซ้ำหรือใช้ไม่ได้' : e.message, 'err'); });
+    });
+    go.disabled = true;
+    function read(text) {
+      out.textContent = ''; rows = null; go.disabled = true;
+      try { rows = slotRowsFrom(text); } catch (e) { show(e.message, 'err'); return; }
+      if (!rows.length) { show('ไม่พบแถวข้อมูลใต้แถวหัวคอลัมน์', 'err'); return; }
+      var fresh = rows.filter(function (r) { return !have[r.code.toUpperCase()]; });
+      show(''); out.appendChild(el('p', '', 'อ่านได้ ' + rows.length + ' แถว: แก้ไข ' + (rows.length - fresh.length) + ' ตำแหน่ง เพิ่มใหม่ ' + fresh.length + ' ตำแหน่ง' + (fresh.length ? ' (' + fresh.slice(0, 12).map(function (r) { return r.code; }).join(', ') + (fresh.length > 12 ? ' ...' : '') + ')' : '')));
+      go.disabled = false;
+    }
+    file.onchange = function () { var f = file.files[0]; if (!f) return; f.text().then(read); file.value = ''; };
+    var pick = el('div', 'row'); pick.appendChild(button('เลือกไฟล์ CSV', 'alt', function () { file.click(); })); pick.appendChild(button('อ่านจากที่วาง', 'alt', function () { read(paste.value); })); pick.appendChild(file);
+    var row = el('div', 'row'); row.appendChild(go); row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); }));
+    d.appendChild(pick); d.appendChild(paste); d.appendChild(out); d.appendChild(row);
+    holder.textContent = ''; holder.appendChild(d);
   }
   function slotForm(holder, s) {
     rememberScroll();
