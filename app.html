@@ -264,9 +264,11 @@
   .pastebox .row { margin-top: var(--space-2); }
   .agdlg { height: fit-content; max-width: calc(var(--size-pane) * 2); }
   .agdlg .agopt { margin-top: var(--space-3); }
+  .agdlg .agline { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0; }
   .agdlg .agopt > .btn { display: block; width: 100%; text-align: left; }
   .agdlg .agopt > details.hist { margin-top: var(--space-1); }
   .agdlg .row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+  .gapnote { margin: var(--space-3) 0; }
   .conacts { margin: var(--space-2) 0 var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--c-line); }
   .paybox > .boxscroll { margin-top: 0; }
   .fieldbad > .t { color: var(--c-err); font-weight: bold; }
@@ -1708,7 +1710,7 @@
             .catch(function (e) { show(e.message, 'err'); pl.value = c.package_id; });
         };
         row.appendChild(pl);
-        row.appendChild(button('แก้สาขา/แพ็กเกจ', '', function () { cashierForm(c); }));
+        row.appendChild(button('แก้ข้อมูล/สาขา/แพ็กเกจ', '', function () { cashierForm(c); }));
         row.appendChild(button('แจ้งคลังอีกครั้ง', 'alt', function () { notifyCashier(c); }));
         row.appendChild(button('ยกเลิกเฉพาะรายการนี้', 'danger', function () {
           if (!confirm('ยกเลิกเฉพาะรายการเช่า ' + c.brand + ' นี้ ?\n\nTTA และรายการเช่าอื่นใน TTA ยังอยู่')) return;
@@ -1843,6 +1845,32 @@
   var formAgreement = null; // agreement id a new cashier/sign line joins; the form takes it when it opens
   // One TTA, one agreement: when the brand already has an agreement overlapping these dates, ask whether the new line
   // belongs there. Resolves with that agreement's id, null (open a new agreement) or false (back to the form).
+  // The whole of one rental line over the choice dialog (no money beyond what the office already sees); closing it returns there.
+  function lineFull(a, l) {
+    var dlg = el('dialog', 'plandlg agdlg'), sign = l.kind === 'sign';
+    dlg.setAttribute('aria-label', 'รายละเอียดรายการเช่า');
+    dlg.appendChild(el('h2', 'sec', (sign ? 'รายการเช่าพื้นที่ ' + (l.sys_no || '') : 'รายการเช่าชั้นแคชเชียร์') + ' · ' + a.brand));
+    var dl = el('dl', 'facts one');
+    fact(dl, 'TTA', (a.tta_no || 'ยังไม่มีเลข TTA') + ' · ' + thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) + (a.status === 'pending' ? ' · รออนุมัติ' : ' · อนุมัติแล้ว'));
+    fact(dl, 'เวนเดอร์', a.vendor); fact(dl, 'มูลค่ารวมของ TTA', a.total != null ? baht(a.total) + ' บาท' : '');
+    fact(dl, 'ช่วงเวลาของรายการนี้', thDate(l.start_date) + ' ถึง ' + thDate(l.end_date) + (l.status === 'pending' ? ' · รออนุมัติ' : ''));
+    if (!sign) fact(dl, 'สาขา', (l.branch_list.length ? l.branch_list.join(', ') : 'สาขาตามแพ็กเกจ') + (l.house ? ' · House Brand' : ''));
+    fact(dl, 'วิธีวาง/ข้อห้าม', l.how_to_place); fact(dl, 'หมายเหตุ', l.note || a.note);
+    fact(dl, 'รายการอื่นใน TTA', (a.item_list || []).map(function (x) { return x.item + (x.amount != null ? ' ' + baht(x.amount) + ' บาท' : ''); }).join(', '));
+    dlg.appendChild(dl);
+    if (sign) {
+      var by = {};
+      l.place_list.forEach(function (x) { var s = takeText(x); (by[x.branch_code] = by[x.branch_code] || []).push(x.code + (s ? ' (' + s + ')' : '') + (x.rent != null ? ' ' + baht(x.rent) + ' บาท/เดือน' : '')); });
+      var pl = el('div', 'boxscroll'); pl.appendChild(el('h3', '', 'ตำแหน่งที่เช่า ' + l.branches + ' สาขา ' + l.places + ' ตำแหน่ง'));
+      Object.keys(by).sort().forEach(function (b) { pl.appendChild(el('p', 'sub', b + ': ' + by[b].join(', '))); });
+      if (!l.place_list.length) pl.appendChild(el('p', 'sub', 'รอระบุตำแหน่ง'));
+      dlg.appendChild(pl);
+    }
+    var row = el('div', 'row'), back = button('← กลับไปเลือก TTA', '', function () { dlg.close(); });
+    row.appendChild(back); dlg.appendChild(row);
+    dlg.addEventListener('close', function () { dlg.remove(); });
+    document.body.appendChild(dlg); dlg.showModal(); back.focus();
+  }
   function chooseAgreement(brand, from, to) {
     return api('agreement_match', { brand: brand, start_date: from, end_date: to }).catch(function () { return { agreements: [] }; }).then(function (r) {
       if (!r.agreements.length) return null;
@@ -1859,7 +1887,10 @@
           var det = el('details', 'hist'); det.appendChild(el('summary', '', 'ดูว่ามีอะไรใน TTA นี้'));
           a.lines.forEach(function (l) {
             var where = l.kind === 'sign' ? (l.places ? l.branches + ' สาขา ' + l.places + ' ตำแหน่ง' : 'รอระบุตำแหน่ง') : l.branches ? l.branches + ' สาขา' : 'สาขาตามแพ็กเกจ';
-            det.appendChild(el('div', '', (l.kind === 'sign' ? 'รายการเช่าพื้นที่ ' + (l.sys_no || '') : 'รายการเช่าชั้นแคชเชียร์') + ' · ' + where + ' · ' + thDate(l.start_date) + ' ถึง ' + thDate(l.end_date) + (l.status === 'pending' ? ' · รออนุมัติ' : '')));
+            var ln = el('div', 'agline');
+            ln.appendChild(el('span', 'grow', (l.kind === 'sign' ? 'รายการเช่าพื้นที่ ' + (l.sys_no || '') : 'รายการเช่าชั้นแคชเชียร์') + ' · ' + where + ' · ' + thDate(l.start_date) + ' ถึง ' + thDate(l.end_date) + (l.status === 'pending' ? ' · รออนุมัติ' : '')));
+            ln.appendChild(button('ดูฉบับเต็ม', 'alt', function () { lineFull(a, l); }));
+            det.appendChild(ln);
           });
           if (a.items.length) det.appendChild(el('div', '', 'รายการอื่น: ' + a.items.join(', ')));
           if (a.total != null) det.appendChild(el('div', '', 'มูลค่ารวม ' + baht(a.total) + ' บาท'));
@@ -2195,7 +2226,7 @@
     function act(label, cls, fn) { var b = button(label, cls, function () { b.disabled = true; fn(function (e) { b.disabled = false; if (e.message) show(e.message, 'err'); }); }); row.appendChild(b); }
     function run(action, body, ok) { return function (bad) { api(action, body).then(function () { afterNote = [ok, 'ok']; contracts(); }).catch(bad); }; }
     // a cancelled contract only shows its agreement: the agreement is handled from one of its live contracts
-    if (live && r.c.status === 'cancelled') box.appendChild(el('p', 'hint', 'รายการนี้ยกเลิกแล้ว จัดการ TTA ได้จากรายการเช่าที่ยังใช้งานอยู่ใน TTA (กดชื่อรายการเช่าด้านบน)'));
+    if (live && r.c.status === 'cancelled') box.appendChild(el('p', 'hint gapnote', 'รายการนี้ยกเลิกแล้ว จัดการ TTA ได้จากรายการเช่าที่ยังใช้งานอยู่ใน TTA (กดชื่อรายการเช่าด้านบน)'));
     if (live && r.c.status !== 'cancelled') {
       if (con.canApprove && waiting) act('อนุมัติ TTA', '', function (bad) { run('agreement_approve', { id: a.id }, 'อนุมัติ TTA แล้ว')(bad); });
       if (con.canApprove && a.status === 'active' && !a.needs_review) act('ถอนอนุมัติ', 'alt', function (bad) {
@@ -2313,7 +2344,7 @@
       var next = r.kind === 'sign' ? con.rows.filter(function (x) { return x.kind === 'sign' && x.c.renewed_from === c.id && x.c.status !== 'cancelled'; })[0] : null;
       if (next) row.appendChild(button('ต่อแล้วเป็น ' + (next.c.sys_no || next.c.brand), 'alt', function () { con.sel = next.key; renderContracts(); }));
       else if (r.kind === 'sign' && (st === 'ended' || (st === 'live' && daysTo(c.end_date) <= 60))) row.appendChild(button('ต่อรายการเช่า', '', function () { openSignFromContracts(c, true); }));
-      row.appendChild(button(r.kind === 'cashier' ? 'แก้สาขา/แพ็กเกจ' : 'แก้ตำแหน่ง/ค่าเช่า', '', function () { if (r.kind === 'cashier') { formBack = contracts; cashierForm(c); } else openSignFromContracts(c); }));
+      row.appendChild(button(r.kind === 'cashier' ? 'แก้ข้อมูล/สาขา/แพ็กเกจ' : 'แก้ข้อมูล/ตำแหน่ง/ค่าเช่า', '', function () { if (r.kind === 'cashier') { formBack = contracts; cashierForm(c); } else openSignFromContracts(c); }));
       if (r.kind === 'cashier' && act) row.appendChild(button('แจ้งคลังอีกครั้ง', 'alt', function () { notifyCashier(c); }));
       if (con.canApprove) row.appendChild(button('ย้ายไป TTA อื่น', 'alt', function () { moveLine(r); }));
       row.appendChild(button('ยกเลิกเฉพาะรายการนี้', 'danger', function () {
