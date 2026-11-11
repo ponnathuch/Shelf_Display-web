@@ -233,7 +233,8 @@
   .codes { margin: calc(var(--space-1) * -2) 0 var(--space-3); font-size: var(--fs-s); }
   .codes .bad { color: var(--c-err); font-weight: bold; }
   /* a field the user must fix: red frame and the reason right under it */
-  .input.invalid { border-color: var(--c-err); box-shadow: 0 0 0 1px var(--c-err); }
+  .input.invalid { border-color: var(--c-err); box-shadow: 0 0 0 1px var(--c-err); background: var(--c-err-soft); }
+  .fieldbad > .t { color: var(--c-err); font-weight: bold; }
   .fielderr { display: block; margin-top: var(--space-1); color: var(--c-err); font-size: var(--fs-s); font-weight: bold; }
   .codes .good { color: var(--c-ok); }
   .formbar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -335,9 +336,9 @@
     list.forEach(function (x) {
       var inp = x[0], host = inp.closest('label') || inp.parentNode, p = host.querySelector('.fielderr');
       if (!p) { p = el('span', 'fielderr'); p.id = 'fielderr' + (++fieldErrN); host.appendChild(p); }
-      p.textContent = x[1]; inp.classList.add('invalid'); inp.setAttribute('aria-invalid', 'true'); inp.setAttribute('aria-describedby', p.id);
+      p.textContent = x[1]; inp.classList.add('invalid'); host.classList.add('fieldbad'); inp.setAttribute('aria-invalid', 'true'); inp.setAttribute('aria-describedby', p.id);
       var clear = function () {
-        inp.classList.remove('invalid'); inp.removeAttribute('aria-invalid'); inp.removeAttribute('aria-describedby'); p.remove();
+        inp.classList.remove('invalid'); host.classList.remove('fieldbad'); inp.removeAttribute('aria-invalid'); inp.removeAttribute('aria-describedby'); p.remove();
         inp.removeEventListener('input', clear); inp.removeEventListener('change', clear);
       };
       inp.addEventListener('input', clear); inp.addEventListener('change', clear);
