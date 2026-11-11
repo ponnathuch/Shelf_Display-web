@@ -297,6 +297,26 @@
   .dtable .linkbtn { min-height: 0; padding: 0; }
   .grphead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: var(--space-4) 0 var(--space-2); }
   .grphead > div { display: flex; flex-direction: column; flex: 1 1 auto; }
+  /* TTA overview: wide table with a month timeline, the brand column stays put while scrolling sideways */
+  .dwrap.tall { max-height: calc(var(--size-scroll) * 3); }
+  .dtable.board tbody th, .dtable.matrix tbody th { position: sticky; left: 0; z-index: 1; background: var(--c-surface); }
+  .dtable.board thead th:nth-child(2), .dtable.matrix thead th:first-child { position: sticky; left: 0; z-index: 2; }
+  .dtable.board tbody th { left: 0; }
+  .dtable .tlcol { min-width: calc(var(--size-tile) * 5); padding-left: var(--space-2); padding-right: var(--space-2); }
+  .dtable.board.timemode .nx, .dtable.board.nummode .tlcol { display: none; }
+  .dtable.board.timemode .tlcol { width: 100%; }
+  .tlmonths { display: grid; grid-template-columns: repeat(var(--n), 1fr); font-size: var(--fs-xs); }
+  .tlmonths span { border-left: 1px solid var(--c-line); padding-left: var(--space-1); }
+  .tlmonths span.yr { border-left-color: var(--c-ink-2); font-weight: bold; color: var(--c-ink); }
+  .tltrack { position: relative; height: var(--size-target); }
+  .tlbar { position: absolute; top: var(--space-1); bottom: var(--space-1); border-radius: var(--radius-s); background: var(--c-brand-line); color: var(--c-ink);
+    font-size: var(--fs-xs); padding: 0 var(--space-1); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: calc(var(--size-target) - var(--space-1) * 2); }
+  .tlbar.wait { background: var(--c-brand-soft); border: 1px dashed var(--c-brand-line); }
+  .tlnow { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--c-err); }
+  .dtable.matrix td.on { background: var(--c-brand-soft); font-weight: bold; }
+  .dtable.matrix td.tot, .dtable.matrix tfoot th { font-weight: bold; }
+  .dtable.matrix tbody th small { display: block; font-weight: normal; color: var(--c-ink-2); }
+  .dtable tfoot th, .dtable tfoot td { position: sticky; bottom: 0; background: var(--c-surface-2); }
   .invfilters { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
   .invfilters label.f { min-width: 0; }
   .fronttl button.full { background: var(--c-err-soft); color: var(--c-err); font-weight: bold; }
@@ -1884,7 +1904,7 @@
   // ---------- Inventory: what is free to sell in every branch for a whole period (design v3 P1-P23) ----------
   // Availability = branches x kinds; a cell counts places free all period (Sections: whole / some shelves) and opens the
   // list on the right with sign size and default price. Pending agreements hold places too. Office only (prices).
-  var inv = { tab: 'avail', from: '', to: '', off: {}, grade: '', size: '', chain: '', q: '', data: null, keep: null, brand: '', brands: null, bd: null, ended: false, back: null, bq: '', bg: '' };
+  var inv = { tab: 'avail', from: '', to: '', off: {}, grade: '', size: '', chain: '', q: '', data: null, keep: null, brand: '', brands: null, bd: null, ended: false, back: null, bq: '', bg: '', sb: null, sfrom: '', sto: '', team: '', sq: '' };
   var INV_KIND = { sign: 'ป้ายหัวชั้น', glass: 'กระจก', cashier: 'แคชเชียร์', hang: 'ป้ายแขวน', front: 'ป้ายหน้าร้าน' };
   function invCols(d) {
     var seen = {}, cols = [];
@@ -1928,12 +1948,13 @@
     var v = $('view'); v.textContent = ''; show('');
     if (inv.back) { var bk = inv.back, b0 = button('← ' + bk.label, 'alt', function () { inv.back = null; bk.fn(); }); b0.classList.add('backbtn'); v.appendChild(b0); }
     var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'มุมมอง');
-    [['avail', 'ว่าง (Availability)'], ['brand', 'แบรนด์ (Brand view)']].forEach(function (x) {
+    [['avail', 'ว่าง (Availability)'], ['brand', 'แบรนด์ (Brand view)'], ['board', 'TTA ภาพรวม (By supplier)'], ['matrix', 'แบรนด์ × สาขา']].forEach(function (x) {
       var b = el('button', '', x[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(inv.tab === x[0]));
       b.onclick = function () { inv.tab = x[0]; inventory(); }; seg.appendChild(b);
     });
     var top = el('div', 'toolbar'); top.appendChild(seg); v.appendChild(top);
     if (inv.tab === 'brand') { invBrand(v); return; }
+    if (inv.tab === 'board' || inv.tab === 'matrix') { invBoard(v); return; }
     var tb = el('div', 'card invfilters');
     function dateF(text, val) { var l = el('label', 'f'), i = el('input', 'input'); i.type = 'date'; i.value = val; l.appendChild(el('span', 't', text)); l.appendChild(i); tb.appendChild(l); return i; }
     var from = dateF('ว่างตั้งแต่', inv.from), to = dateF('ถึง', inv.to);
@@ -2088,7 +2109,7 @@
       api('brand_view', { brand: inv.brand }).then(guard(function (d) { inv.bd = d; draw(); })).catch(function (e) { body.textContent = ''; show(e.message, 'err'); });
     }
     function openLine(key, c) {
-      con.sel = key; con.type = 'all'; con.what = 'all'; con.pay = 'all'; con.needle = ''; con.view = c.status === 'pending' ? 'wait' : cashState(c);
+      con.sel = key; con.type = 'all'; con.what = 'all'; con.pay = 'all'; con.team = 'all'; con.needle = ''; con.view = c.status === 'pending' ? 'wait' : cashState(c);
       con.backHome = { key: key, label: 'กลับไปภาพรวมแบรนด์ ' + inv.brand, fn: function () { inv.tab = 'brand'; go('inventory'); } }; go('contracts');
     }
     function draw() {
@@ -2223,6 +2244,171 @@
     if (inv.data) { go2(inv.data); return; }
     api('avail', {}).then(function (d) { inv.data = d; d.byBranch = {}; d.places.forEach(function (p) { (d.byBranch[p.branch_code] = d.byBranch[p.branch_code] || []).push(p); }); inv.from = d.start_date; inv.to = d.end_date; go2(d); }).catch(function (e) { show(e.message, 'err'); });
   }
+  // ---------- Inventory > TTA overview (sheet "Display by supplier TTA") and brand x branch (sheet "brand by store") ----------
+  // One load for both: agreements running in the period with what they hold. Team (Med/Nonmed) and a search narrow both.
+  // counts of one agreement: distinct places, by branch grade and by column (shelf type or kind), cashier branches
+  function boardCount(a) {
+    var seen = {}, o = { places: 0, A: 0, B: 0, none: 0, col: {}, branches: {} };
+    a.places.forEach(function (p) {
+      o.branches[p.branch_code] = true;
+      if (seen[p.slot_id]) return; seen[p.slot_id] = true; o.places++;
+      o[p.grade === 'A' ? 'A' : p.grade === 'B' ? 'B' : 'none']++;
+      var k = invColOf(p); o.col[k] = (o.col[k] || 0) + 1;
+    });
+    o.cashier = !a.cashier ? 0 : a.cashier.all ? 'ทุกสาขา' : a.cashier.branches.length;
+    return o;
+  }
+  // brand x branch: distinct places of each brand in each branch (brand names merged by case)
+  function boardMatrix(ags) {
+    var cell = {}, brands = {}, bs = {};
+    ags.forEach(function (a) {
+      var k = String(a.brand || '').trim(), key = k.toLowerCase(); if (!k) return; brands[key] = brands[key] || { name: k, n: 0, seen: {} };
+      a.places.forEach(function (p) {
+        var ck = p.branch_code + '|' + key; cell[ck] = cell[ck] || {}; if (cell[ck][p.slot_id]) return;
+        cell[ck][p.slot_id] = true; bs[p.branch_code] = true; if (!brands[key].seen[p.slot_id]) { brands[key].seen[p.slot_id] = true; brands[key].n++; }
+      });
+    });
+    var cols = Object.keys(brands).filter(function (k) { return brands[k].n; }).sort(function (x, y) { return brands[y].n - brands[x].n || brands[x].name.localeCompare(brands[y].name); });
+    return { cols: cols.map(function (k) { return { key: k, name: brands[k].name, n: brands[k].n }; }), branches: Object.keys(bs).sort(),
+      n: function (b, k) { return Object.keys(cell[b + '|' + k] || {}).length; } };
+  }
+  // months of a period as timeline columns, and where a span sits on it (percent of the width)
+  function boardMonths(from, to) {
+    var out = [], y = Number(from.slice(0, 4)), m = Number(from.slice(5, 7)) - 1;
+    while (out.length < 48) {
+      var first = y + '-' + String(m + 1).padStart(2, '0') + '-01'; if (first > to) break;
+      out.push({ y: y, m: m, first: first }); m++; if (m === 12) { m = 0; y++; }
+    }
+    return out;
+  }
+  // billed months of a rental, as the server counts them: the fewest N whose N-month rental reaches the end
+  function monthsCount(from, to) {
+    var n = 1, d = function (k) { var x = new Date(from + 'T00:00:00Z'); x.setUTCMonth(x.getUTCMonth() + k); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
+    while (n < 600 && d(n) < to) n++;
+    return n;
+  }
+  function boardSpan(from, to, s, e) {
+    var t0 = Date.parse(from + 'T00:00:00Z'), t1 = Date.parse(to + 'T00:00:00Z') + 86400000, a = Math.max(t0, Date.parse(s + 'T00:00:00Z')), b = Math.min(t1, Date.parse(e + 'T00:00:00Z') + 86400000);
+    if (b <= a) return null;
+    return { left: (a - t0) / (t1 - t0) * 100, width: (b - a) / (t1 - t0) * 100 };
+  }
+  function invBoard(v) {
+    var bar = el('div', 'card invfilters');
+    function dateF(text, val) { var l = el('label', 'f'), i = el('input', 'input'); i.type = 'date'; i.value = val; l.appendChild(el('span', 't', text)); l.appendChild(i); bar.appendChild(l); return i; }
+    var from = dateF('ช่วงตั้งแต่', inv.sfrom), to = dateF('ถึง', inv.sto);
+    var tseg = el('div', 'seg'); tseg.setAttribute('role', 'group'); tseg.setAttribute('aria-label', 'ฝ่าย Med/Nonmed'); bar.appendChild(tseg);
+    var ql = el('label', 'f'), q = el('input', 'input search'); q.type = 'search'; q.value = inv.sq; q.placeholder = 'แบรนด์ เวนเดอร์ หรือเลข TTA';
+    ql.appendChild(el('span', 't', 'ค้นหา')); ql.appendChild(q); bar.appendChild(ql);
+    var xb = button('ส่งออก (CSV)', 'alt', function () { exportNow(); }); bar.appendChild(xb);
+    var body = el('div'); v.appendChild(bar); v.appendChild(body);
+    var exportNow = function () {};
+    function load() {
+      if (from.value && to.value && to.value < from.value) { badFields([[to, 'วันสิ้นสุดต้องไม่ก่อนวันเริ่ม']]); return; }
+      body.textContent = ''; body.appendChild(el('p', 'sub', 'กำลังโหลด...'));
+      api('supplier_board', from.value && to.value ? { start_date: from.value, end_date: to.value } : {}).then(guard(function (d) {
+        inv.sb = d; inv.sfrom = from.value = d.start_date; inv.sto = to.value = d.end_date; paint();
+      })).catch(function (e) { body.textContent = ''; show(e.message, 'err'); });
+    }
+    from.onchange = to.onchange = function () { if (from.value && to.value) load(); };
+    q.oninput = function () { inv.sq = q.value; paint(); };
+    function rowsNow() {
+      var n = inv.sq.trim().toLowerCase();
+      return inv.sb.agreements.filter(function (a) {
+        return (!inv.team || (a.purchase || 'none') === inv.team) && (!n || [a.brand, a.vendor, a.tta_no, a.vendor_no].join(' ').toLowerCase().indexOf(n) >= 0);
+      });
+    }
+    function toBrand(name) { var back = inv.tab; inv.tab = 'brand'; inv.brand = name; inv.back = { label: 'กลับไป' + (back === 'board' ? 'TTA ภาพรวม' : 'แบรนด์ × สาขา'), fn: function () { inv.tab = back; go('inventory'); } }; inventory(); }
+    function paint() {
+      tseg.textContent = '';
+      [['', 'ทุกฝ่าย'], ['med', 'Med'], ['nonmed', 'Nonmed'], ['none', 'ยังไม่ระบุ']].forEach(function (x) {
+        var b = el('button', '', x[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(inv.team === x[0])); b.onclick = function () { inv.team = x[0]; paint(); }; tseg.appendChild(b);
+      });
+      body.textContent = ''; var d = inv.sb, rows = rowsNow();
+      if (inv.tab === 'matrix') { drawMatrix(rows); return; }
+      // counters
+      var cs = rows.map(boardCount), sum = function (f) { return cs.reduce(function (n, c) { return n + f(c); }, 0); };
+      var priced = rows.filter(function (a) { return a.total != null && Number(a.total) > 0; }), value = priced.reduce(function (n, a) { return n + Number(a.total); }, 0);
+      var kp = el('div', 'kpi'), noop = function () {};
+      kp.appendChild(kpiCard('TTA', rows.length, 'Med ' + rows.filter(function (a) { return a.purchase === 'med'; }).length + ' · Nonmed ' + rows.filter(function (a) { return a.purchase === 'nonmed'; }).length + ' · ยังไม่ระบุ ' + rows.filter(function (a) { return !a.purchase; }).length, '', noop));
+      kp.appendChild(kpiCard('มูลค่ารวม', priced.length ? baht(value) : '-', 'บาท' + (priced.length < rows.length ? ' · ยังไม่ใส่มูลค่า ' + (rows.length - priced.length) + ' TTA' : ''), '', noop));
+      kp.appendChild(kpiCard('จุดที่เช่า', sum(function (c) { return c.places; }), 'เกรด A ' + sum(function (c) { return c.A; }) + ' · เกรด B ' + sum(function (c) { return c.B; }), '', noop));
+      if (d.can_pay) { var got = rows.reduce(function (n, a) { return n + Number(a.received || 0); }, 0); kp.appendChild(kpiCard('รับเงินแล้ว', value ? Math.min(100, Math.round(got / value * 100)) + '%' : '-', baht(got) + ' บาท', '', noop)); }
+      body.appendChild(kp);
+      var card = el('section', 'card'); body.appendChild(card);
+      card.appendChild(el('p', 'sub', rows.length + ' TTA ที่มีช่วงวันทับ ' + thDate(d.start_date) + ' ถึง ' + thDate(d.end_date) + ' · แถบเส้นเวลาสีเข้ม = อนุมัติแล้ว สีอ่อน = รออนุมัติ · กดชื่อแบรนด์เพื่อดูภาพรวมแบรนด์'));
+      if (!rows.length) { card.appendChild(el('p', 'empty-note', 'ไม่พบ TTA ตามตัวกรอง')); exportNow = function () { show('ไม่มี TTA ตามตัวกรองที่เลือก', 'err'); }; return; }
+      var cols = [], seenC = {}; cs.forEach(function (c) { Object.keys(c.col).forEach(function (k) { if (!seenC[k]) { seenC[k] = true; cols.push(k); } }); });
+      var order = (inv.sb && inv.data && inv.data.types ? inv.data.types.map(function (x) { return x.name; }) : ['Wall Shelf', 'EndCap', 'Gondola', 'Standee']);
+      cols.sort(function (x, y) { var i = order.indexOf(x), j = order.indexOf(y); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j) || x.localeCompare(y); });
+      var months = boardMonths(d.start_date, d.end_date), t0 = today();
+      var vseg = el('div', 'seg'); vseg.setAttribute('role', 'group'); vseg.setAttribute('aria-label', 'มุมมองตาราง');
+      [['num', 'ตัวเลข'], ['time', 'เส้นเวลา']].forEach(function (x) { var b = el('button', '', x[1]); b.type = 'button'; b.setAttribute('aria-pressed', String((inv.bview || 'num') === x[0])); b.onclick = function () { inv.bview = x[0]; paint(); }; vseg.appendChild(b); });
+      card.insertBefore(vseg, card.firstChild);
+      var tb = el('table', 'dtable board ' + (inv.bview === 'time' ? 'timemode' : 'nummode')), hr = el('tr');
+      var heads = ['ฝ่าย', 'แบรนด์', 'เวนเดอร์', 'เลข TTA', 'มูลค่า (บาท)', 'เริ่ม', 'สิ้นสุด', 'เดือน', 'จุด', 'A', 'B'].concat(cols).concat(['แคชเชียร์ (สาขา)']);
+      // the numbers or the timeline: both side by side do not fit a screen
+      var keep = { 0: 1, 1: 1, 3: 1, 8: 1 }, nx = function (i) { return keep[i] ? '' : ' nx'; };
+      heads.forEach(function (h, i) { var c = el('th', (i >= 4 && i !== 5 && i !== 6 ? 'num' : '') + nx(i), h); c.scope = 'col'; hr.appendChild(c); });
+      var tlh = el('th', 'tlcol'); tlh.scope = 'col'; var mh = el('div', 'tlmonths'); mh.style.setProperty('--n', months.length);
+      months.forEach(function (mo) { var c = el('span', mo.m === 0 ? 'yr' : '', (mo.m === 0 || mo === months[0] ? String((mo.y + 543) % 100) + ' ' : '') + TH_M[mo.m]); mh.appendChild(c); });
+      tlh.appendChild(mh); hr.appendChild(tlh);
+      var th = el('thead'); th.appendChild(hr); tb.appendChild(th); var tbd = el('tbody');
+      var nowAt = boardSpan(d.start_date, d.end_date, t0, t0);
+      rows.forEach(function (a, i) {
+        var c = cs[i], tr = el('tr'), team = el('td'); team.appendChild(el('span', 'chip', a.purchase === 'med' ? 'Med' : a.purchase === 'nonmed' ? 'Nonmed' : '?')); tr.appendChild(team);
+        var bh = el('th'); bh.scope = 'row'; var bl = el('button', 'linkbtn', a.brand); bl.type = 'button'; bl.onclick = function () { toBrand(a.brand); }; bh.appendChild(bl); tr.appendChild(bh);
+        tr.appendChild(el('td', 'muted nx', a.vendor || '-')); tr.appendChild(el('td', '', a.tta_no || '-'));
+        tr.appendChild(el('td', 'num nx', a.total != null ? baht(a.total) : '-'));
+        tr.appendChild(el('td', 'nx', thDate(a.start_date))); tr.appendChild(el('td', 'nx', thDate(a.end_date)));
+        tr.appendChild(el('td', 'num nx', String(monthsCount(a.start_date, a.end_date))));
+        [c.places, c.A, c.B].concat(cols.map(function (k) { return c.col[k] || 0; })).concat([c.cashier]).forEach(function (n, j) { tr.appendChild(el('td', 'num' + (j ? ' nx' : ''), n ? String(n) : '-')); });
+        var tl = el('td', 'tlcol'), track = el('div', 'tltrack'), sp = boardSpan(d.start_date, d.end_date, a.start_date, a.end_date);
+        if (nowAt) { var nl = el('i', 'tlnow'); nl.style.left = nowAt.left + '%'; track.appendChild(nl); }
+        if (sp) { var bb = el('span', 'tlbar' + (a.status === 'pending' ? ' wait' : ''), a.brand); bb.style.left = sp.left + '%'; bb.style.width = sp.width + '%'; bb.title = a.brand + ' ' + thDate(a.start_date) + ' ถึง ' + thDate(a.end_date); track.appendChild(bb); }
+        tl.appendChild(track); tr.appendChild(tl); tbd.appendChild(tr);
+      });
+      tb.appendChild(tbd); var w = el('div', 'dwrap tall'); w.appendChild(tb); card.appendChild(w);
+      exportNow = function () {
+        var out = [heads.concat(d.can_pay ? ['รับเงินแล้ว (บาท)'] : [])];
+        rows.forEach(function (a, i) {
+          var c = cs[i];
+          out.push([PURCHASE[a.purchase] || '', a.brand, a.vendor || '', a.tta_no || '', a.total != null ? a.total : '', a.start_date, a.end_date, monthsCount(a.start_date, a.end_date), c.places, c.A, c.B]
+            .concat(cols.map(function (k) { return c.col[k] || 0; })).concat([c.cashier || '']).concat(d.can_pay ? [a.received || 0] : []));
+        });
+        saveCsv('TTA_ภาพรวม_' + d.start_date + '_' + d.end_date + '.csv', out);
+      };
+    }
+    function drawMatrix(rows) {
+      var d = inv.sb, mx = boardMatrix(rows);
+      var card = el('section', 'card'); body.appendChild(card);
+      card.appendChild(el('p', 'sub', mx.cols.length + ' แบรนด์ ใน ' + mx.branches.length + ' สาขา · ตัวเลขคือจำนวนจุดที่เช่าในช่วง ' + thDate(d.start_date) + ' ถึง ' + thDate(d.end_date) + ' (ไม่รวมชั้นแคชเชียร์) · กดชื่อแบรนด์เพื่อดูภาพรวมแบรนด์'));
+      if (!mx.cols.length) { card.appendChild(el('p', 'empty-note', 'ไม่มีจุดที่เช่าตามตัวกรอง')); exportNow = function () { show('ไม่มีจุดที่เช่าตามตัวกรองที่เลือก', 'err'); }; return; }
+      var tb = el('table', 'dtable matrix'), hr = el('tr'), h0 = el('th', '', 'สาขา'); h0.scope = 'col'; hr.appendChild(h0);
+      var hT = el('th', 'num', 'รวม'); hT.scope = 'col'; hr.appendChild(hT);
+      mx.cols.forEach(function (c) { var h = el('th', 'num'); h.scope = 'col'; var b = el('button', 'linkbtn', c.name); b.type = 'button'; b.onclick = function () { toBrand(c.name); }; h.appendChild(b); hr.appendChild(h); });
+      var th = el('thead'); th.appendChild(hr); tb.appendChild(th); var tbd = el('tbody');
+      mx.branches.forEach(function (b) {
+        var tr = el('tr'), rh = el('th'); rh.scope = 'row'; rh.appendChild(el('b', '', b)); var u = units.filter(function (x) { return x.code === b; })[0]; if (u) rh.appendChild(el('small', '', bName(u))); tr.appendChild(rh);
+        var tot = mx.cols.reduce(function (s, c) { return s + mx.n(b, c.key); }, 0); tr.appendChild(el('td', 'num tot', String(tot)));
+        mx.cols.forEach(function (c) { var n = mx.n(b, c.key); tr.appendChild(el('td', 'num' + (n ? ' on' : ''), n ? String(n) : '')); });
+        tbd.appendChild(tr);
+      });
+      var ft = el('tr'), fh = el('th', '', 'รวม'); fh.scope = 'row'; ft.appendChild(fh);
+      ft.appendChild(el('td', 'num tot', String(mx.cols.reduce(function (s, c) { return s + c.n; }, 0))));
+      mx.cols.forEach(function (c) { ft.appendChild(el('td', 'num tot', String(c.n))); });
+      var tf = el('tfoot'); tf.appendChild(ft); tb.appendChild(tbd); tb.appendChild(tf);
+      var w = el('div', 'dwrap tall'); w.appendChild(tb); card.appendChild(w);
+      exportNow = function () {
+        var out = [['สาขา', 'ชื่อสาขา', 'รวม'].concat(mx.cols.map(function (c) { return c.name; }))];
+        mx.branches.forEach(function (b) {
+          var u = units.filter(function (x) { return x.code === b; })[0], ns = mx.cols.map(function (c) { return mx.n(b, c.key); });
+          out.push([b, u ? bName(u) : '', ns.reduce(function (s, n) { return s + n; }, 0)].concat(ns.map(function (n) { return n || ''; })));
+        });
+        saveCsv('แบรนด์xสาขา_' + d.start_date + '_' + d.end_date + '.csv', out);
+      };
+    }
+    if (inv.sb && inv.sb.start_date === inv.sfrom && inv.sb.end_date === inv.sto) paint(); else load();
+  }
   // Free places as a CSV for Excel (one row per place; the cashier as one row per branch), to send to a vendor
   function invExport(rows, cols) {
     var d = inv.data, out = [['สาขา', 'ชื่อสาขา', 'เกรด', 'ขนาด', 'เครือ', 'ชนิด', 'รหัส', 'หมวดสินค้า', 'จำนวนชั้น', 'ที่ว่าง', 'ป้าย (ขนาด/วัสดุ)', 'ราคาทั้งตู้/จุด (บาท/เดือน)', 'ราคาชั้นที่ว่างชุดแรก (บาท/เดือน)', 'หมายเหตุ']];
@@ -2243,7 +2429,7 @@
   // ---------- settings ----------
   // ---------- contracts: one ledger of cashier-shelf and sign contracts (office only) ----------
   // Reading, searching and the money view live here; editing opens the same forms the other modules use and comes back.
-  var con = { rows: [], edit: {}, view: 'live', type: 'all', what: 'all', pay: 'all', needle: '', sel: null, limit: 30, canPay: false, canApprove: false, ags: [] };
+  var con = { rows: [], edit: {}, view: 'live', type: 'all', what: 'all', pay: 'all', team: 'all', needle: '', sel: null, limit: 30, canPay: false, canApprove: false, ags: [] };
   var formAgreement = null; // agreement id a new cashier/sign line joins; the form takes it when it opens
   // One TTA, one agreement: when the brand already has an agreement overlapping these dates, ask whether the new line
   // belongs there. Resolves with that agreement's id, null (open a new agreement) or false (back to the form).
@@ -2351,6 +2537,7 @@
     if (what === 'none') return !c.slots.length;
     return c.slots.some(function (x) { return what === 'front' ? x.kind === 'front' : what === 'sign' ? x.sign && x.kind !== 'front' : x.whole || !!x.shelf_from; });
   }
+  function conAg(r) { return r.ag || (r.kind === 'deal' ? con.ags.filter(function (a) { return a.id === r.c.id; })[0] : null) || {}; }
   function conRows() {
     var q = con.needle.trim().toLowerCase();
     return con.rows.filter(function (r) {
@@ -2358,6 +2545,7 @@
       if (con.type !== 'all' && r.kind !== con.type) return false;
       if (con.type === 'sign' && con.what !== 'all' && !rentsWhat(r.c, con.what)) return false;
       if (con.pay !== 'all' && (r.pay || 'pending') !== con.pay) return false;
+      if (con.team !== 'all' && (conAg(r).purchase || 'none') !== con.team) return false;
       if (con.view === 'wait') { if (!isWait(r) || st === 'cancelled') return false; }
       else if (r.c.status === 'pending' || (con.view === 'soon' ? !(st === 'live' && daysTo(r.c.end_date) <= 30) : st !== con.view)) return false;
       return !q || (r.c.brand + ' ' + (r.c.vendor || '') + ' ' + (r.c.agreement_no || '') + ' ' + (r.c.sys_no || '') + ' ' + (r.c.ad_no || '')).toLowerCase().indexOf(q) >= 0;
@@ -2392,6 +2580,10 @@
     if (con.canPay) [['all', 'ทั้งหมด'], ['pending', PAY_TH.pending], ['partial', PAY_TH.partial], ['paid', PAY_TH.paid], ['none', PAY_TH.none]].forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.pay === t[0])); x.onclick = function () { con.pay = t[0]; con.limit = 30; renderContracts(); }; pseg.appendChild(x);
     });
+    var mseg = el('div', 'seg'); mseg.setAttribute('role', 'group'); mseg.setAttribute('aria-label', 'กรองตามฝ่าย Med/Nonmed');
+    [['all', 'ทั้งหมด'], ['med', 'Med'], ['nonmed', 'Nonmed'], ['none', 'ยังไม่ระบุ']].forEach(function (t) {
+      var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.team === t[0])); x.onclick = function () { con.team = t[0]; con.limit = 30; renderContracts(); }; mseg.appendChild(x);
+    });
     var sb = el('input', 'input search'); sb.type = 'search'; sb.value = con.needle; sb.placeholder = 'ค้นหาแบรนด์ เวนเดอร์ เลข TTA หรือเลขโฆษณา'; sb.setAttribute('aria-label', 'ค้นหารายการเช่า');
     bar.appendChild(sb); bar.appendChild(el('span', 'grow'));
     if (con.edit.cashier) bar.appendChild(button('+ รายการเช่าชั้นแคชเชียร์', '', function () { formBack = contracts; cashierForm(null); }));
@@ -2400,7 +2592,7 @@
     v.appendChild(bar);
     var fr = el('div', 'filterrow');
     function fgroup(label, sg) { var g = el('div', 'fgroup'); g.appendChild(el('span', 'cap', label)); g.appendChild(sg); fr.appendChild(g); }
-    fgroup('สถานะรายการเช่า', seg); fgroup('ประเภทรายการเช่า', tseg); if (con.type === 'sign') fgroup('สิ่งที่เช่า', wseg); if (con.canPay) fgroup('การรับเงินจากเวนเดอร์', pseg);
+    fgroup('สถานะรายการเช่า', seg); fgroup('ประเภทรายการเช่า', tseg); fgroup('ฝ่าย', mseg); if (con.type === 'sign') fgroup('สิ่งที่เช่า', wseg); if (con.canPay) fgroup('การรับเงินจากเวนเดอร์', pseg);
     v.appendChild(fr);
     var grid = el('div', 'floorgrid'), card = el('section', 'card floorplan'), list = el('div'), more = el('div', 'row'), side = el('aside', 'card floorpanel');
     card.appendChild(list); card.appendChild(more); grid.appendChild(card); grid.appendChild(side); v.appendChild(grid);
