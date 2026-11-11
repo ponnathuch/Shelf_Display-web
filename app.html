@@ -4392,7 +4392,7 @@
     var r = sess.staff.role;
     if (r === 'WAREHOUSE') return [{ id: 'home', label: 'ค้นหา', icon: 'home' }];
     if (r === 'STAFF') return [{ id: 'home', label: 'ภาพรวม', icon: 'home' }, { id: 'floor', label: 'ผังร้าน', icon: 'floor' }];
-    var m = [{ id: 'home', label: 'ภาพรวม (Dashboard)', icon: 'home' }, { id: 'media', label: 'สื่อ (Media)', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์', icon: 'cashier' }, { id: 'floor', label: 'ผังร้าน (Store Layout)', icon: 'floor' }, { id: 'contracts', label: 'TTA (Trade Agreements)', icon: 'contract' }, { id: 'inventory', label: 'พื้นที่ขาย (Inventory)', icon: 'shelf' }];
+    var m = [{ id: 'home', label: 'ภาพรวม (Dashboard)', icon: 'home' }, { id: 'media', label: 'สื่อ (Media)', icon: 'media' }, { id: 'cashier', label: 'ชั้นแคชเชียร์ (Cashier Shelf)', icon: 'cashier' }, { id: 'floor', label: 'ผังร้าน (Store Layout)', icon: 'floor' }, { id: 'contracts', label: 'TTA (Trade Agreements)', icon: 'contract' }, { id: 'inventory', label: 'พื้นที่ขาย (Inventory)', icon: 'shelf' }];
     if (isApprover() || isContract()) m.push({ id: 'settings', label: 'ตั้งค่า', icon: 'gear' });
     return m;
   }
