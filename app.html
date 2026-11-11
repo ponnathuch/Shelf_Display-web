@@ -1913,12 +1913,16 @@
   // Availability = branches x kinds; a cell counts places free all period (Sections: whole / some shelves) and opens the
   // list on the right with sign size and default price. Pending agreements hold places too. Office only (prices).
   var inv = { tab: 'avail', from: '', to: '', off: {}, grade: '', size: '', chain: '', q: '', data: null, keep: null, brand: '', brands: null, bd: null, ended: false, back: null, bq: '', bg: '', sb: null, sfrom: '', sto: '', team: '', sq: '' };
-  var INV_KIND = { sign: 'ป้ายหัวชั้น', glass: 'กระจก', cashier: 'แคชเชียร์', hang: 'ป้ายแขวน', front: 'ป้ายหน้าร้าน' };
+  var INV_KIND = { sign: 'ป้ายหัวชั้น', glass: 'กระจก', cashier: 'แคชเชียร์', hang: 'ป้ายแขวน', front: 'ป้ายหน้าร้าน (Storefront)' };
+  // names shown on the sales pages: international words, with the old file's name on hover (design v3, 2026-11-11)
+  var INV_ALIAS = { 'Standee': 'ชั้นตั้งพื้น (FSDU)' };
+  var INV_HINT = { 'ชั้นตั้งพื้น (FSDU)': 'ชั้นตั้งพื้นในร้านที่วางสินค้าได้ ในไฟล์เดิมและ rate card เรียก Standee', 'ป้ายหน้าร้าน (Storefront)': 'ป้ายตั้งหน้าร้าน สาขาละ 4 จุด (FRONT01-04) ป้ายอย่างเดียว ไม่มีชั้น' };
+  function invName(type) { return INV_ALIAS[type] || type; }
   function invCols(d) {
     var seen = {}, cols = [];
     d.places.forEach(function (p) { if (p.type) seen[p.type] = true; });
-    d.types.forEach(function (x) { if (seen[x.name]) { cols.push({ key: 'T:' + x.name, label: x.name, type: x.name }); delete seen[x.name]; } });
-    Object.keys(seen).forEach(function (n) { cols.push({ key: 'T:' + n, label: n, type: n }); }); // a type switched off still has Sections
+    d.types.forEach(function (x) { if (seen[x.name]) { cols.push({ key: 'T:' + x.name, label: invName(x.name), type: x.name }); delete seen[x.name]; } });
+    Object.keys(seen).forEach(function (n) { cols.push({ key: 'T:' + n, label: invName(n), type: n }); }); // a type switched off still has Sections
     ['sign', 'glass', 'cashier', 'hang', 'front'].forEach(function (k) { cols.push({ key: k, label: INV_KIND[k] }); });
     return cols;
   }
@@ -1994,7 +1998,7 @@
     ql.appendChild(el('span', 't', 'ค้นหาสาขา')); ql.appendChild(q); tb.appendChild(ql);
     var kseg = el('div', 'seg invx'); kseg.setAttribute('role', 'group'); kseg.setAttribute('aria-label', 'ชนิดพื้นที่ที่แสดง');
     cols.forEach(function (c) {
-      var x = el('button', '', c.label); x.type = 'button'; x.setAttribute('aria-pressed', String(!inv.off[c.key]));
+      var x = el('button', '', c.label); x.type = 'button'; x.setAttribute('aria-pressed', String(!inv.off[c.key])); if (INV_HINT[c.label]) x.title = INV_HINT[c.label];
       x.onclick = function () { inv.off[c.key] = !inv.off[c.key]; invPaint(body, tb); }; kseg.appendChild(x);
     });
     // second row: which kinds to show (a long group) and the export at its end
@@ -2034,7 +2038,7 @@
       var lay = el('div', 'frontgrid'), wrap = el('div', 'tlwrap'), tbl = el('table', 'fronttl invtl'), th = el('thead'), hr = el('tr'), tbody = el('tbody');
       var side = el('aside', 'frontside invpane'); side.setAttribute('aria-live', 'polite');
       ['สาขา', 'เกรด', 'ขนาด'].forEach(function (h) { var x = el('th', 'lbl', h); x.scope = 'col'; hr.appendChild(x); });
-      shown.forEach(function (c) { var x = el('th', '', c.label); x.scope = 'col'; hr.appendChild(x); });
+      shown.forEach(function (c) { var x = el('th', '', c.label); x.scope = 'col'; if (INV_HINT[c.label]) x.title = INV_HINT[c.label]; hr.appendChild(x); });
       th.appendChild(hr); tbl.appendChild(th);
       var on = null, cells = {};
       function pick(b, c) {
@@ -2100,7 +2104,7 @@
   // Brand view (design v3 P18): one brand's live agreements, places and cashier lines; ended ones on request.
   // a captioned group in a filter bar (button groups have no label element), lined up with the inputs
   function invGroup(text, node) { var g = el('div', 'fgrp'); g.appendChild(el('span', 't', text)); g.appendChild(node); return g; }
-  function invColOf(p) { return p.type || (p.kind === 'header' ? 'ป้ายหัวชั้น' : INV_KIND[p.kind] || p.kind); }
+  function invColOf(p) { return p.type ? invName(p.type) : (p.kind === 'header' ? 'ป้ายหัวชั้น' : INV_KIND[p.kind] || p.kind); }
   function invBrand(v) {
     var bar = el('div', 'card invfilters'), l = el('label', 'f'), inp = el('input', 'input search'), dl = el('datalist');
     dl.id = 'inv-brands'; inp.type = 'search'; inp.setAttribute('list', 'inv-brands'); inp.value = inv.brand; inp.placeholder = 'พิมพ์ชื่อแบรนด์ เช่น Mega';
@@ -2334,7 +2338,7 @@
       card.appendChild(el('p', 'sub', rows.length + ' TTA ที่มีช่วงวันทับ ' + thDate(d.start_date) + ' ถึง ' + thDate(d.end_date) + ' · แถบเส้นเวลาสีเข้ม = อนุมัติแล้ว สีอ่อน = รออนุมัติ · กดชื่อแบรนด์เพื่อดูภาพรวมแบรนด์'));
       if (!rows.length) { card.appendChild(el('p', 'empty-note', 'ไม่พบ TTA ตามตัวกรอง')); exportNow = function () { show('ไม่มี TTA ตามตัวกรองที่เลือก', 'err'); }; return; }
       var cols = [], seenC = {}; cs.forEach(function (c) { Object.keys(c.col).forEach(function (k) { if (!seenC[k]) { seenC[k] = true; cols.push(k); } }); });
-      var order = (inv.sb && inv.data && inv.data.types ? inv.data.types.map(function (x) { return x.name; }) : ['Wall Shelf', 'EndCap', 'Gondola', 'Standee']);
+      var order = (inv.data && inv.data.types ? inv.data.types.map(function (x) { return x.name; }) : ['Wall Shelf', 'EndCap', 'Gondola', 'Standee']).map(invName);
       cols.sort(function (x, y) { var i = order.indexOf(x), j = order.indexOf(y); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j) || x.localeCompare(y); });
       var months = boardMonths(d.start_date, d.end_date), t0 = today();
       var vseg = el('div', 'seg'); vseg.setAttribute('role', 'group'); vseg.setAttribute('aria-label', 'มุมมองตาราง');
@@ -2344,7 +2348,7 @@
       var heads = ['ฝ่าย', 'แบรนด์', 'เวนเดอร์', 'เลข TTA', 'มูลค่า (บาท)', 'เริ่ม', 'สิ้นสุด', 'เดือน', 'จุด', 'A', 'B'].concat(cols).concat(['แคชเชียร์ (สาขา)']);
       // the numbers or the timeline: both side by side do not fit a screen
       var keep = { 0: 1, 1: 1, 3: 1, 8: 1 }, nx = function (i) { return keep[i] ? '' : ' nx'; };
-      heads.forEach(function (h, i) { var c = el('th', (i >= 4 && i !== 5 && i !== 6 ? 'num' : '') + nx(i), h); c.scope = 'col'; hr.appendChild(c); });
+      heads.forEach(function (h, i) { var c = el('th', (i >= 4 && i !== 5 && i !== 6 ? 'num' : '') + nx(i), h); c.scope = 'col'; if (INV_HINT[h]) c.title = INV_HINT[h]; hr.appendChild(c); });
       var tlh = el('th', 'tlcol'); tlh.scope = 'col'; var mh = el('div', 'tlmonths'); mh.style.setProperty('--n', months.length);
       months.forEach(function (mo) { var c = el('span', mo.m === 0 ? 'yr' : '', (mo.m === 0 || mo === months[0] ? String((mo.y + 543) % 100) + ' ' : '') + TH_M[mo.m]); mh.appendChild(c); });
       tlh.appendChild(mh); hr.appendChild(tlh);
