@@ -1991,11 +1991,13 @@
   }
   function inventory() {
     var v = $('view'); v.textContent = ''; show('');
+    // coming in from another page (a TTA may have changed): load again; a tab switch or the way back from a plan reuses the data
+    if (!inv.reuse) { inv.data = null; inv.sb = null; inv.bd = null; } inv.reuse = false;
     if (inv.back) { var bk = inv.back, b0 = button('← ' + bk.label, 'alt', function () { inv.back = null; bk.fn(); }); b0.classList.add('backbtn'); v.appendChild(b0); }
     var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'มุมมอง');
     [['avail', 'ว่าง (Availability)'], ['brand', 'แบรนด์ (Brand view)'], ['board', 'TTA ภาพรวม (By supplier)'], ['matrix', 'แบรนด์ × สาขา']].forEach(function (x) {
       var b = el('button', '', x[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(inv.tab === x[0]));
-      b.onclick = function () { inv.tab = x[0]; inventory(); }; seg.appendChild(b);
+      b.onclick = function () { inv.tab = x[0]; inv.reuse = true; inventory(); }; seg.appendChild(b);
     });
     var top = el('div', 'toolbar'); top.appendChild(seg); v.appendChild(top);
     if (inv.tab === 'brand') { invBrand(v); return; }
@@ -2101,7 +2103,7 @@
           fb.onclick = function () {
             inv.keep = { b: b.code, c: c.key, y: window.scrollY };
             flo.branch = b.code; flo.sel = p.id; flo.view = p.kind === 'glass' ? 'glass' : p.kind === 'hang' ? 'hang' : 'active';
-            flo.backTo = { label: 'กลับไปพื้นที่ว่าง', fn: function () { go('inventory'); } }; window.scrollTo(0, 0); go('floor');
+            flo.backTo = { label: 'กลับไปพื้นที่ว่าง', fn: function () { inv.reuse = true; go('inventory'); } }; window.scrollTo(0, 0); go('floor');
           };
           t4.appendChild(fb); [t1, t2, t3, t4].forEach(function (td) { tr.appendChild(td); }); sb.appendChild(tr);
         });
@@ -2148,13 +2150,15 @@
     var body = el('div'); v.appendChild(bar); v.appendChild(body);
     function fill() { dl.textContent = ''; (inv.brands || []).forEach(function (b) { var o = el('option'); o.value = b; dl.appendChild(o); }); }
     if (inv.brands) fill(); else api('brand_view').then(function (r) { inv.brands = r.brands; fill(); }).catch(function () { /* typing still works */ });
-    function pick() { var b = inp.value.trim(); if (b && b.toLowerCase() !== inv.brand.toLowerCase()) { inv.brand = b; load(); } }
+    function pick() { var b = inp.value.trim(); if (b && b.toLowerCase() !== inv.brand.toLowerCase()) { inv.brand = b; inv.bq = ''; inv.bg = ''; load(); } } // a new brand starts unfiltered
     inp.onchange = pick; inp.onkeydown = function (e) { if (e.key === 'Enter') pick(); };
     ck.onchange = function () { inv.ended = ck.checked; if (inv.bd) draw(); };
     function load() {
       body.textContent = ''; body.appendChild(el('p', 'sub', 'กำลังโหลด...'));
-      api('brand_view', { brand: inv.brand }).then(guard(function (d) { inv.bd = d; draw(); })).catch(function (e) { body.textContent = ''; show(e.message, 'err'); });
+      api('brand_view', { brand: inv.brand }).then(guard(function (d) { inv.bd = d; draw(); backY(); })).catch(function (e) { body.textContent = ''; show(e.message, 'err'); });
     }
+    // back from a TTA opened here: the same scroll position, once the brand is drawn again
+    function backY() { var y = inv.brandY; inv.brandY = 0; if (y) setTimeout(function () { window.scrollTo(0, y); }, 0); return !!y; }
     function openLine(key, c) {
       con.sel = key; con.type = 'all'; con.what = 'all'; con.pay = 'all'; con.team = 'all'; con.needle = ''; con.view = c.status === 'pending' ? 'wait' : cashState(c);
       var y = window.scrollY; window.scrollTo(0, 0); // the TTA page opens at its top, where the way back is
@@ -2273,7 +2277,7 @@
     }
     if (!inv.brand) body.appendChild(el('p', 'empty-note', 'พิมพ์ชื่อแบรนด์เพื่อดู TTA ตำแหน่ง และยอดรับเงินทั้งหมดของแบรนด์'));
     else if (inv.bd && inv.bd.brand.toLowerCase() === inv.brand.toLowerCase()) {
-      draw(); var y = inv.brandY; inv.brandY = 0; if (y) { setTimeout(function () { window.scrollTo(0, y); }, 0); return; } // back where the TTA was opened
+      draw(); if (backY()) return;
     } else load();
     if (!inv.brand) inp.focus(); // focusing the box would jump the page to the top
   }
@@ -2350,7 +2354,7 @@
         return (!inv.team || (a.purchase || 'none') === inv.team) && (!n || [a.brand, a.vendor, a.tta_no, a.vendor_no].join(' ').toLowerCase().indexOf(n) >= 0);
       });
     }
-    function toBrand(name) { window.scrollTo(0, 0); var back = inv.tab; inv.tab = 'brand'; inv.brand = name; inv.back = { label: 'กลับไป' + (back === 'board' ? 'TTA ภาพรวม' : 'แบรนด์ × สาขา'), fn: function () { inv.tab = back; go('inventory'); } }; inventory(); }
+    function toBrand(name) { window.scrollTo(0, 0); var back = inv.tab; inv.tab = 'brand'; inv.brand = name; inv.bq = ''; inv.bg = ''; inv.reuse = true; inv.back = { label: 'กลับไป' + (back === 'board' ? 'TTA ภาพรวม' : 'แบรนด์ × สาขา'), fn: function () { inv.tab = back; go('inventory'); } }; inventory(); }
     function paint() {
       tseg.textContent = '';
       [['', 'ทุกฝ่าย'], ['med', 'Med'], ['nonmed', 'Nonmed'], ['none', 'ยังไม่ระบุ']].forEach(function (x) {
@@ -4408,7 +4412,7 @@
     return m;
   }
   var whoText = '', roleText = '', current = 'home';
-  function setCurrent(id) { current = id; if (id !== 'floor') flo.backTo = null; renderNav(); var m = modules().filter(function (x) { return x.id === id; })[0]; $('title').textContent = m ? m.label : 'การวางสื่อในร้าน'; }
+  function setCurrent(id) { current = id; if (id !== 'floor') flo.backTo = null; if (id !== 'contracts') con.backHome = null; if (id !== 'inventory') inv.back = null; renderNav(); var m = modules().filter(function (x) { return x.id === id; })[0]; $('title').textContent = m ? m.label : 'การวางสื่อในร้าน'; }
   function renderNav() {
     var mods = modules(), nav = $('nav'); nav.textContent = '';
     $('app').classList.toggle('solo', mods.length < 2);
