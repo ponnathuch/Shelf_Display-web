@@ -1461,6 +1461,7 @@
         var px = el('input', 'input'); px.type = 'text'; px.value = fresh ? '' : (t.area_prefixes || []).join(', '); px.placeholder = 'รหัสพื้นที่ เช่น OA'; px.setAttribute('aria-label', 'รหัสพื้นที่ คั่นด้วยจุลภาค');
         var l = el('label', 'check'), on = el('input'); on.type = 'checkbox'; on.checked = fresh ? true : t.active !== false; l.appendChild(on); l.appendChild(document.createTextNode('ใช้งาน'));
         r.appendChild(nm); r.appendChild(el('span', 'sub', 'ชั้น')); r.appendChild(sh); r.appendChild(px); r.appendChild(l);
+        if (!fresh && INV_ALIAS[t.name]) r.appendChild(el('span', 'sub', 'แสดงบนจอเป็น ' + INV_ALIAS[t.name] + ' (ชื่อนี้ใช้กับไฟล์นำเข้า)'));
         if (d.can_edit) r.appendChild(button(fresh ? 'เพิ่ม' : 'บันทึก', fresh ? '' : 'alt', function () {
           var b = { name: nm.value.trim(), default_shelves: Number(sh.value), area_prefixes: px.value.split(/[ ,]+/).filter(Boolean), active: on.checked };
           if (!b.name) { show('ใส่ชื่อประเภทก่อน', 'err'); return; }
@@ -2029,7 +2030,7 @@
       kp.appendChild(kpiCard('Section ว่างทั้งตู้', k.whole.A + k.whole.B, ab(k.whole), 'ok', noop));
       kp.appendChild(kpiCard('Section ว่างบางชั้น', k.part.A + k.part.B, ab(k.part), '', noop));
       kp.appendChild(kpiCard('Section เช่าเต็มแล้ว', k.full.A + k.full.B, ab(k.full), '', noop));
-      kp.appendChild(kpiCard('จุดอื่นที่ว่าง', other, 'ป้ายหัวชั้น กระจก แคชเชียร์ ป้ายแขวน ป้ายหน้าร้าน', '', noop));
+      kp.appendChild(kpiCard('จุดอื่นที่ว่าง', other, 'ป้ายหัวชั้น กระจก แคชเชียร์ ป้ายแขวน ป้ายหน้าร้าน (Storefront)', '', noop));
       body.appendChild(kp);
       if (d.draft) body.appendChild(el('p', 'hint', 'ตารางราคาปี ' + (d.year + 543) + ' ยังเป็นร่าง ราคาที่แสดงอาจเปลี่ยน'));
       var card = el('section', 'card'); body.appendChild(card);
@@ -2575,7 +2576,7 @@
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.type === t[0])); x.onclick = function () { con.type = t[0]; con.limit = 30; renderContracts(); }; tseg.appendChild(x);
     });
     var wseg = el('div', 'seg'); wseg.setAttribute('role', 'group'); wseg.setAttribute('aria-label', 'กรองตามสิ่งที่เช่า');
-    [['all', 'ทั้งหมด'], ['sign', 'เช่าป้าย'], ['shelf', 'เช่าชั้นวาง'], ['front', 'ป้ายหน้าร้าน'], ['none', 'รอระบุตำแหน่ง']].forEach(function (t) {
+    [['all', 'ทั้งหมด'], ['sign', 'เช่าป้าย'], ['shelf', 'เช่าชั้นวาง'], ['front', 'ป้ายหน้าร้าน (Storefront)'], ['none', 'รอระบุตำแหน่ง']].forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.what === t[0])); x.onclick = function () { con.what = t[0]; con.limit = 30; renderContracts(); }; wseg.appendChild(x);
     });
     var pseg = el('div', 'seg'); pseg.setAttribute('role', 'group'); pseg.setAttribute('aria-label', 'กรองตามการรับเงินจากเวนเดอร์');
@@ -2925,7 +2926,7 @@
     if (c.status === 'pending') chips.appendChild(el('span', 'chip warn', 'รออนุมัติ'));
     else chips.appendChild(el('span', 'chip ' + (st === 'live' ? 'ok' : st === 'cancelled' ? 'err' : ''), { live: 'ใช้งานอยู่', next: 'ยังไม่เริ่ม', ended: 'หมดอายุแล้ว', cancelled: 'ยกเลิกแล้ว' }[st]));
     left.appendChild(chips); head.appendChild(left); head.appendChild(button('ปิด', 'alt', function () { con.sel = null; renderContracts(); })); p.appendChild(head);
-    if (con.backHome && con.backHome.key === r.key) p.insertBefore(button('← ' + (con.backHome.label || 'กลับไทม์ไลน์ป้ายหน้าร้าน'), 'alt back', function () { var bh = con.backHome; con.backHome = null; if (bh.fn) bh.fn(); else { frontKeep = bh; go('home'); } }), head);
+    if (con.backHome && con.backHome.key === r.key) p.insertBefore(button('← ' + (con.backHome.label || 'กลับไทม์ไลน์ป้ายหน้าร้าน (Storefront)'), 'alt back', function () { var bh = con.backHome; con.backHome = null; if (bh.fn) bh.fn(); else { frontKeep = bh; go('home'); } }), head);
     agBlock(p, r);
     var dl = el('dl', 'facts one');
     fact(dl, 'ช่วงเวลา', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) + (c._raw ? ' (ตามวันหมดอายุโฆษณา)' : ''));
@@ -2965,7 +2966,7 @@
 
   // ---------- floor plans and places ----------
   var flo = { mode: 'branch', freeOn: '', signLimit: 15, signNeedle: '', signs: [], branch: '', data: null, view: 'active', needle: '', sel: null, pinning: null };
-  var KIND_TH = { header: 'หัวชั้น', glass: 'กระจกหน้าร้าน', temp: 'สื่อชั่วคราว', hang: 'ป้ายแขวน', front: 'ป้ายตั้งหน้าร้าน' }, TENANT_TH = { icare: 'iCare', rent: 'เช่า' };
+  var KIND_TH = { header: 'หัวชั้น', glass: 'กระจกหน้าร้าน', temp: 'สื่อชั่วคราว', hang: 'ป้ายแขวน', front: 'ป้ายหน้าร้าน (Storefront)' }, TENANT_TH = { icare: 'iCare', rent: 'เช่า' };
 
   // Minimal .xlsx reader (an .xlsx is a zip of XML files): enough for "Lock section_<branch>.xlsx".
   function zipEntries(buf) {
@@ -3751,7 +3752,7 @@
         r.appendChild(el('span', 'sub grow', [s.name, s.category, s.note, sp.length ? 'ขนาด ' + sp.slice(0, 3).join(', ') + (sp.length > 3 ? ' +' + (sp.length - 3) : '') : ''].filter(Boolean).join(' · ')));
         r.appendChild(el('span', 'chip', KIND_TH[s.kind] || s.kind)); if (s.kind === 'glass' || s.tenant === 'rent') r.appendChild(el('span', 'chip', TENANT_TH[s.tenant]));
         if (s.fixture) {
-          r.appendChild(el('span', 'chip', s.fixture.type_name + ' · ' + shelfText(s.fixture.shelves)));
+          r.appendChild(el('span', 'chip', invName(s.fixture.type_name) + ' · ' + shelfText(s.fixture.shelves)));
           if (!s.fixture.confirmed) r.appendChild(el('span', 'chip warn', 'ยังไม่ยืนยันจำนวนชั้น'));
         }
         var placed = s.x != null && s.y != null, rentNow = signNow(s);
@@ -3862,7 +3863,7 @@
     }
     var code = fld('รหัส (เช่น OA03 หรือ กระจกซ้าย)', s && s.code); if (s) code.readOnly = true;
     var name = fld('ชื่อ/คำอธิบาย', s && s.name), cat = fld('หมวดสินค้า', s && s.category);
-    var kind = sel('ชนิด', [['header', 'หัวชั้น'], ['glass', 'กระจกหน้าร้าน'], ['temp', 'ป้ายสื่อชั่วคราว (ผูกแคมเปญสื่อ)'], ['hang', 'ป้ายแขวน (เช่าขั้นต่ำ 3 เดือน)'], ['front', 'ป้ายตั้งหน้าร้าน']], s ? s.kind : 'glass');
+    var kind = sel('ชนิด', [['header', 'หัวชั้น'], ['glass', 'กระจกหน้าร้าน'], ['temp', 'ป้ายสื่อชั่วคราว (ผูกแคมเปญสื่อ)'], ['hang', 'ป้ายแขวน (เช่าขั้นต่ำ 3 เดือน)'], ['front', 'ป้ายหน้าร้าน (Storefront)']], s ? s.kind : 'glass');
     var tenant = sel('ผู้ใช้ตำแหน่ง', [['icare', 'iCare ติดเอง'], ['rent', 'ให้ซัพพลายเออร์เช่า']], s ? s.tenant : 'icare');
     var note = fld('หมายเหตุ', s && s.note); d.appendChild(g);
     // sign specs of this place: edit one size, add or remove a line
@@ -3911,8 +3912,8 @@
     var box = el('fieldset', 'card'); box.appendChild(el('legend', '', 'ชั้นวางสำหรับขาย'));
     var g = el('div', 'grid');
     var tl = el('label', 'f'); tl.appendChild(el('span', 't', 'ประเภทชั้นวาง')); var ts = el('select', 'input');
-    var auto = el('option', '', fx && fx.by_prefix ? 'ตามรหัสพื้นที่ (' + fx.type_name + ')' : 'ตามรหัสพื้นที่ (ไม่ใช่ชั้นวาง)'); auto.value = ''; ts.appendChild(auto);
-    types.forEach(function (t) { var o = el('option', '', t.name); o.value = String(t.id); if (fx && !fx.by_prefix && fx.type_id === t.id) o.selected = true; ts.appendChild(o); });
+    var auto = el('option', '', fx && fx.by_prefix ? 'ตามรหัสพื้นที่ (' + invName(fx.type_name) + ')' : 'ตามรหัสพื้นที่ (ไม่ใช่ชั้นวาง)'); auto.value = ''; ts.appendChild(auto);
+    types.forEach(function (t) { var o = el('option', '', invName(t.name)); o.value = String(t.id); if (fx && !fx.by_prefix && fx.type_id === t.id) o.selected = true; ts.appendChild(o); });
     tl.appendChild(ts); g.appendChild(tl);
     var nl = el('label', 'f'); nl.appendChild(el('span', 't', 'จำนวนชั้น')); var ns = el('input', 'input'); ns.type = 'number'; ns.min = 1; ns.max = 20; nl.appendChild(ns); g.appendChild(nl);
     box.appendChild(g);
@@ -4174,8 +4175,8 @@
   var frontKeep = null;
   function frontTimeline(list, places) {
     var card = el('section', 'card'), branches = Object.keys(places).sort();
-    card.appendChild(el('h2', 'sec', 'ป้ายหน้าร้าน: จุดที่เช่าแล้วรายเดือน (12 เดือน)'));
-    if (!branches.length) { card.appendChild(el('p', 'empty-note', 'ยังไม่มีจุดป้ายหน้าร้าน')); return card; }
+    card.appendChild(el('h2', 'sec', 'ป้ายหน้าร้าน (Storefront): จุดที่เช่าแล้วรายเดือน (12 เดือน)'));
+    if (!branches.length) { card.appendChild(el('p', 'empty-note', 'ยังไม่มีจุดป้ายหน้าร้าน (Storefront)')); return card; }
     var t0 = today(), y = Number(t0.slice(0, 4)), m0 = Number(t0.slice(5, 7)) - 1, months = [], i;
     for (i = 0; i < 12; i++) {
       var yy = y + Math.floor((m0 + i) / 12), mm = (m0 + i) % 12, first = yy + '-' + String(mm + 1).padStart(2, '0') + '-01';
@@ -4319,7 +4320,7 @@
       done(); var v = $('view'); v.textContent = ''; $('bar').hidden = true; window.scrollTo(0, 0);
       v.appendChild(button('← กลับภาพรวม', 'alt back', showHome));
       var codes = (c.slots || []).map(function (x) { return x.code; }).join(', ');
-      v.appendChild(card({ brand: c.brand, code: codes, position_types: { name: 'ป้ายหน้าร้าน' }, status: 'approved', start_date: c.start_date, end_date: c.end_date, ad_expiry: c.ad_expiry, how_to_place: c.how_to_place, return_to: c.return_to, _raw: c._raw }));
+      v.appendChild(card({ brand: c.brand, code: codes, position_types: { name: 'ป้ายหน้าร้าน (Storefront)' }, status: 'approved', start_date: c.start_date, end_date: c.end_date, ad_expiry: c.ad_expiry, how_to_place: c.how_to_place, return_to: c.return_to, _raw: c._raw }));
       if (d.photos.length) { var ph = el('section', 'card'); ph.appendChild(el('h2', 'sec', 'รูปตัวอย่าง')); ph.appendChild(photoGrid(d.photos)); v.appendChild(ph); }
     })).catch(guard(fail));
   }
