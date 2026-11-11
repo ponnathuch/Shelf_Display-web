@@ -241,6 +241,14 @@
   .fronttl thead th { position: sticky; top: 0; z-index: 1; }
   .fronttl th[scope=row], .fronttl thead th:first-child { position: sticky; left: 0; text-align: left; z-index: 2; }
   .fronttl button { min-width: var(--size-target); min-height: var(--size-target); border: 1px solid var(--c-line); border-radius: var(--radius-s); background: var(--c-surface); color: var(--c-ink); font: inherit; cursor: pointer; }
+  .frontgrid { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: flex-start; }
+  .frontgrid .tlwrap { flex: 0 1 auto; min-width: 0; }
+  .frontside { flex: 1 1 var(--size-pane); min-width: 0; margin-top: var(--space-3); }
+  .frontside h3 { margin: 0; }
+  .frontsign { padding: var(--space-2) 0; border-bottom: 1px solid var(--c-line); }
+  .frontrent { display: flex; gap: var(--space-3); align-items: flex-start; margin-top: var(--space-2); }
+  .frontrent p { margin: var(--space-1) 0 0; }
+  .frontrent .chip { margin-left: var(--space-2); }
   .fronttl button.part { background: var(--c-brand-soft); }
   .fronttl button.full { background: var(--c-err-soft); color: var(--c-err); font-weight: bold; }
   .fronttl button[aria-pressed=true] { border-color: var(--c-brand); box-shadow: 0 0 0 1px var(--c-brand); }
@@ -1556,20 +1564,51 @@
     var name = fld('ชื่อแพ็กเกจ', 'text', p.name);
     var rate = fld('ค่าเช่าต่อแบรนด์ต่อเดือน (บาท)', 'number', p.rate); rate.min = 0;
     d.appendChild(g);
-    var bl = el('label', 'f'); bl.appendChild(el('span', 't', 'สาขาเริ่มต้นของแพ็กเกจ (รหัสสาขา คั่นด้วยเว้นวรรคหรือขึ้นบรรทัดใหม่ เว้นว่างได้)'));
-    var ta = el('textarea', 'input'); ta.rows = 3; ta.value = p.branches.join(' '); bl.appendChild(ta); d.appendChild(bl);
-    var count = el('p', 'sub'); d.appendChild(count);
-    var codes = function () { return ta.value.toUpperCase().split(/[\s,]+/).filter(Boolean); };
-    var upd = function () { count.textContent = 'ทั้งหมด ' + new Set(codes()).size + ' สาขา'; }; ta.oninput = upd; upd();
-    var row = el('div', 'row');
-    row.appendChild(button('ทุกสาขา', '', function () {
-      ta.value = units.filter(function (u) { return u.is_branch; }).map(function (u) { return u.code; }).join(' '); upd();
+    // the package's branches: the picker (search, departments, tick boxes), quick fills by grade or chain, or a pasted list
+    var pb = el('div'); d.appendChild(pb);
+    var picker = branchPicker(pb, p.branches.slice(), null), req = pb.querySelector('.req'); if (req) req.remove(); // none chosen = every branch
+    var add = function (list) { var s = {}; picker.getCodes().concat(list).forEach(function (c) { s[c] = true; }); picker.setCodes(Object.keys(s)); };
+    var quick = el('div', 'linker'), ys = el('select', 'input sortsel'); ys.setAttribute('aria-label', 'ปีของเกรดสาขา');
+    var yNow = new Date().getFullYear(); [yNow - 1, yNow, yNow + 1].forEach(function (y) { var o = el('option', '', 'เกรดปี ' + (y + 543)); o.value = y; if (y === yNow) o.selected = true; ys.appendChild(o); });
+    var prof = null;
+    var withProfiles = function (f) { (prof ? Promise.resolve(prof) : api('branch_profiles').then(function (r) { prof = r; return r; })).then(f).catch(function (e) { show(e.message, 'err'); }); };
+    quick.appendChild(el('span', 'sub', 'เพิ่มทีละกลุ่ม:'));
+    quick.appendChild(button('ทุกสาขา', 'alt', function () { picker.setCodes(units.filter(function (u) { return u.is_branch; }).map(function (u) { return u.code; })); }));
+    quick.appendChild(ys);
+    ['A', 'B'].forEach(function (gr) {
+      quick.appendChild(button('+ สาขาเกรด ' + gr, 'alt', function () {
+        withProfiles(function (r) {
+          var list = r.grades.filter(function (g) { return g.year === Number(ys.value) && g.grade === gr; }).map(function (g) { return g.branch_code; });
+          if (!list.length) { show('ยังไม่มีเกรดของปี ' + (Number(ys.value) + 543) + ' ใส่เกรดได้ที่ "ข้อมูลประจำสาขา"', 'err'); return; }
+          add(list); show('เพิ่มสาขาเกรด ' + gr + ' ' + list.length + ' สาขา', 'ok');
+        });
+      }));
+    });
+    quick.appendChild(button('+ ตามเครือ', 'alt', function () {
+      withProfiles(function (r) {
+        var chains = {}; r.profiles.forEach(function (x) { if (x.chain) (chains[x.chain] = chains[x.chain] || []).push(x.branch_code); });
+        var names = Object.keys(chains).sort(), ch = prompt('เครือที่จะเพิ่ม: ' + names.map(function (n) { return n + ' (' + chains[n].length + ')'; }).join(', '), names[0] || '');
+        if (ch === null) return;
+        var key = names.filter(function (n) { return n.toUpperCase() === ch.trim().toUpperCase(); })[0];
+        if (!key) { show('ไม่พบเครือ ' + ch, 'err'); return; }
+        add(chains[key]); show('เพิ่มสาขาเครือ ' + key + ' ' + chains[key].length + ' สาขา', 'ok');
+      });
     }));
+    d.appendChild(quick);
+    var pf = el('details', 'hist'); pf.appendChild(el('summary', '', 'วางรหัสสาขาจาก Excel'));
+    var ta = el('textarea', 'input'); ta.rows = 3; ta.placeholder = 'วางรหัสสาขา คั่นด้วยเว้นวรรค จุลภาค หรือขึ้นบรรทัดใหม่ เช่น IC002 PM017'; ta.setAttribute('aria-label', 'รหัสสาขาที่วาง');
+    pf.appendChild(ta);
+    pf.appendChild(button('เพิ่มสาขาที่วาง', 'alt', function () {
+      var known = {}; units.forEach(function (u) { if (u.is_branch) known[u.code] = true; });
+      var list = ta.value.toUpperCase().split(/[\s,;]+/).filter(Boolean), bad = list.filter(function (c) { return !known[c]; });
+      add(list.filter(function (c) { return known[c]; })); ta.value = bad.join(' ');
+      show(bad.length ? 'เพิ่มแล้ว ยกเว้นรหัสที่ไม่พบ: ' + bad.slice(0, 8).join(', ') : 'เพิ่ม ' + list.length + ' สาขาแล้ว', bad.length ? 'err' : 'ok');
+    }));
+    d.appendChild(pf);
+    var row = el('div', 'row');
     row.appendChild(button('บันทึก', '', function () {
-      var list = codes(), known = {}; units.forEach(function (u) { known[u.code] = true; });
-      var bad = list.filter(function (c) { return !BRANCH_RE.test(c) || (units.length && !known[c]); });
-      if (bad.length) { show('รหัสสาขาไม่ถูกต้อง: ' + bad.slice(0, 8).join(', '), 'err'); return; }
-      if (!code.value.trim() || !name.value.trim()) { show('ใส่รหัสและชื่อแพ็กเกจก่อน', 'err'); return; }
+      var list = picker.getCodes().sort();
+      var miss = emptyOf([[code, 'ใส่รหัสแพ็กเกจ'], [name, 'ใส่ชื่อแพ็กเกจ']]); if (miss.length) { badFields(miss); return; }
       api('cashier_package_save', { code: code.value.trim(), name: name.value.trim(), rate: Number(rate.value) || 0, active: p.active, branches: list })
         .then(function () { show('บันทึกแพ็กเกจ ' + code.value.trim() + ' แล้ว', 'ok'); if (fresh) settings(); }).catch(function (e) { show(e.message, 'err'); });
     }));
@@ -2098,6 +2137,7 @@
     if (c.status === 'pending') chips.appendChild(el('span', 'chip warn', 'รออนุมัติ'));
     else chips.appendChild(el('span', 'chip ' + (st === 'live' ? 'ok' : st === 'cancelled' ? 'err' : ''), { live: 'ใช้งานอยู่', next: 'ยังไม่เริ่ม', ended: 'หมดอายุแล้ว', cancelled: 'ยกเลิกแล้ว' }[st]));
     left.appendChild(chips); head.appendChild(left); head.appendChild(button('ปิด', 'alt', function () { con.sel = null; renderContracts(); })); p.appendChild(head);
+    if (con.backHome && con.backHome.key === r.key) p.insertBefore(button('← กลับไทม์ไลน์ป้ายหน้าร้าน', 'alt back', function () { frontKeep = con.backHome; con.backHome = null; go('home'); }), head);
     agBlock(p, r);
     var dl = el('dl', 'facts one');
     fact(dl, 'ช่วงเวลา', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) + (c._raw ? ' (ตามวันหมดอายุโฆษณา)' : ''));
@@ -3354,12 +3394,14 @@
     });
     cols.appendChild(todo); host.appendChild(cols);
     host.appendChild(cashierTimeline(cashHome));
+    host.appendChild(frontTimeline(signHome, frontHome));
     host.appendChild(cashierDueCard(cashHome));
     host.appendChild(cashierDueCard(signHome, 'สัญญาพื้นที่'));
-    host.appendChild(frontTimeline(signHome, frontHome));
   }
   // Storefront signs month by month for the next 12 months: each cell is how many of the branch's signs are rented in
-  // that month (contracts not cancelled; waiting ones count, as they hold the place). A click names the brands.
+  // that month (contracts not cancelled; waiting ones count, as they hold the place). A click shows the branch's signs
+  // that month on the right; the office opens a contract from there and comes back to the same cell (frontKeep).
+  var frontKeep = null;
   function frontTimeline(list, places) {
     var card = el('section', 'card'), branches = Object.keys(places).sort();
     card.appendChild(el('h2', 'sec', 'ป้ายหน้าร้าน: จุดที่เช่าแล้วรายเดือน (12 เดือน)'));
@@ -3376,32 +3418,65 @@
       (c.slots || []).forEach(function (x) {
         if (x.kind !== 'front') return;
         months.forEach(function (mo, k) {
-          if (c.start_date <= mo.to && c.end_date >= mo.from) { var key = x.branch_code + '|' + k; (held[key] = held[key] || []).push({ brand: c.brand, code: x.code, wait: c.status === 'pending' }); }
+          if (c.start_date <= mo.to && c.end_date >= mo.from) { var key = x.branch_code + '|' + k; (held[key] = held[key] || []).push({ c: c, code: x.code }); }
         });
       });
     });
     var cap = 0, used = 0, openB = 0;
-    branches.forEach(function (b) { var n = (held[b + '|0'] || []).length; cap += places[b]; used += n; if (n < places[b]) openB++; });
-    card.appendChild(el('p', 'sub', 'เดือนนี้เช่าแล้ว ' + used + ' จาก ' + cap + ' จุด · ' + openB + ' สาขายังมีจุดว่าง · กดช่องเพื่อดูแบรนด์'));
-    var about = el('p', 'sub'); about.setAttribute('aria-live', 'polite');
-    var wrap = el('div', 'tlwrap'), tb = el('table', 'fronttl'), th = el('thead'), hr = el('tr'), body = el('tbody'), on = null;
+    branches.forEach(function (b) { var n = (held[b + '|0'] || []).length; cap += places[b].length; used += n; if (n < places[b].length) openB++; });
+    card.appendChild(el('p', 'sub', 'เดือนนี้เช่าแล้ว ' + used + ' จาก ' + cap + ' จุด' + (branches.length > 1 ? ' · ' + openB + ' สาขายังมีจุดว่าง' : '') + ' · กดช่องเพื่อดูป้ายแต่ละจุด'));
+    var lay = el('div', 'frontgrid'), wrap = el('div', 'tlwrap'), tb = el('table', 'fronttl'), th = el('thead'), hr = el('tr'), body = el('tbody');
+    var side = el('aside', 'frontside'); side.setAttribute('aria-live', 'polite');
+    var on = null, cells = {};
+    function pick(b, k) {
+      var bt = cells[b + '|' + k]; if (!bt) return;
+      if (on) on.setAttribute('aria-pressed', 'false'); on = bt; bt.setAttribute('aria-pressed', 'true');
+      var hs = held[b + '|' + k] || [], mo = months[k];
+      side.textContent = '';
+      side.appendChild(el('h3', '', b + ' · ' + mo.label));
+      side.appendChild(el('p', 'sub', 'เช่าแล้ว ' + hs.length + ' จาก ' + places[b].length + ' จุด'));
+      places[b].forEach(function (code) {
+        var box = el('div', 'frontsign'), mine = hs.filter(function (h) { return h.code === code; });
+        box.appendChild(el('b', '', code));
+        if (!mine.length) box.appendChild(el('p', 'sub', 'ว่าง'));
+        mine.forEach(function (h) {
+          var c = h.c, row = el('div', 'frontrent');
+          if (c.thumb_url) { var a = el('a'); a.href = c.thumb_url; a.target = '_blank'; a.rel = 'noopener'; a.setAttribute('aria-label', 'เปิดรูป ' + c.brand); var im = el('img', 'thumb'); im.src = c.thumb_url; im.alt = ''; a.appendChild(im); row.appendChild(a); }
+          var tx = el('div'); tx.appendChild(el('b', '', c.brand));
+          if (c.status === 'pending') tx.appendChild(el('span', 'chip warn', 'รออนุมัติ'));
+          tx.appendChild(el('p', 'sub', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date)));
+          if (c.how_to_place) tx.appendChild(el('p', 'sub', 'วิธีวาง: ' + c.how_to_place));
+          if (!isOffice()) tx.appendChild(button('ดูรายละเอียด', 'alt', function () { frontKeep = { y: window.scrollY, b: b, k: k }; signBranchOpen(c); }));
+          if (isOffice()) tx.appendChild(button('ดูสัญญา', 'alt', function () {
+            frontKeep = { y: window.scrollY, b: b, k: k, key: 's' + c.id };
+            con.sel = 's' + c.id; con.type = 'sign'; con.what = 'all'; con.needle = ''; con.view = c.status === 'pending' ? 'wait' : cashState(c);
+            con.backHome = frontKeep; go('contracts');
+          }));
+          row.appendChild(tx); box.appendChild(row);
+        });
+        side.appendChild(box);
+      });
+    }
     hr.appendChild(el('th', '', 'สาขา')); months.forEach(function (mo) { hr.appendChild(el('th', '', mo.label)); });
     th.appendChild(hr); tb.appendChild(th);
     branches.forEach(function (b) {
       var tr = el('tr'), rh = el('th', '', b); rh.scope = 'row'; tr.appendChild(rh);
       months.forEach(function (mo, k) {
-        var hs = held[b + '|' + k] || [], n = places[b], td = el('td'), bt = el('button', hs.length >= n ? 'full' : hs.length ? 'part' : '', hs.length + '/' + n);
+        var hs = held[b + '|' + k] || [], n = places[b].length, td = el('td'), bt = el('button', hs.length >= n ? 'full' : hs.length ? 'part' : '', hs.length + '/' + n);
         bt.type = 'button'; bt.setAttribute('aria-pressed', 'false'); bt.setAttribute('aria-label', b + ' ' + mo.label + ' เช่าแล้ว ' + hs.length + ' จาก ' + n + ' จุด');
-        bt.onclick = function () {
-          if (on) on.setAttribute('aria-pressed', 'false'); on = bt; bt.setAttribute('aria-pressed', 'true');
-          about.textContent = b + ' · ' + mo.label + ': ' + (hs.length ? hs.map(function (h) { return h.brand + ' (' + h.code + (h.wait ? ', รออนุมัติ' : '') + ')'; }).join(', ') : 'ว่างทุกจุด')
-            + (hs.length < n ? ' · ว่าง ' + (n - hs.length) + ' จุด' : '');
-        };
+        bt.onclick = function () { pick(b, k); }; cells[b + '|' + k] = bt;
         td.appendChild(bt); tr.appendChild(td);
       });
       body.appendChild(tr);
     });
-    tb.appendChild(body); wrap.appendChild(tb); card.appendChild(wrap); card.appendChild(about);
+    tb.appendChild(body); wrap.appendChild(tb); lay.appendChild(wrap); lay.appendChild(side); card.appendChild(lay);
+    // back from a contract: the same cell again; a branch with one row starts on this month
+    var keep = frontKeep; frontKeep = null;
+    if (keep && cells[keep.b + '|' + keep.k]) {
+      pick(keep.b, keep.k);
+      requestAnimationFrame(function () { window.scrollTo(0, keep.y); var c0 = cells[keep.b + '|' + keep.k]; c0.scrollIntoView({ block: 'nearest', inline: 'nearest' }); c0.focus({ preventScroll: true }); });
+    } else if (branches.length === 1) pick(branches[0], 0);
+    else side.appendChild(el('p', 'empty-note', 'กดช่องในตารางเพื่อดูป้ายทั้ง ' + places[branches[0]].length + ' จุดของสาขาในเดือนนั้น'));
     return card;
   }
   // Cashier contracts as timeline rows; a branch only sees its own, and nothing opens for a branch.
@@ -3442,6 +3517,7 @@
     host.appendChild(k);
     host.appendChild(timelineCard(all.filter(function (c) { return c.status === 'approved'; }), branchOpen));
     host.appendChild(cashierTimeline(cashHome));
+    host.appendChild(frontTimeline(signHome, frontHome));
     host.appendChild(cashierDueCard(cashHome));
     host.appendChild(cashierDueCard(signHome, 'สัญญาพื้นที่'));
     var box = el('div'); host.appendChild(box); renderBranchBox(box);
@@ -3465,6 +3541,18 @@
     })).catch(guard(fail));
   }
   function openDetail(id) { setCurrent('media'); detail(id); }
+  // A branch opens a space contract from the storefront timeline: what it already holds (its own places, no money) and the
+  // photos; the way back returns to the same cell of the timeline.
+  function signBranchOpen(c) {
+    loading();
+    api('sign_photos', { id: c.id }).then(guard(function (d) {
+      done(); var v = $('view'); v.textContent = ''; $('bar').hidden = true; window.scrollTo(0, 0);
+      v.appendChild(button('← กลับภาพรวม', 'alt back', showHome));
+      var codes = (c.slots || []).map(function (x) { return x.code; }).join(', ');
+      v.appendChild(card({ brand: c.brand, code: codes, position_types: { name: 'ป้ายหน้าร้าน' }, status: 'approved', start_date: c.start_date, end_date: c.end_date, ad_expiry: c.ad_expiry, how_to_place: c.how_to_place, return_to: c.return_to, _raw: c._raw }));
+      if (d.photos.length) { var ph = el('section', 'card'); ph.appendChild(el('h2', 'sec', 'รูปตัวอย่าง')); ph.appendChild(photoGrid(d.photos)); v.appendChild(ph); }
+    })).catch(guard(fail));
+  }
   // A branch opens a cashier-shelf contract: the list it already holds has everything it may see; only the photos are fetched.
   function cashierBranchOpen(c) {
     if (!c) return;
