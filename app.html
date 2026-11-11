@@ -262,7 +262,7 @@
   .pastebox .row { margin-top: var(--space-2); }
   .agdlg { height: fit-content; max-width: calc(var(--size-pane) * 2); }
   .agdlg > .btn { display: block; width: 100%; margin-top: var(--space-2); text-align: left; }
-  .agdlg .row { margin-top: var(--space-4); }
+  .agdlg .row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
   .conacts { margin: var(--space-2) 0 var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--c-line); }
   .paybox > .boxscroll { margin-top: 0; }
   .fieldbad > .t { color: var(--c-err); font-weight: bold; }
@@ -1848,7 +1848,7 @@
         dlg.appendChild(el('h2', 'sec', brand + ' มีข้อตกลงในช่วงวันนี้อยู่แล้ว'));
         dlg.appendChild(el('p', 'sub', 'ถ้าอยู่ใน TTA ใบเดียวกัน ให้ใส่ในข้อตกลงเดิม มูลค่า การอนุมัติ และงวดเงินจะรวมเป็นก้อนเดียว ข้อตกลงที่อนุมัติแล้วจะต้องอนุมัติใหม่'));
         r.agreements.forEach(function (a) {
-          dlg.appendChild(button('ใส่ในข้อตกลง ' + (a.tta_no || '(ยังไม่มีเลข TTA)') + ' · ' + thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) + (a.status === 'pending' ? ' · รออนุมัติ' : ' · อนุมัติแล้ว'), '', function () { fin(a.id); }));
+          dlg.appendChild(button('ใส่ในข้อตกลง ' + (a.tta_no || '(ยังไม่มีเลข TTA)') + ' · ' + thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) + ' · ' + a.lines + ' สัญญา' + (a.status === 'pending' ? ' · รออนุมัติ' : ' · อนุมัติแล้ว'), '', function () { fin(a.id); }));
         });
         var row = el('div', 'row');
         row.appendChild(button('สร้างข้อตกลงใหม่ (คนละ TTA)', 'alt', function () { fin(null); }));
