@@ -1320,7 +1320,7 @@
   // Space core settings (design v3): shelf fixture types and the default count of quota spaces per branch.
   function spaceSettings(v) {
     var ff = fold('ประเภทชั้นวาง', 'Wall Shelf, EndCap, Gondola และจำนวนชั้นเริ่มต้น', true), fb = ff.body; v.appendChild(ff.node);
-    var qf = fold('จุดโควตาต่อสาขา', 'ชั้นแคชเชียร์และป้ายหน้าร้าน (ค่าเริ่มต้น)', false), qb = qf.body; v.appendChild(qf.node);
+    var qf = fold('จุดโควตาต่อสาขา', 'ชั้นแคชเชียร์ (ค่าเริ่มต้น)', false), qb = qf.body; v.appendChild(qf.node);
     fb.appendChild(el('p', 'hint', 'Section ที่รหัสขึ้นต้นด้วยตัวอักษรในช่อง "รหัสพื้นที่" จะเป็นประเภทนี้เอง (เช่น OA01 คือ OA) เปลี่ยนเป็นประเภทอื่นได้ที่หน้าแก้ไขตำแหน่ง จำนวนชั้นเริ่มต้นใช้กับ Section ที่ยังไม่ได้กำหนดชั้นเอง'));
     var list = el('div'); fb.appendChild(list);
     api('space_settings').then(function (d) {
@@ -1770,10 +1770,10 @@
   }
   // Waiting for approval: the line or its agreement is pending, or the agreement changed since it was approved.
   function isWait(r) { return r.c.status === 'pending' || !!(r.ag && (r.ag.status === 'pending' || r.ag.needs_review)); }
-  // what a space contract rents: 'sign' any header sign, 'shelf' any shelves, 'none' no places yet
+  // what a space contract rents: 'sign' any sign but the storefront ones, 'shelf' any shelves, 'front' storefront signs, 'none' no places yet
   function rentsWhat(c, what) {
     if (what === 'none') return !c.slots.length;
-    return c.slots.some(function (x) { return what === 'sign' ? x.sign : x.whole || !!x.shelf_from; });
+    return c.slots.some(function (x) { return what === 'front' ? x.kind === 'front' : what === 'sign' ? x.sign && x.kind !== 'front' : x.whole || !!x.shelf_from; });
   }
   function conRows() {
     var q = con.needle.trim().toLowerCase();
@@ -1809,7 +1809,7 @@
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.type === t[0])); x.onclick = function () { con.type = t[0]; con.limit = 30; renderContracts(); }; tseg.appendChild(x);
     });
     var wseg = el('div', 'seg'); wseg.setAttribute('role', 'group'); wseg.setAttribute('aria-label', 'กรองตามสิ่งที่เช่า');
-    [['all', 'ทั้งหมด'], ['sign', 'เช่าป้าย'], ['shelf', 'เช่าชั้นวาง'], ['none', 'รอระบุตำแหน่ง']].forEach(function (t) {
+    [['all', 'ทั้งหมด'], ['sign', 'เช่าป้าย'], ['shelf', 'เช่าชั้นวาง'], ['front', 'ป้ายหน้าร้าน'], ['none', 'รอระบุตำแหน่ง']].forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(con.what === t[0])); x.onclick = function () { con.what = t[0]; con.limit = 30; renderContracts(); }; wseg.appendChild(x);
     });
     var pseg = el('div', 'seg'); pseg.setAttribute('role', 'group'); pseg.setAttribute('aria-label', 'กรองตามการรับเงินจากเวนเดอร์');
@@ -2102,7 +2102,7 @@
 
   // ---------- floor plans and places ----------
   var flo = { mode: 'branch', freeOn: '', signLimit: 15, signNeedle: '', signs: [], branch: '', data: null, view: 'active', needle: '', sel: null, pinning: null };
-  var KIND_TH = { header: 'หัวชั้น', glass: 'กระจกหน้าร้าน', temp: 'สื่อชั่วคราว', hang: 'ป้ายแขวน' }, TENANT_TH = { icare: 'iCare', rent: 'เช่า' };
+  var KIND_TH = { header: 'หัวชั้น', glass: 'กระจกหน้าร้าน', temp: 'สื่อชั่วคราว', hang: 'ป้ายแขวน', front: 'ป้ายตั้งหน้าร้าน' }, TENANT_TH = { icare: 'iCare', rent: 'เช่า' };
 
   // Minimal .xlsx reader (an .xlsx is a zip of XML files): enough for "Lock section_<branch>.xlsx".
   function zipEntries(buf) {
@@ -2950,7 +2950,7 @@
   // Bulk edit of a branch's places: export the list, change it in Excel, import it back. Columns are found by their
   // header, so a sheet may carry only the columns to change; a place is matched by its code and new codes are added.
   var SLOT_COLS = [['code', 'รหัส'], ['name', 'ชื่อ'], ['category', 'หมวดสินค้า'], ['kind', 'ชนิด'], ['tenant', 'ผู้ใช้ตำแหน่ง'], ['active', 'ใช้งาน'], ['note', 'หมายเหตุ'], ['fixture_type', 'ประเภทชั้น'], ['shelves', 'จำนวนชั้น'], ['confirmed', 'ยืนยันจำนวนชั้น']];
-  var SLOT_KINDS = { header: 'หัวชั้น', glass: 'กระจก', temp: 'ชั่วคราว', hang: 'ป้ายแขวน' }, SLOT_TENANTS = { icare: 'iCare', rent: 'เช่า' };
+  var SLOT_KINDS = { header: 'หัวชั้น', glass: 'กระจก', temp: 'ชั่วคราว', hang: 'ป้ายแขวน', front: 'ป้ายหน้าร้าน' }, SLOT_TENANTS = { icare: 'iCare', rent: 'เช่า' };
   function exportSlots() {
     var yn = function (b) { return b ? 'Y' : 'N'; };
     saveCsv('ตำแหน่ง_' + flo.branch + '.csv', [SLOT_COLS.map(function (c) { return c[1]; })].concat(flo.data.slots.map(function (s) {
@@ -3019,7 +3019,7 @@
     }
     var code = fld('รหัส (เช่น OA03 หรือ กระจกซ้าย)', s && s.code); if (s) code.readOnly = true;
     var name = fld('ชื่อ/คำอธิบาย', s && s.name), cat = fld('หมวดสินค้า', s && s.category);
-    var kind = sel('ชนิด', [['header', 'หัวชั้น'], ['glass', 'กระจกหน้าร้าน'], ['temp', 'ป้ายสื่อชั่วคราว (ผูกแคมเปญสื่อ)'], ['hang', 'ป้ายแขวน (เช่าขั้นต่ำ 3 เดือน)']], s ? s.kind : 'glass');
+    var kind = sel('ชนิด', [['header', 'หัวชั้น'], ['glass', 'กระจกหน้าร้าน'], ['temp', 'ป้ายสื่อชั่วคราว (ผูกแคมเปญสื่อ)'], ['hang', 'ป้ายแขวน (เช่าขั้นต่ำ 3 เดือน)'], ['front', 'ป้ายตั้งหน้าร้าน']], s ? s.kind : 'glass');
     var tenant = sel('ผู้ใช้ตำแหน่ง', [['icare', 'iCare ติดเอง'], ['rent', 'ให้ซัพพลายเออร์เช่า']], s ? s.tenant : 'icare');
     var note = fld('หมายเหตุ', s && s.note); d.appendChild(g);
     // sign specs of this place: edit one size, add or remove a line
