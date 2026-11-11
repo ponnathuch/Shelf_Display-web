@@ -177,7 +177,12 @@
   .input.mini { width: var(--size-cell); }
   label.f > .btn, .ttanote .chip { margin-top: var(--space-2); }
   .ttanote { display: block; }
-  .planpick { margin-top: var(--space-3); }
+  /* the contract form's "pick on the plan", centred over the page */
+  .plandlg { width: calc(100vw - 2 * var(--space-6)); max-width: var(--max-page-image); max-height: calc(100vh - 2 * var(--space-6)); padding: var(--space-4) var(--space-5);
+    border: 1px solid var(--c-line); border-radius: var(--radius-m); background: var(--c-surface); color: var(--c-ink); overflow: auto; }
+  .plandlg::backdrop { background: var(--c-scrim); opacity: 0.5; }
+  .plandlg .dlghead { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+  .plandlg .dlghead h2 { flex: 1; margin: 0; }
   .planpick .pin.dot { cursor: pointer; } /* a helper button under its field (next number, reuse old number) */
   .missgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--size-cell-wide), 1fr)); gap: var(--space-2); max-height: var(--size-scroll); overflow-y: auto; margin-top: var(--space-3); }
   .missgrid .tile { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--c-line); border-radius: var(--radius-l); background: var(--c-surface); font: inherit; color: inherit; text-align: left; cursor: pointer; }
@@ -2578,9 +2583,19 @@
       var part = x.taken.every(function (h) { return h.shelf_from && !h.whole; });
       return (part ? 'เช่าบางชั้น: ' : 'ไม่ว่าง: ') + x.taken.map(function (h) { var s = takeText(h); return h.brand + (s ? ' ' + s : ''); }).join(', ');
     }
-    var planOpen = {}, planUrl = {};
+    var planUrl = {};
+    // The plan of one branch in a centred dialog; picking a dot updates the form behind it at once.
+    function openPlan(b) {
+      var dlg = el('dialog', 'plandlg'), head = el('div', 'dlghead'), done = button('เสร็จ', '', function () { dlg.close(); });
+      dlg.setAttribute('aria-label', 'เลือกตำแหน่งจากผัง ' + b);
+      head.appendChild(el('h2', 'sec', 'เลือกตำแหน่งจากผัง ' + b + ' ' + nameOf(b))); head.appendChild(done);
+      dlg.appendChild(head); dlg.appendChild(planPick(b));
+      dlg.addEventListener('close', function () { dlg.remove(); });
+      dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); }); // a click on the dimmed page closes it
+      document.body.appendChild(dlg); dlg.showModal(); done.focus();
+    }
     function planPick(b) {
-      var box = el('div', 'planpick');
+      var box = el('div');
       function draw() {
         box.textContent = '';
         if (!planUrl[b]) { box.appendChild(el('p', 'sub', 'สาขานี้ยังไม่มีรูปผัง เลือกจากช่องพิมพ์รหัสแทน')); return; }
@@ -2597,7 +2612,7 @@
           p.onclick = function () {
             if (!sel[x.id] && full) { show(x.code + ' ' + heldText(x), 'err'); return; }
             if (sel[x.id]) delete sel[x.id]; else sel[x.id] = true;
-            paintRows();
+            paintRows(); draw();
           };
           wrap.appendChild(p);
         });
@@ -2653,8 +2668,7 @@
         };
         row.appendChild(add); row.appendChild(dl);
         // pick on the plan: for whoever does not remember the Section codes
-        head.appendChild(button(planOpen[b] ? 'ซ่อนผัง' : 'เลือกจากผัง', 'alt', function () { planOpen[b] = !planOpen[b]; paintRows(); }));
-        if (planOpen[b]) row.appendChild(planPick(b));
+        head.appendChild(button('เลือกจากผัง', 'alt', function () { openPlan(b); }));
         rowsBox.appendChild(row);
       });
     }
