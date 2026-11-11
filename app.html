@@ -1293,8 +1293,11 @@
     var tl = label('ประเภทตำแหน่ง', true), ts = el('select', 'input');
     var tlist = types.slice();
     if (c.position_type_id && !tlist.some(function (t) { return t.id === c.position_type_id; })) tlist.unshift({ id: c.position_type_id, name: ((c.position_types || {}).name || 'ประเภทเดิม') + ' (ปิดใช้แล้ว)' });
+    // no type yet (approved from LINE, or a draft): an empty choice, not the first type shown as if it were set
+    if (!c.position_type_id) { var o0 = el('option', '', 'เลือกประเภทตำแหน่ง...'); o0.value = ''; o0.selected = true; ts.appendChild(o0); }
     tlist.forEach(function (t) { var o = el('option', '', t.name); o.value = t.id; if (c.position_type_id === t.id) o.selected = true; ts.appendChild(o); });
     tl.appendChild(ts); g1.appendChild(tl);
+    if (c.id && !c.position_type_id) setTimeout(function () { badFields([[ts, 'ยังไม่ได้เลือกประเภทตำแหน่ง']]); }, 0);
     field(g1, 'package', 'แพ็กเกจ (A/B)', 'text', c.package);
     field(g1, 'supplier_contact', 'ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c.supplier_contact);
     field(g1, 'registrant_dept', 'แผนกผู้ลงทะเบียน', 'text', c.registrant_dept);
@@ -1423,7 +1426,7 @@
       ev.preventDefault();
       if (!bf.valid()) { show(ERR.bad_branches, 'err'); bf.focus(); return; }
       if (inputs.start_date && inputs.end_date && inputs.start_date.value && inputs.end_date.value && inputs.end_date.value < inputs.start_date.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); inputs.end_date.focus(); return; }
-      var b = { position_type_id: Number(ts.value), how_to_place: how.value, open_ended: oe.checked,
+      var b = { position_type_id: ts.value ? Number(ts.value) : null, how_to_place: how.value, open_ended: oe.checked,
         branches: bf.getCodes(), designated: dz.getCodes() };
       for (var k in inputs) b[k] = inputs[k].value;
       if (rent) b.rent_note = rent.value;
