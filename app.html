@@ -1703,10 +1703,10 @@
             .catch(function (e) { show(e.message, 'err'); pl.value = c.package_id; });
         };
         row.appendChild(pl);
-        row.appendChild(button('แก้ไข', '', function () { cashierForm(c); }));
+        row.appendChild(button('แก้สาขา/แพ็กเกจ', '', function () { cashierForm(c); }));
         row.appendChild(button('แจ้งคลังอีกครั้ง', 'alt', function () { notifyCashier(c); }));
-        row.appendChild(button('ยกเลิกสัญญา', 'danger', function () {
-          if (!confirm('ยกเลิกสัญญา ' + c.brand + ' ?')) return;
+        row.appendChild(button('ยกเลิกเฉพาะสัญญานี้', 'danger', function () {
+          if (!confirm('ยกเลิกเฉพาะสัญญา ' + c.brand + ' นี้ ?\n\nข้อตกลงและสัญญาอื่นในข้อตกลงยังอยู่')) return;
           api('cashier_cancel', { id: c.id }).then(cashier).catch(function (e) { show(e.message, 'err'); });
         }));
         d.appendChild(row);
@@ -2157,7 +2157,7 @@
     var a = r.ag; if (!a) return;
     var box = el('section', 'boxscroll'), live = a.status !== 'cancelled', review = a.status === 'active' && a.needs_review;
     var mine = a.registrant_user === (sess.staff && sess.staff.u), waiting = a.status === 'pending' || review;
-    box.appendChild(el('h3', '', 'ข้อตกลง ' + (a.tta_no || '')));
+    box.appendChild(el('h3', '', (r.kind === 'deal' ? 'ข้อตกลง (TTA) ' : 'ข้อตกลง (TTA) ที่สัญญานี้อยู่ ') + (a.tta_no || '')));
     var dl = el('dl', 'facts one');
     fact(dl, 'เลข TTA', a.tta_no); fact(dl, 'เวนเดอร์', a.vendor); fact(dl, 'ช่วงเวลา', a.start_date ? thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) : '');
     fact(dl, 'มูลค่ารวม', a.total != null ? baht(a.total) + ' บาท' : ''); fact(dl, 'ผู้ลงทะเบียน', a.registrant_name);
@@ -2190,11 +2190,15 @@
         if (!n) { bad({ message: 'พิมพ์ว่ารออะไรอยู่ก่อน' }); return; }
         run('agreement_wait', { id: a.id, note: n }, 'บันทึกแล้ว: ' + n)(bad);
       });
-      if (con.canApprove || mine) act('แก้ไขข้อตกลง', 'alt', function () { agreementForm(a); });
-      if (con.edit.cashier) act('+ เพิ่มชั้นแคชเชียร์ในข้อตกลงนี้', 'alt', function () { formAgreement = a.id; formBack = contracts; cashierForm(null); });
-      if (con.edit.sign) act('+ เพิ่มป้ายในข้อตกลงนี้', 'alt', function () { formAgreement = a.id; openSignFromContracts(null); });
-      if (con.canApprove || (mine && a.status === 'pending')) act('ยกเลิกข้อตกลง', 'danger', function (bad) {
-        if (!confirm('ยกเลิกข้อตกลง ' + (a.tta_no || '') + ' และทุกสัญญาในข้อตกลงนี้ ?')) { bad({ message: '' }); return; }
+      if (con.canApprove || mine) act('แก้ TTA/มูลค่า/รายการอื่น', 'alt', function () { agreementForm(a); });
+      if (con.edit.cashier) act('+ สัญญาแคชเชียร์ในข้อตกลงนี้', 'alt', function () { formAgreement = a.id; formBack = contracts; cashierForm(null); });
+      if (con.edit.sign) act('+ สัญญาพื้นที่ในข้อตกลงนี้', 'alt', function () { formAgreement = a.id; openSignFromContracts(null); });
+      if (con.canApprove || (mine && a.status === 'pending')) act('ยกเลิกทั้งข้อตกลง (ทุกสัญญา)', 'danger', function (bad) {
+        // cancels every line too, and cannot be undone here: the user types the TTA number (or the brand when there is none)
+        var key = String(a.tta_no || a.brand).trim(), live = (a.lines || []).filter(function (x) { return x.status !== 'cancelled'; });
+        var typed = prompt('ยกเลิกทั้งข้อตกลง ' + key + '\n' + '\n' + 'สัญญาในข้อตกลงนี้จะถูกยกเลิกด้วย ' + live.length + ' สัญญา' + (live.length ? ': ' + live.map(function (x) { return CON_KIND[x.kind] + ' ' + (x.sys_no || x.brand); }).join(', ') : '') + '\n' + 'รายการอื่นและงวดเงินจะไม่นับอีก' + '\n' + '\n' + 'พิมพ์ ' + (a.tta_no ? 'เลข TTA' : 'ชื่อแบรนด์') + ' "' + key + '" เพื่อยืนยัน');
+        if (typed === null) { bad({ message: '' }); return; }
+        if (typed.trim().toLowerCase() !== key.toLowerCase()) { alert('พิมพ์ไม่ตรงกับ "' + key + '" จึงยังไม่ยกเลิก'); bad({ message: '' }); return; }
         run('agreement_cancel', { id: a.id }, 'ยกเลิกข้อตกลงแล้ว')(bad);
       });
     }
@@ -2291,11 +2295,11 @@
       var next = r.kind === 'sign' ? con.rows.filter(function (x) { return x.kind === 'sign' && x.c.renewed_from === c.id && x.c.status !== 'cancelled'; })[0] : null;
       if (next) row.appendChild(button('ต่อแล้วเป็น ' + (next.c.sys_no || next.c.brand), 'alt', function () { con.sel = next.key; renderContracts(); }));
       else if (r.kind === 'sign' && (st === 'ended' || (st === 'live' && daysTo(c.end_date) <= 60))) row.appendChild(button('ต่อสัญญา', '', function () { openSignFromContracts(c, true); }));
-      row.appendChild(button('แก้ไข', '', function () { if (r.kind === 'cashier') { formBack = contracts; cashierForm(c); } else openSignFromContracts(c); }));
+      row.appendChild(button(r.kind === 'cashier' ? 'แก้สาขา/แพ็กเกจ' : 'แก้ตำแหน่ง/ค่าเช่า', '', function () { if (r.kind === 'cashier') { formBack = contracts; cashierForm(c); } else openSignFromContracts(c); }));
       if (r.kind === 'cashier' && act) row.appendChild(button('แจ้งคลังอีกครั้ง', 'alt', function () { notifyCashier(c); }));
       if (con.canApprove) row.appendChild(button('ย้ายไปข้อตกลงอื่น', 'alt', function () { moveLine(r); }));
-      row.appendChild(button('ยกเลิกสัญญา', 'danger', function () {
-        if (!confirm('ยกเลิกสัญญา ' + c.brand + ' ?')) return;
+      row.appendChild(button('ยกเลิกเฉพาะสัญญานี้', 'danger', function () {
+        if (!confirm('ยกเลิกเฉพาะสัญญา ' + c.brand + ' นี้ ?\n\nข้อตกลงและสัญญาอื่นในข้อตกลงยังอยู่')) return;
         api(r.kind === 'cashier' ? 'cashier_cancel' : 'sign_cancel', { id: c.id }).then(contracts).catch(function (e) { show(e.message, 'err'); });
       }));
       // the contract's own buttons sit right under its name, above the agreement, so they are found without scrolling
