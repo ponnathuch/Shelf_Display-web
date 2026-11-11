@@ -232,6 +232,9 @@
   label.check input { width: var(--size-icon); height: var(--size-icon); }
   .codes { margin: calc(var(--space-1) * -2) 0 var(--space-3); font-size: var(--fs-s); }
   .codes .bad { color: var(--c-err); font-weight: bold; }
+  /* a field the user must fix: red frame and the reason right under it */
+  .input.invalid { border-color: var(--c-err); box-shadow: 0 0 0 1px var(--c-err); }
+  .fielderr { display: block; margin-top: var(--space-1); color: var(--c-err); font-size: var(--fs-s); font-weight: bold; }
   .codes .good { color: var(--c-ok); }
   .formbar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   .formwrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
@@ -324,6 +327,25 @@
     m.setAttribute('role', kind === 'err' ? 'alert' : 'status');
     if (kind === 'err' && text && m.scrollIntoView) m.scrollIntoView({ block: 'nearest' });
   }
+  // Fields the user must fix, as [input, reason] pairs: each gets a red frame and its reason under it, and the page moves
+  // to the first one instead of to the message bar at the top. The mark goes away when the field is changed.
+  var fieldErrN = 0;
+  function badFields(list) {
+    show('');
+    list.forEach(function (x) {
+      var inp = x[0], host = inp.closest('label') || inp.parentNode, p = host.querySelector('.fielderr');
+      if (!p) { p = el('span', 'fielderr'); p.id = 'fielderr' + (++fieldErrN); host.appendChild(p); }
+      p.textContent = x[1]; inp.classList.add('invalid'); inp.setAttribute('aria-invalid', 'true'); inp.setAttribute('aria-describedby', p.id);
+      var clear = function () {
+        inp.classList.remove('invalid'); inp.removeAttribute('aria-invalid'); inp.removeAttribute('aria-describedby'); p.remove();
+        inp.removeEventListener('input', clear); inp.removeEventListener('change', clear);
+      };
+      inp.addEventListener('input', clear); inp.addEventListener('change', clear);
+    });
+    if (list.length) { list[0][0].scrollIntoView({ block: 'center' }); list[0][0].focus({ preventScroll: true }); }
+  }
+  // the empty ones of [input, reason] pairs
+  function emptyOf(list) { return list.filter(function (x) { return !String(x[0].value).trim(); }); }
   // every page load bumps navSeq; guard(f) runs f only if no newer page load started since
   var navSeq = 0;
   function guard(f) { var seq = navSeq; return function () { if (seq === navSeq) return f.apply(null, arguments); }; }
@@ -1726,8 +1748,8 @@
     var row = el('div', 'row');
     var save = button('บันทึก', '', function () {
       var p = pkgOf(Number(ps.value));
-      if (!brand.value.trim() || !from.value || !to.value) { show('ใส่แบรนด์ วันเริ่ม และวันสิ้นสุดก่อน', 'err'); return; }
-      if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
+      var miss = emptyOf([[brand, 'ใส่แบรนด์'], [from, 'ใส่วันเริ่ม'], [to, 'ใส่วันสิ้นสุด']]); if (miss.length) { badFields(miss); return; }
+      if (to.value < from.value) { badFields([[to, 'วันสิ้นสุดต้องไม่ก่อนวันเริ่ม']]); return; }
       if (p && !p.branches.length) { show('แพ็กเกจนี้ยังไม่มีสาขา ให้ผู้ดูแลเพิ่มสาขาในหน้าตั้งค่าก่อน', 'err'); return; }
       save.disabled = true;
       var b = { brand: brand.value, vendor: vendor.value, package_id: Number(ps.value), start_date: from.value, end_date: to.value, note: note.value, house: house.checked, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value, supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, branches: bpick ? bpick.getCodes() : [], notify: notify.checked };
@@ -1958,8 +1980,8 @@
     var note = fld('หมายเหตุ', 'textarea', a.note); note.rows = 2; d.appendChild(note.parentNode);
     var row = el('div', 'row');
     var save = button('บันทึก', '', function () {
-      if (!tta.value.trim() || !from.value || !to.value) { show('ใส่เลข TTA วันเริ่ม และวันสิ้นสุดก่อน', 'err'); return; }
-      if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
+      var miss = emptyOf([[tta, 'ใส่เลข TTA'], [from, 'ใส่วันเริ่ม'], [to, 'ใส่วันสิ้นสุด']]); if (miss.length) { badFields(miss); return; }
+      if (to.value < from.value) { badFields([[to, 'วันสิ้นสุดต้องไม่ก่อนวันเริ่ม']]); return; }
       save.disabled = true;
       api('agreement_save', { id: a.id, tta_no: tta.value, vendor: vendor.value, vendor_no: vendorNo(), brand: brand.value, start_date: from.value, end_date: to.value, total: total.value === '' ? null : Number(total.value), designated: dz.getCodes(), note: note.value })
         .then(function (r) { afterNote = r.tta_dup ? ['บันทึกข้อตกลงแล้ว แต่เลข TTA นี้ซ้ำกับข้อตกลงอื่น ตรวจเลขอีกครั้ง', 'err'] : ['บันทึกข้อตกลงแล้ว', 'ok']; contracts(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
@@ -2845,7 +2867,7 @@
     // default rent from the yearly price table, for the places whose shelves are chosen
     var quote = el('div', 'linker'); quote.appendChild(button('คิดค่าเช่าตามตารางราคา', 'alt', function () {
       var ids = Object.keys(sel).filter(function (id) { return info[id] && chosenB.indexOf(info[id].branch_code) >= 0 && takes[id]; });
-      if (!from.value) { show('ใส่วันเริ่มก่อน ราคาใช้ตารางของปีที่เริ่มสัญญา', 'err'); return; }
+      if (!from.value) { badFields([[from, 'ใส่วันเริ่มก่อน ราคาใช้ตารางของปีที่เริ่มสัญญา']]); return; }
       if (!ids.length) { show('เลือกชั้นที่เช่า (ชั้นบน N ชั้น หรือทั้งตู้) ของตำแหน่งก่อน', 'err'); return; }
       api('shelf_quote', { start_date: from.value, items: ids.map(function (id) { var o = takeBody(id); o.slot_id = Number(id); return o; }) }).then(function (r) {
         var none = [];
@@ -2864,8 +2886,8 @@
     var row = el('div', 'row');
     var save = button('บันทึก', '', function () {
       var slots = Object.keys(sel).filter(function (id) { return info[id] && chosenB.indexOf(info[id].branch_code) >= 0; }).map(function (id) { var o = takeBody(id); o.slot_id = Number(id); o.rent = rents[id] == null ? null : rents[id]; return o; });
-      if (!brand.value.trim() || !from.value || !to.value) { show('ใส่แบรนด์ วันเริ่ม และวันสิ้นสุดก่อน', 'err'); return; }
-      if (to.value < from.value) { show('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'err'); return; }
+      var miss = emptyOf([[brand, 'ใส่แบรนด์'], [from, 'ใส่วันเริ่ม'], [to, 'ใส่วันสิ้นสุด']]); if (miss.length) { badFields(miss); return; }
+      if (to.value < from.value) { badFields([[to, 'วันสิ้นสุดต้องไม่ก่อนวันเริ่ม']]); return; }
       var empty = slots.filter(function (s) { return !s.sign && !s.whole && !s.shelf_from; }).map(function (s) { return info[s.slot_id].branch_code + ' ' + info[s.slot_id].code; });
       if (empty.length) { show('เลือกป้ายหรือชั้นที่เช่าของ ' + empty.slice(0, 8).join(', '), 'err'); return; }
       if (!slots.length && !confirm('ยังไม่ได้เลือกตำแหน่ง\n\nบันทึกเป็น "รอระบุตำแหน่ง" ได้ ข้อตกลงจะยังอนุมัติไม่ได้จนกว่าจะกลับมาเลือกตำแหน่ง\n\nบันทึกต่อไหม?')) return;
