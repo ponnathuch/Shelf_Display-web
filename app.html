@@ -252,6 +252,8 @@
   .fronttl button.part { background: var(--c-brand-soft); }
   .fronttl button.full { background: var(--c-err-soft); color: var(--c-err); font-weight: bold; }
   .fronttl button[aria-pressed=true] { border-color: var(--c-brand); box-shadow: 0 0 0 1px var(--c-brand); }
+  .pastebox textarea.input { display: block; width: 100%; min-height: var(--size-thumb); resize: vertical; margin-top: var(--space-2); }
+  .pastebox .row { margin-top: var(--space-2); }
   .fieldbad > .t { color: var(--c-err); font-weight: bold; }
   .fielderr { display: block; margin-top: var(--space-1); color: var(--c-err); font-size: var(--fs-s); font-weight: bold; }
   .codes .good { color: var(--c-ok); }
@@ -1595,10 +1597,11 @@
       });
     }));
     d.appendChild(quick);
-    var pf = el('details', 'hist'); pf.appendChild(el('summary', '', 'วางรหัสสาขาจาก Excel'));
+    var pf = el('details', 'hist pastebox'); pf.appendChild(el('summary', '', 'วางรหัสสาขาจาก Excel'));
     var ta = el('textarea', 'input'); ta.rows = 3; ta.placeholder = 'วางรหัสสาขา คั่นด้วยเว้นวรรค จุลภาค หรือขึ้นบรรทัดใหม่ เช่น IC002 PM017'; ta.setAttribute('aria-label', 'รหัสสาขาที่วาง');
     pf.appendChild(ta);
-    pf.appendChild(button('เพิ่มสาขาที่วาง', 'alt', function () {
+    var pr = el('div', 'row'); pf.appendChild(pr);
+    pr.appendChild(button('เพิ่มสาขาที่วาง', 'alt', function () {
       var known = {}; units.forEach(function (u) { if (u.is_branch) known[u.code] = true; });
       var list = ta.value.toUpperCase().split(/[\s,;]+/).filter(Boolean), bad = list.filter(function (c) { return !known[c]; });
       add(list.filter(function (c) { return known[c]; })); ta.value = bad.join(' ');
@@ -2942,13 +2945,21 @@
       var empty = slots.filter(function (s) { return !s.sign && !s.whole && !s.shelf_from; }).map(function (s) { return info[s.slot_id].branch_code + ' ' + info[s.slot_id].code; });
       if (empty.length) { show('เลือกป้ายหรือชั้นที่เช่าของ ' + empty.slice(0, 8).join(', '), 'err'); return; }
       if (!slots.length && !confirm('ยังไม่ได้เลือกตำแหน่ง\n\nบันทึกเป็น "รอระบุตำแหน่ง" ได้ ข้อตกลงจะยังอนุมัติไม่ได้จนกว่าจะกลับมาเลือกตำแหน่ง\n\nบันทึกต่อไหม?')) return;
+      // rate-card rules of the shelves (shortest rental, branch sizes not sold, off sale): shown to confirm, not a block
+      var shelfSlots = slots.filter(function (s) { return s.whole || s.shelf_from; });
       save.disabled = true;
-      var b = { brand: brand.value, vendor: vendor.value, start_date: from.value, end_date: to.value, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value,
-        supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, note: note.value, slots: slots, wanted_branches: chosenB };
-      if (savedId) b.id = savedId; else if (renew) b.renewed_from = c.id;
-      if (!savedId && agId) b.agreement_id = agId;
-      api('sign_save', b).then(function (r) { savedId = r.id; flo.signsReq = null; return pm.flush(r.id); }).then(function () { var msg = edit || agId ? 'บันทึกแล้ว' : 'บันทึกแล้ว รออนุมัติข้อตกลงก่อนจึงจะแจ้งคลังและแสดงให้สาขาเห็น'; if (formBack) { afterNote = [msg, 'ok']; formBack(); } else { show(msg, 'ok'); loadFloor(holder); } })
-        .catch(function (e) { save.disabled = false; show(e.code === 'slot_taken' ? 'ตำแหน่งเหล่านี้มีสัญญาอื่นอยู่ในช่วงวันที่ชนกัน: ' + e.data.slots.join(', ') + ' (เอาออกหรือเปลี่ยนวันที่)' : e.message, 'err'); });
+      (shelfSlots.length ? api('take_rules', { start_date: from.value, end_date: to.value, items: shelfSlots }).catch(function () { return { problems: [] }; }) : Promise.resolve({ problems: [] })).then(function (rr) {
+        var why = rr.problems.map(function (x) {
+          return x.branch + ' ' + x.code + ' (' + x.type + '): ' + (x.rule === 'min_months' ? 'เช่าขั้นต่ำ ' + x.months + ' เดือน' : x.rule === 'size' ? 'ไม่ขายในสาขาขนาด ' + x.size : 'ปิดขายในตารางราคาปี ' + (rr.year + 543));
+        });
+        if (why.length && !confirm('ไม่ตรงเงื่อนไขในตารางราคา\n\n' + why.slice(0, 12).join('\n') + (why.length > 12 ? '\nและอีก ' + (why.length - 12) + ' รายการ' : '') + '\n\nบันทึกต่อไหม')) { save.disabled = false; return; }
+        var b = { brand: brand.value, vendor: vendor.value, start_date: from.value, end_date: to.value, agreement_no: agr.value, ad_no: adn.value, ad_expiry: adx.value,
+          supplier_contact: sup.value, how_to_place: how.value, return_to: ret.value, note: note.value, slots: slots, wanted_branches: chosenB };
+        if (savedId) b.id = savedId; else if (renew) b.renewed_from = c.id;
+        if (!savedId && agId) b.agreement_id = agId;
+        api('sign_save', b).then(function (r) { savedId = r.id; flo.signsReq = null; return pm.flush(r.id); }).then(function () { var msg = edit || agId ? 'บันทึกแล้ว' : 'บันทึกแล้ว รออนุมัติข้อตกลงก่อนจึงจะแจ้งคลังและแสดงให้สาขาเห็น'; if (formBack) { afterNote = [msg, 'ok']; formBack(); } else { show(msg, 'ok'); loadFloor(holder); } })
+          .catch(function (e) { save.disabled = false; show(e.code === 'slot_taken' ? 'ตำแหน่งเหล่านี้มีสัญญาอื่นอยู่ในช่วงวันที่ชนกัน: ' + e.data.slots.join(', ') + ' (เอาออกหรือเปลี่ยนวันที่)' : e.message, 'err'); });
+      });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', function () { if (formBack) formBack(); else renderFloor(holder); })); d.appendChild(row);
     holder.textContent = ''; holder.appendChild(d);
