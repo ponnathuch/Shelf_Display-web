@@ -319,6 +319,14 @@
   .dtable tfoot th, .dtable tfoot td { position: sticky; bottom: 0; background: var(--c-surface-2); }
   .invfilters { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
   .invfilters label.f { min-width: 0; }
+  .invfilters label.f, .invfilters .fgrp { margin-bottom: 0; }
+  .invfilters .fgrp { font-size: var(--fs-s); color: var(--c-ink-2); }
+  .invfilters .fgrp > span.t { display: block; margin-bottom: var(--space-1); }
+  .invfilters .fgrp .seg { padding: var(--space-0) var(--space-1); }
+  .invfilters label.chk { display: flex; align-items: center; gap: var(--space-2); min-height: calc(var(--size-target-lg) + var(--space-1)); color: var(--c-ink); }
+  .invfilters .invrow { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; justify-content: space-between; }
+  .invfilters .invrow > .btn { min-height: calc(var(--size-target-lg) + var(--space-1)); }
+  .invfilters > .btn { min-height: calc(var(--size-target-lg) + var(--space-1)); }
   .fronttl button.full { background: var(--c-err-soft); color: var(--c-err); font-weight: bold; }
   .fronttl button[aria-pressed=true] { border-color: var(--c-brand); box-shadow: 0 0 0 1px var(--c-brand); }
   .pastebox textarea.input { display: block; width: 100%; min-height: var(--size-thumb); resize: vertical; margin-top: var(--space-2); }
@@ -1989,8 +1997,9 @@
       var x = el('button', '', c.label); x.type = 'button'; x.setAttribute('aria-pressed', String(!inv.off[c.key]));
       x.onclick = function () { inv.off[c.key] = !inv.off[c.key]; invPaint(body, tb); }; kseg.appendChild(x);
     });
-    tb.appendChild(kseg);
-    var xb = button('ส่งออกรายการว่าง (CSV)', 'alt', function () { invExport(rowsNow(), shown); }); xb.classList.add('invx'); tb.appendChild(xb);
+    // second row: which kinds to show (a long group) and the export at its end
+    var row2 = el('div', 'invrow invx'), kg = invGroup('ชนิดพื้นที่ที่แสดง (กดเพื่อซ่อนหรือแสดงคอลัมน์)', kseg); row2.appendChild(kg);
+    row2.appendChild(button('ส่งออกรายการว่าง (CSV)', 'alt', function () { invExport(rowsNow(), shown); })); tb.appendChild(row2);
     var shown = cols.filter(function (c) { return !inv.off[c.key]; });
     function rowsNow() {
       var n = inv.q.trim().toUpperCase();
@@ -2055,7 +2064,7 @@
           fb.onclick = function () {
             inv.keep = { b: b.code, c: c.key, y: window.scrollY };
             flo.branch = b.code; flo.sel = p.id; flo.view = p.kind === 'glass' ? 'glass' : p.kind === 'hang' ? 'hang' : 'active';
-            flo.backTo = { label: 'กลับไปพื้นที่ว่าง', fn: function () { go('inventory'); } }; go('floor');
+            flo.backTo = { label: 'กลับไปพื้นที่ว่าง', fn: function () { go('inventory'); } }; window.scrollTo(0, 0); go('floor');
           };
           t4.appendChild(fb); [t1, t2, t3, t4].forEach(function (td) { tr.appendChild(td); }); sb.appendChild(tr);
         });
@@ -2089,15 +2098,16 @@
     draw();
   }
   // Brand view (design v3 P18): one brand's live agreements, places and cashier lines; ended ones on request.
+  // a captioned group in a filter bar (button groups have no label element), lined up with the inputs
+  function invGroup(text, node) { var g = el('div', 'fgrp'); g.appendChild(el('span', 't', text)); g.appendChild(node); return g; }
   function invColOf(p) { return p.type || (p.kind === 'header' ? 'ป้ายหัวชั้น' : INV_KIND[p.kind] || p.kind); }
   function invBrand(v) {
     var bar = el('div', 'card invfilters'), l = el('label', 'f'), inp = el('input', 'input search'), dl = el('datalist');
     dl.id = 'inv-brands'; inp.type = 'search'; inp.setAttribute('list', 'inv-brands'); inp.value = inv.brand; inp.placeholder = 'พิมพ์ชื่อแบรนด์ เช่น Mega';
     l.appendChild(el('span', 't', 'แบรนด์')); l.appendChild(inp); l.appendChild(dl); bar.appendChild(l);
-    var el2 = el('label', 'f'), ck = el('input'); ck.type = 'checkbox'; ck.checked = inv.ended;
+    var el2 = el('label', 'f chk'), ck = el('input'); ck.type = 'checkbox'; ck.checked = inv.ended;
     el2.appendChild(ck); el2.appendChild(document.createTextNode(' รวมที่หมดแล้ว')); bar.appendChild(el2);
-    var mx = button('ส่งออก สาขา × แบรนด์ (CSV)', 'alt', invMatrix); mx.title = 'นับจุดที่เช่าของทุกแบรนด์ในช่วงวันเดียวกับแท็บ ว่าง'; bar.appendChild(mx);
-    bar.appendChild(el('p', 'hint', 'ไฟล์ สาขา × แบรนด์ ใช้ช่วงวันเดียวกับแท็บ ว่าง' + (inv.from ? ' (' + thDate(inv.from) + ' ถึง ' + thDate(inv.to) + ')' : ' (ค่าเริ่มต้นทั้งปีหน้า)')));
+    // the branch x brand file now lives on its own tab (แบรนด์ × สาขา), with its own export
     var body = el('div'); v.appendChild(bar); v.appendChild(body);
     function fill() { dl.textContent = ''; (inv.brands || []).forEach(function (b) { var o = el('option'); o.value = b; dl.appendChild(o); }); }
     if (inv.brands) fill(); else api('brand_view').then(function (r) { inv.brands = r.brands; fill(); }).catch(function () { /* typing still works */ });
@@ -2110,7 +2120,8 @@
     }
     function openLine(key, c) {
       con.sel = key; con.type = 'all'; con.what = 'all'; con.pay = 'all'; con.team = 'all'; con.needle = ''; con.view = c.status === 'pending' ? 'wait' : cashState(c);
-      con.backHome = { key: key, label: 'กลับไปภาพรวมแบรนด์ ' + inv.brand, fn: function () { inv.tab = 'brand'; go('inventory'); } }; go('contracts');
+      var y = window.scrollY; window.scrollTo(0, 0); // the TTA page opens at its top, where the way back is
+      con.backHome = { key: key, label: 'กลับไปภาพรวมแบรนด์ ' + inv.brand, fn: function () { inv.tab = 'brand'; inv.brandY = y; go('inventory'); } }; go('contracts');
     }
     function draw() {
       body.textContent = '';
@@ -2224,25 +2235,10 @@
       }
     }
     if (!inv.brand) body.appendChild(el('p', 'empty-note', 'พิมพ์ชื่อแบรนด์เพื่อดู TTA ตำแหน่ง และยอดรับเงินทั้งหมดของแบรนด์'));
-    else if (inv.bd && inv.bd.brand.toLowerCase() === inv.brand.toLowerCase()) draw(); else load();
-    inp.focus();
-  }
-  // Branch x brand counts of rented places for the Availability period (sheet "brand by store 2026" of the old file)
-  function invMatrix() {
-    var go2 = function (d) {
-      var m = {}, brands = {}, bs = {};
-      d.places.forEach(function (p) { p.taken.forEach(function (h) { var b = String(h.brand || '').trim(); if (!b) return; var k = p.branch_code + '|' + b.toLowerCase(); if (!m[k]) { m[k] = {}; } m[k][p.id] = true; brands[b.toLowerCase()] = brands[b.toLowerCase()] || b; bs[p.branch_code] = true; }); });
-      var names = Object.keys(brands).sort(), out = [['สาขา', 'ชื่อสาขา'].concat(names.map(function (k) { return brands[k]; })).concat(['รวม'])];
-      d.branches.filter(function (b) { return bs[b.code]; }).forEach(function (b) {
-        var row = [b.code, b.name || ''], sum = 0;
-        names.forEach(function (k) { var n = Object.keys(m[b.code + '|' + k] || {}).length; sum += n; row.push(n || ''); });
-        out.push(row.concat([sum]));
-      });
-      if (out.length === 1) { show('ไม่มีจุดที่เช่าในช่วง ' + thDate(d.start_date) + ' ถึง ' + thDate(d.end_date), 'err'); return; }
-      saveCsv('สาขาxแบรนด์_' + d.start_date + '_' + d.end_date + '.csv', out);
-    };
-    if (inv.data) { go2(inv.data); return; }
-    api('avail', {}).then(function (d) { inv.data = d; d.byBranch = {}; d.places.forEach(function (p) { (d.byBranch[p.branch_code] = d.byBranch[p.branch_code] || []).push(p); }); inv.from = d.start_date; inv.to = d.end_date; go2(d); }).catch(function (e) { show(e.message, 'err'); });
+    else if (inv.bd && inv.bd.brand.toLowerCase() === inv.brand.toLowerCase()) {
+      draw(); var y = inv.brandY; inv.brandY = 0; if (y) { setTimeout(function () { window.scrollTo(0, y); }, 0); return; } // back where the TTA was opened
+    } else load();
+    if (!inv.brand) inp.focus(); // focusing the box would jump the page to the top
   }
   // ---------- Inventory > TTA overview (sheet "Display by supplier TTA") and brand x branch (sheet "brand by store") ----------
   // One load for both: agreements running in the period with what they hold. Team (Med/Nonmed) and a search narrow both.
@@ -2296,7 +2292,7 @@
     var bar = el('div', 'card invfilters');
     function dateF(text, val) { var l = el('label', 'f'), i = el('input', 'input'); i.type = 'date'; i.value = val; l.appendChild(el('span', 't', text)); l.appendChild(i); bar.appendChild(l); return i; }
     var from = dateF('ช่วงตั้งแต่', inv.sfrom), to = dateF('ถึง', inv.sto);
-    var tseg = el('div', 'seg'); tseg.setAttribute('role', 'group'); tseg.setAttribute('aria-label', 'ฝ่าย Med/Nonmed'); bar.appendChild(tseg);
+    var tseg = el('div', 'seg'); tseg.setAttribute('role', 'group'); tseg.setAttribute('aria-label', 'ฝ่าย Med/Nonmed'); bar.appendChild(invGroup('ฝ่าย', tseg));
     var ql = el('label', 'f'), q = el('input', 'input search'); q.type = 'search'; q.value = inv.sq; q.placeholder = 'แบรนด์ เวนเดอร์ หรือเลข TTA';
     ql.appendChild(el('span', 't', 'ค้นหา')); ql.appendChild(q); bar.appendChild(ql);
     var xb = button('ส่งออก (CSV)', 'alt', function () { exportNow(); }); bar.appendChild(xb);
@@ -2317,7 +2313,7 @@
         return (!inv.team || (a.purchase || 'none') === inv.team) && (!n || [a.brand, a.vendor, a.tta_no, a.vendor_no].join(' ').toLowerCase().indexOf(n) >= 0);
       });
     }
-    function toBrand(name) { var back = inv.tab; inv.tab = 'brand'; inv.brand = name; inv.back = { label: 'กลับไป' + (back === 'board' ? 'TTA ภาพรวม' : 'แบรนด์ × สาขา'), fn: function () { inv.tab = back; go('inventory'); } }; inventory(); }
+    function toBrand(name) { window.scrollTo(0, 0); var back = inv.tab; inv.tab = 'brand'; inv.brand = name; inv.back = { label: 'กลับไป' + (back === 'board' ? 'TTA ภาพรวม' : 'แบรนด์ × สาขา'), fn: function () { inv.tab = back; go('inventory'); } }; inventory(); }
     function paint() {
       tseg.textContent = '';
       [['', 'ทุกฝ่าย'], ['med', 'Med'], ['nonmed', 'Nonmed'], ['none', 'ยังไม่ระบุ']].forEach(function (x) {
@@ -2553,6 +2549,8 @@
   }
   function renderContracts() {
     restoreScroll(); var v = $('view'); v.textContent = '';
+    // came from another page (brand view): the way back sits at the top of the page too, not only on the panel
+    if (con.backHome && con.backHome.fn) { var bh0 = con.backHome, bt0 = button('← ' + bh0.label, 'alt', function () { con.backHome = null; bh0.fn(); }); bt0.classList.add('backbtn'); v.appendChild(bt0); }
     var live = con.rows.filter(function (r) { return cashState(r.c) === 'live' && r.c.status !== 'pending'; }), soon = live.filter(function (r) { return daysTo(r.c.end_date) <= 30; });
     var waitN = con.ags.filter(function (a) { return a.status === 'pending' || (a.status === 'active' && a.needs_review); }).length;
     var income = live.reduce(function (n, r) { return n + (r.pay === 'none' ? 0 : r.rent || 0); }, 0), brands = {}; live.forEach(function (r) { brands[String(r.c.brand).toLowerCase()] = true; });
@@ -2916,7 +2914,7 @@
     if (!r) { p.appendChild(el('p', 'empty-note', 'กดรายการเช่าในรายการเพื่อดูรายละเอียดตรงนี้')); return; }
     var c = r.c, head = el('div', 'card-head'), left = el('div'); left.appendChild(el('h3', '', c.brand));
     var bl = el('button', 'linkbtn', 'ภาพรวมแบรนด์ ' + c.brand + ' →'); bl.type = 'button';
-    bl.onclick = function () { var key = r.key; inv.tab = 'brand'; inv.brand = c.brand; inv.back = { label: 'กลับไปรายการเช่า', fn: function () { con.sel = key; go('contracts'); } }; go('inventory'); };
+    bl.onclick = function () { var key = r.key; window.scrollTo(0, 0); inv.tab = 'brand'; inv.brand = c.brand; inv.back = { label: 'กลับไปรายการเช่า', fn: function () { con.sel = key; go('contracts'); } }; go('inventory'); };
     left.appendChild(bl);
     var chips = el('div', 'chips'); chips.appendChild(el('span', 'chip', CON_KIND[r.kind])); if (c.house) chips.appendChild(el('span', 'chip', 'House Brand'));
     var st = cashState(c);
