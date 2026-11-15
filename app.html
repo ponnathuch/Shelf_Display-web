@@ -290,6 +290,15 @@
   .dtable .num { text-align: right; }
   .dtable .muted { color: var(--c-ink-2); }
   /* every rental line block lines its columns up with the others */
+  .needbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: var(--space-3) 0; }
+  .slotwrap { overflow-x: auto; }
+  .row > .grow { flex: 1; }
+  .slottbl td, .slottbl th { vertical-align: middle; }
+  .slottbl .wrapcell { white-space: normal; min-width: calc(var(--size-cell) * 2); }
+  .slottbl .wrapcell small { display: block; }
+  .slottbl .wrapcell .chip { margin: 0 var(--space-1) var(--space-1) 0; }
+  .slottbl .acts { text-align: right; }
+  .slottbl .acts .btn + .btn { margin-left: var(--space-2); }
   .dtable.places { table-layout: fixed; min-width: calc(var(--size-tile) * 6); }
   .dtable.places td, .dtable.places th { white-space: normal; overflow-wrap: anywhere; }
   .dtable.places th:nth-child(1) { width: 9%; } .dtable.places th:nth-child(2) { width: 25%; } .dtable.places th:nth-child(3) { width: 7%; }
@@ -4445,6 +4454,17 @@
     row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', function () { if (formBack) formBack(); else renderFloor(holder); })); d.appendChild(row);
     holder.textContent = ''; holder.appendChild(d);
   }
+  // What a place still lacks: a confirmed shelf count, a pin on the plan (when the branch has a plan), a sign size.
+  var NEED_TH = { shelf: 'ยืนยันชั้น', pin: 'ปักหมุด', size: 'ขนาดป้าย' };
+  function slotNeeds(s, hasPlan) {
+    if (!s.active) return [];
+    var n = [];
+    if (s.fixture && !s.fixture.confirmed) n.push('shelf');
+    if (hasPlan && (s.x == null || s.y == null)) n.push('pin');
+    if (!(s.specs || []).some(function (x) { return (x.width_cm != null && x.height_cm != null) || x.size_text; })) n.push('size');
+    return n;
+  }
+  function needOk(s, need, hasPlan) { var n = slotNeeds(s, hasPlan); return !need || (need === 'done' ? s.active && !n.length : n.indexOf(need) >= 0); }
   function slotsCard(holder) {
     var d = flo.data, card = el('section', 'card'), all = d.slots;
     card.appendChild(el('h2', 'sec', 'ตำแหน่งป้าย (' + all.length + ')'));
@@ -4466,32 +4486,46 @@
       list.textContent = '';
       var cur = views.filter(function (t) { return t[0] === flo.view; })[0][2], q = flo.needle.trim().toLowerCase();
       var rows = all.filter(cur).filter(function (s) { return !q || (s.code + ' ' + (s.category || '') + ' ' + (s.name || '')).toLowerCase().indexOf(q) >= 0; });
-      if (!rows.length) list.appendChild(el('p', 'empty-note', 'ไม่มีตำแหน่งในกลุ่มนี้'));
+      // what is still missing, as filters with counts (user 2026-11-16: see at a glance which shelf lacks what)
+      var hasPlan = !!(d.layout && d.layout.image_url), base = all.filter(cur), need = flo.need || '';
+      var nb = el('div', 'needbar'), nseg = el('div', 'seg'); nseg.setAttribute('role', 'group'); nseg.setAttribute('aria-label', 'กรองตามข้อมูลที่ยังขาด');
+      nb.appendChild(el('span', 'sub', 'ข้อมูลที่ยังขาด'));
+      [['', 'ทั้งหมด'], ['shelf', 'ยืนยันจำนวนชั้น'], ['pin', 'ยังไม่ปักหมุด'], ['size', 'ไม่มีขนาดป้าย'], ['done', 'ครบแล้ว']].forEach(function (f) {
+        if (f[0] === 'pin' && !hasPlan) return;
+        var n = base.filter(function (s) { return needOk(s, f[0], hasPlan); }).length;
+        if (f[0] && f[0] !== 'done' && !n) return;
+        var x = el('button', '', f[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(need === f[0]));
+        x.appendChild(el('span', 'n', String(n))); x.onclick = function () { flo.need = f[0]; paint(); }; nseg.appendChild(x);
+      });
+      nb.appendChild(nseg); list.appendChild(nb);
+      rows = rows.filter(function (s) { return needOk(s, need, hasPlan); });
+      if (!rows.length) { list.appendChild(el('p', 'empty-note', 'ไม่มีตำแหน่งในกลุ่มนี้')); return; }
+      var wrap = el('div', 'slotwrap'), tb = el('table', 'dtable slottbl'), thr = el('tr'), tbd = el('tbody');
+      ['รหัส', 'หมวด / ป้าย', 'ชั้นวาง', 'เช่าอยู่', 'ยังขาด', ''].forEach(function (h) { var x = el('th', '', h); x.scope = 'col'; thr.appendChild(x); });
+      var th0 = el('thead'); th0.appendChild(thr); tb.appendChild(th0); tb.appendChild(tbd); wrap.appendChild(tb); list.appendChild(wrap);
       rows.forEach(function (s) {
-        var r = el('div', 'trow'); r.appendChild(el('b', 'slot-code', s.code));
+        var r = el('tr'), c0 = el('th', '', s.code); c0.scope = 'row'; r.appendChild(c0);
         var sp = (s.specs || []).map(function (x) { var z = (x.width_cm != null && x.height_cm != null ? x.width_cm + ' x ' + x.height_cm + ' cm' : x.size_text || '') + (x.qty != null && x.qty !== 1 ? ' x' + x.qty : ''); return z ? (x.sign_type ? x.sign_type + ' ' : '') + z : ''; }).filter(Boolean);
-        r.appendChild(el('span', 'sub grow', [s.name, s.category, s.note, sp.length ? 'ขนาด ' + sp.slice(0, 3).join(', ') + (sp.length > 3 ? ' +' + (sp.length - 3) : '') : ''].filter(Boolean).join(' · ')));
-        r.appendChild(el('span', 'chip', KIND_TH[s.kind] || s.kind)); if (s.kind === 'glass' || s.tenant === 'rent') r.appendChild(el('span', 'chip', TENANT_TH[s.tenant]));
-        if (s.fixture) {
-          r.appendChild(el('span', 'chip', invName(s.fixture.type_name) + ' · ' + shelfText(s.fixture.shelves)));
-          if (!s.fixture.confirmed) r.appendChild(el('span', 'chip warn', 'ยังไม่ยืนยันจำนวนชั้น'));
+        var c1 = el('td', 'wrapcell'); c1.appendChild(el('div', '', [s.category, s.name].filter(Boolean).join(' · ') || '-'));
+        // the kind is the same for every row of a tab, so it shows only where kinds mix
+        var sub = [flo.view === 'free' ? KIND_TH[s.kind] || s.kind : '', s.kind === 'glass' || s.tenant === 'rent' ? TENANT_TH[s.tenant] : '',
+          sp.length ? sp.slice(0, 2).join(', ') + (sp.length > 2 ? ' +' + (sp.length - 2) : '') : '', s.note || ''].filter(Boolean).join(' · ');
+        if (sub) c1.appendChild(el('small', 'sub', sub)); r.appendChild(c1);
+        r.appendChild(el('td', '', s.fixture ? invName(s.fixture.type_name) + ' · ' + shelfText(s.fixture.shelves) : '-'));
+        var rentNow = signNow(s), c3 = el('td'); c3.appendChild(rentNow ? el('span', 'chip', rentNow.brand) : el('span', 'muted', 'ว่าง')); r.appendChild(c3);
+        var c4 = el('td', 'wrapcell'), ns = slotNeeds(s, hasPlan);
+        if (!s.active) c4.appendChild(el('span', 'muted', 'เลิกใช้'));
+        else if (!ns.length) c4.appendChild(el('span', 'chip ok', 'ครบ'));
+        else ns.forEach(function (k) { c4.appendChild(el('span', 'chip warn', NEED_TH[k])); });
+        r.appendChild(c4);
+        var c5 = el('td', 'acts'), placed = s.x != null && s.y != null;
+        if (s.active && hasPlan) {
+          if (d.can_edit && !placed) c5.appendChild(button('ปักหมุด', 'alt', function () { flo.pinning = s.id; flo.sel = null; renderFloor(holder); window.scrollTo(0, 0); }));
+          else if (placed) c5.appendChild(button('ดูบนผัง', 'alt', function () { flo.sel = s.id; renderFloor(holder); window.scrollTo(0, 0); }));
         }
-        var placed = s.x != null && s.y != null, rentNow = signNow(s);
-        if (s.specs && s.specs.length) r.appendChild(el('span', 'chip', s.specs.length + ' รายการป้าย'));
-        if (rentNow) r.appendChild(el('span', 'chip warn', 'เช่า: ' + rentNow.brand));
-        if (placed && s.active) r.appendChild(button('ดูบนผัง', 'alt', function () { flo.sel = s.id; renderFloor(holder); window.scrollTo(0, 0); }));
-        else if (s.active && d.layout && d.layout.image_url) r.appendChild(el('span', 'sub', 'ยังไม่ปักหมุด'));
-        if (d.can_edit && s.active && d.layout && d.layout.image_url) {
-          r.appendChild(button(placed ? 'ย้ายหมุด' : 'ปักหมุด', 'alt', function () { flo.pinning = s.id; flo.sel = null; renderFloor(holder); window.scrollTo(0, 0); }));
-        }
-        if (d.can_edit) {
-          r.appendChild(button('แก้ไข', 'alt', function () { slotForm(holder, s); }));
-          r.appendChild(button('ลบ', 'danger', function () {
-            if (!confirm('ลบตำแหน่ง ' + s.code + ' ?')) return;
-            api('slot_delete', { id: s.id }).then(function () { loadFloor(holder); }).catch(function (e) { show(e.message, 'err'); });
-          }));
-        }
-        list.appendChild(r);
+        if (d.can_edit) c5.appendChild(button('แก้ไข', 'alt', function () { slotForm(holder, s); }));
+        r.appendChild(c5);
+        tbd.appendChild(r);
       });
     }
     sb.oninput = function () { flo.needle = sb.value; paint(); }; paint();
@@ -4619,7 +4653,15 @@
         .then(function () { return shelf && shelf.dirty() ? api('slot_shelves_save', shelf.body()) : null; })
         .then(function () { show('บันทึกตำแหน่งแล้ว', 'ok'); loadFloor(holder); }).catch(function (e) { show(e.message, 'err'); });
     }));
-    row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
+    row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); }));
+    if (s) {
+      row.appendChild(el('span', 'grow'));
+      row.appendChild(button('ลบตำแหน่งนี้', 'danger', function () {
+        if (!confirm('ลบตำแหน่ง ' + s.code + ' ?')) return;
+        api('slot_delete', { id: s.id }).then(function () { loadFloor(holder); }).catch(function (e) { show(e.message, 'err'); });
+      }));
+    }
+    d.appendChild(row);
     holder.textContent = ''; holder.appendChild(d);
   }
   // "4 ชั้น" or "3 ชั้น (ชั้น 1 แบ่ง 2 ช่อง)": how a shelf Section is sold.
