@@ -2060,7 +2060,7 @@
     tok.forEach(function (x) { on[idx[x]] = true; });
     return on;
   }
-  // Booked days per branch over the limits (A4): training 1 company a day, booths and PC 2. -> { 'IC001|2026-06-09': true }
+  // Booked days per branch over the limits (A4): training 1 company a day, booths and PC 2. -> { 'IC001|2026-06-09': [company ids] }
   function evOver(events) {
     var per = {}, over = {};
     events.forEach(function (e) {
@@ -2070,7 +2070,7 @@
         (per[k] = per[k] || {})[e.company_id] = true;
       }
     });
-    Object.keys(per).forEach(function (k) { var n = Object.keys(per[k]).length, p = k.split('|'); if (n > (p[2] === 't' ? 1 : 2)) over[p[0] + '|' + p[1]] = true; });
+    Object.keys(per).forEach(function (k) { var n = Object.keys(per[k]).length, p = k.split('|'); if (n > (p[2] === 't' ? 1 : 2)) over[p[0] + '|' + p[1]] = (over[p[0] + '|' + p[1]] || []).concat(Object.keys(per[k]).map(Number)); });
     return over;
   }
 
@@ -2132,7 +2132,8 @@
       var kp = el('div', 'kpi'), noop = function () {};
       kp.appendChild(kpiCard('นัดทั้งปี', booked.length, (evs.year + 543) + '', '', noop));
       kp.appendChild(kpiCard('นัดที่ยังไม่ถึง', booked.filter(function (e) { return e.end_date >= now; }).length, 'นับจากวันนี้', 'ok', noop));
-      kp.appendChild(kpiCard('วันที่เกินกฎ', Object.keys(over).length, 'สาขา × วัน', Object.keys(over).length ? 'warn' : '', noop));
+      var nOver = Object.keys(over).length;
+      kp.appendChild(kpiCard('วันที่เกินกฎ', nOver, nOver ? 'สาขา × วัน · กดเพื่อดูรายการ' : 'สาขา × วัน', nOver ? 'warn' : '', nOver ? function () { evs.sel = 'over'; paint(); } : noop));
       body.appendChild(kp);
       if (!rows.length || !comps.length) { body.appendChild(el('p', 'empty-note', !comps.length ? 'ยังไม่มีบริษัทในตารางนี้ เพิ่มได้ที่ "รายชื่อบริษัท"' : 'ไม่พบสาขาตามคำค้น')); return; }
       var lay = el('div', 'frontgrid evgrid'), wrap = el('div', 'tlwrap'), tbl = el('table', 'fronttl invtl evtl'), th = el('thead'), hr = el('tr'), tbody = el('tbody');
@@ -2165,10 +2166,35 @@
         tbody.appendChild(tr);
       });
       wrap.appendChild(tbl); lay.appendChild(wrap); lay.appendChild(side); body.appendChild(lay);
-      if (evs.sel) evPane(side, evs.sel.branch, comps.filter(function (c) { return c.id === evs.sel.company; })[0] || d.all_companies.filter(function (c) { return c.id === evs.sel.company; })[0], prof[evs.sel.branch], load);
+      if (evs.sel === 'over') evOverList(side, over, d, paint);
+      else if (evs.sel) evPane(side, evs.sel.branch, comps.filter(function (c) { return c.id === evs.sel.company; })[0] || d.all_companies.filter(function (c) { return c.id === evs.sel.company; })[0], prof[evs.sel.branch], load);
       else side.appendChild(el('p', 'empty-note', 'กดช่องในตารางเพื่อดูนัดของสาขากับบริษัทนั้น และลงนัดใหม่'));
     }
     if (evs.data && evs.data.grid === grid && evs.data.from === evs.year + '-01-01') paint(); else load();
+  }
+
+  // The over-limit days of the grid (the red cells): branch, day and the companies booked; a row opens that cell on that day.
+  function evOverList(side, over, d, repaint) {
+    side.textContent = '';
+    var names = {}; d.all_companies.forEach(function (c) { names[c.id] = c.name; });
+    var keys = Object.keys(over).sort(function (a, b) { var x = a.split('|'), y = b.split('|'); return x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : x[0] < y[0] ? -1 : 1; });
+    var now = today(), soon = keys.filter(function (k) { return k.split('|')[1] >= now; }), past = keys.filter(function (k) { return k.split('|')[1] < now; });
+    side.appendChild(el('h3', '', 'วันที่เกินกฎ ' + keys.length + ' รายการ'));
+    side.appendChild(el('p', 'sub', d.grid === 'training' ? 'สาขามีเทรนนิ่งเกิน 1 บริษัทในวันเดียว' : 'สาขามีบูธและ PC เกิน 2 บริษัทในวันเดียว'));
+    function group(title, list) {
+      if (!list.length) return;
+      side.appendChild(el('b', '', title + ' · ' + list.length));
+      var ul = el('ul', 'evlist');
+      list.forEach(function (k) {
+        var p = k.split('|'), ids = over[k].filter(function (id, i, a) { return a.indexOf(id) === i; }), li = el('li');
+        var b = el('button', 'linkbtn', p[0] + ' · ' + TH_DAY[new Date(p[1] + 'T00:00:00Z').getUTCDay()] + ' ' + evShort(p[1])); b.type = 'button';
+        b.onclick = function () { evs.sel = { branch: p[0], company: ids[0] }; evs.month = p[1]; evs.jump = true; repaint(); };
+        li.appendChild(b); li.appendChild(el('small', '', ids.map(function (id) { return names[id] || '?'; }).join(', ')));
+        ul.appendChild(li);
+      });
+      side.appendChild(ul);
+    }
+    group('ยังไม่ถึง', soon); group('ผ่านไปแล้ว', past);
   }
 
   // Side pane of one branch x company: the branch's convenient times, the bookings, a month calendar, and the booking form.
@@ -2187,7 +2213,7 @@
       li.appendChild(el('span', 'when', evWhen(e)));
       var w = el('span', 'what'); w.appendChild(evChip(e.kind)); if (e.note) w.appendChild(el('small', '', e.note)); li.appendChild(w);
       if (e.status === 'cancelled') li.appendChild(el('span', 'chip err', 'ยกเลิก'));
-      else {
+      else if (d.can_edit) {
         li.appendChild(button('แก้', 'alt', function () { form(e); }));
         li.appendChild(button('ยกเลิก', 'alt', function () {
           if (!confirm('ยกเลิกนัด ' + comp.name + ' ' + evWhen(e) + ' ที่ ' + branch + ' ?')) return;
@@ -2226,7 +2252,9 @@
       cal.appendChild(g);
       cal.appendChild(el('p', 'hint', 'สีเขียว = วันที่สาขาสะดวก · กรอบสี = มีนัดแล้ว · สีแดง = เกินกฎ'));
     }
-    var add = el('div', 'row'); add.appendChild(button('+ ลงนัดใหม่', '', function () { form(null); })); side.insertBefore(add, formBox);
+    if (d.can_edit) { var add = el('div', 'row'); add.appendChild(button('+ ลงนัดใหม่', '', function () { form(null); })); side.insertBefore(add, formBox); }
+    else side.insertBefore(el('p', 'hint', 'ดูได้อย่างเดียว ขอสิทธิ์แก้ไขกิจกรรมในร้านได้จากผู้ดูแลระบบ'), formBox);
+    if (evs.jump) { evs.jump = false; drawCal(evs.month.slice(0, 7)); return; }
     drawCal((mine.filter(function (e) { return e.status === 'booked' && e.end_date >= today(); })[0] || {}).start_date ? mine.filter(function (e) { return e.status === 'booked' && e.end_date >= today(); })[0].start_date.slice(0, 7) : today().slice(0, 7));
   }
 
@@ -2311,7 +2339,7 @@
       var rq = function (g) { return api('ev_grid', { grid: g, from: evs.year + '-01-01', to: evs.year + '-12-31' }); };
       Promise.all([rq('training'), rq('booth'), navLists()]).then(guard(function (r) {
         var prof = {}; r[0].profiles.forEach(function (p) { prof[p.branch_code] = p; });
-        data = { companies: r[0].all_companies, events: r[0].events.concat(r[1].events), profiles: prof, vendors: (r[2] && r[2].vendors) || [] };
+        data = { companies: r[0].all_companies, events: r[0].events.concat(r[1].events), profiles: prof, vendors: (r[2] && r[2].vendors) || [], canEdit: r[0].can_edit };
         var old = document.getElementById('ev-comps'); if (old) old.remove();
         var dl = el('datalist'); dl.id = 'ev-comps'; data.companies.forEach(function (c) { var op = el('option'); op.value = c.name; dl.appendChild(op); }); f.appendChild(dl);
         paint();
@@ -2340,7 +2368,7 @@
         evForm(formBox, { company: c, branch: e ? e.branch_code : null, event: e, kinds: e ? (e.kind === 'training' ? ['training'] : ['booth', 'pc']) : kinds, profiles: data.profiles, onSaved: load });
         formBox.scrollIntoView({ block: 'nearest' });
       };
-      var ar = el('div', 'row'); ar.appendChild(button('+ ลงนัดให้ ' + c.name, '', function () { open(null); })); head.appendChild(ar); head.appendChild(formBox);
+      if (data.canEdit) { var ar = el('div', 'row'); ar.appendChild(button('+ ลงนัดให้ ' + c.name, '', function () { open(null); })); head.appendChild(ar); head.appendChild(formBox); }
       var from = evs.year + '-01-01', to = evs.year + '-12-31';
       [['training', 'เทรนนิ่ง (Small Group Training)'], ['booth', 'ออกบูธ และ PC']].forEach(function (g) {
         var list = mine.filter(function (e) { return g[0] === 'training' ? e.kind === 'training' : e.kind !== 'training'; });
@@ -2362,7 +2390,7 @@
             bb.type = 'button'; bb.style.left = sp.left + '%'; bb.style.width = sp.width + '%';
             bb.title = bc + ' ' + EV_KIND[e.kind] + ' ' + evWhen(e) + (e.status === 'cancelled' ? ' (ยกเลิก)' : '') + (e.note ? ' · ' + e.note : '');
             bb.setAttribute('aria-label', bb.title);
-            if (e.status !== 'cancelled') bb.onclick = function () { open(e); };
+            if (e.status !== 'cancelled' && data.canEdit) bb.onclick = function () { open(e); };
             track.appendChild(bb);
           });
           td.appendChild(track); tr.appendChild(td); tb.appendChild(tr);
@@ -2395,11 +2423,12 @@
       api('ev_summary', { from: from.value, to: to.value }).then(guard(function (d) {
         data = d;
         info.textContent = d.bookings + ' นัด · เปลี่ยนจากรอบก่อน ' + d.changes + ' รายการ · ' + (d.last_sent ? 'ส่งครั้งล่าสุด ' + thDate(bkk(d.last_sent).slice(0, 10)) + ' ' + bkk(d.last_sent).slice(11, 16) + ' น. โดย ' + (d.last_by || '-') : 'ยังไม่เคยส่ง');
+        sendBtn.hidden = !d.can_edit;
         frame.srcdoc = '<!doctype html><meta charset="utf-8"><body style="margin:0">' + d.html.replace(/\{\{JT_URL\}\}/g, '#') + '</body>';
       })).catch(function (e) { info.textContent = ''; show(e.message, 'err'); });
     }
     from.onchange = to.onchange = load;
-    row.appendChild(button('ส่งอีเมลถึงสาขา', '', function () {
+    var sendBtn = row.appendChild(button('ส่งอีเมลถึงสาขา', '', function () {
       if (!data) return;
       if (!confirm('ส่งอีเมลสรุป ' + data.subject + ' (' + data.bookings + ' นัด) ถึงอีเมลกลุ่มสาขา?')) return;
       api('ev_send', { from: from.value, to: to.value }).then(function (r) { show('ส่งอีเมลแล้ว' + (r.to ? ' ถึง ' + r.to : ''), 'ok'); load(); })
@@ -2453,6 +2482,7 @@
       var dys = fld('วันที่สะดวก', p.days, 'จ./ศ.'), tms = fld('เวลาที่สะดวก', p.times, '14:00 - 16:00'), stf = fld('จำนวนพนักงาน', p.staff, '8 (อิสลาม 2)');
       if (p.updated_by) pc.appendChild(el('p', 'sub', (p.updated_by === 'import-xlsx' ? 'นำเข้าจากไฟล์ Excel ของการตลาด' : 'แก้ล่าสุดโดย ' + p.updated_by) + ' ' + thDate(bkk(p.updated_at).slice(0, 10))));
       var row = el('div', 'row'); pc.appendChild(row);
+      if (!d.can_edit_profile) { [dys, tms, stf].forEach(function (x) { x.disabled = true; }); return; }
       row.appendChild(button('บันทึกข้อมูลสาขา', '', function () {
         api('ev_profile_save', { branch: branch, days: dys.value, times: tms.value, staff: stf.value }).then(function () { show('บันทึกข้อมูลสาขาแล้ว', 'ok'); evBranch(holder, branch); }).catch(function (x) { show(x.message, 'err'); });
       }));
@@ -2478,6 +2508,7 @@
         var vn = el('input', 'input evvendor'); vn.type = 'search'; vn.placeholder = 'ค้นเวนเดอร์ (เลขหรือชื่อ)'; vn.setAttribute('list', 'ev-vendors'); vn.autocomplete = 'off';
         vn.value = c && c.vendor_no ? c.vendor_no + (vname[c.vendor_no] ? ' · ' + vname[c.vendor_no] : '') : ''; vn.setAttribute('aria-label', 'เวนเดอร์'); r.appendChild(vn);
         var on = chk('ใช้งาน', c ? c.active !== false : true);
+        if (!d.can_edit) { [name, tr, bo, vn, on].forEach(function (x) { x.disabled = true; }); return r; }
         r.appendChild(button(c ? 'บันทึก' : 'เพิ่ม', c ? 'alt' : '', function () {
           if (!name.value.trim()) { badFields([[name, 'ใส่ชื่อบริษัท']]); return; }
           var kinds = []; if (tr.checked) kinds.push('training'); if (bo.checked) kinds.push('booth');
@@ -2490,7 +2521,7 @@
         }));
         return r;
       }
-      body.appendChild(row(null));
+      if (d.can_edit) body.appendChild(row(null)); else body.appendChild(el('p', 'hint', 'ดูได้อย่างเดียว ขอสิทธิ์แก้ไขกิจกรรมในร้านได้จากผู้ดูแลระบบ'));
       d.all_companies.forEach(function (c) { body.appendChild(row(c)); });
     })).catch(function (e) { body.textContent = ''; show(e.message, 'err'); });
   }
@@ -4582,7 +4613,7 @@
     var v = $('view'); v.textContent = '';
     var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'หมวดการตั้งค่า');
     // media settings for media approvers, cashier/floor settings for contract approvers
-    var tabs = [['media', 'สื่อ', isApprover()], ['cashier', 'ชั้นแคชเชียร์', isContract()], ['floor', 'ผังร้าน', isContract()]].filter(function (t) { return t[2]; });
+    var tabs = [['media', 'สื่อ', isApprover()], ['cashier', 'ชั้นแคชเชียร์', isContract()], ['floor', 'ผังร้าน', isContract()], ['events', 'กิจกรรมในร้าน', isContract()]].filter(function (t) { return t[2]; });
     if (!tabs.some(function (t) { return t[0] === setTab; })) setTab = tabs[0][0];
     tabs.forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(setTab === t[0]));
@@ -4590,6 +4621,7 @@
     });
     var tb = el('div', 'toolbar'); tb.appendChild(seg); v.appendChild(tb);
     if (setTab === 'cashier') { cashierSettings(v); return; }
+    if (setTab === 'events') { editorsFold(v, 'สิทธิ์แก้ไขกิจกรรมในร้าน', 'ใครลงนัด แก้ ยกเลิก และส่งอีเมลสรุปได้', 'ev_editors', 'ev_editors_save', 'ผู้ดูแลและผู้อนุมัติ TTA แก้ได้เสมอ คนอื่นที่เลือกไว้ที่นี่ลงนัด เลื่อน ยกเลิกนัด แก้รายชื่อบริษัท แก้ข้อมูลสาขา และกดส่งอีเมลสรุปถึงสาขาได้ คนที่ไม่ได้เลือกดูตารางได้อย่างเดียว สาขายังแก้ข้อมูลของสาขาตัวเองได้เหมือนเดิม'); return; }
     if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและรายการเช่าพื้นที่', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการรายการเช่าพื้นที่ได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติ TTA จัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกรายการเช่าพื้นที่ได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); spaceSettings(v); branchProfiles(v); priceTable(v); return; }
     var fd = fold('ประเภทตำแหน่งสื่อ', 'เพดานต่อสาขา เพิ่มประเภทใหม่ได้', true), card = fd.body; v.appendChild(fd.node); card.classList.add('tset');
     card.appendChild(el('p', 'hint', 'เพดาน = จำนวนสื่อสูงสุดต่อสาขาในช่วงวันที่ชนกัน เว้นว่าง = ไม่จำกัด ประเภทที่ปิดการใช้งานจะไม่ให้เลือกตอนลงทะเบียน แต่แคมเปญเดิมยังอยู่'));
