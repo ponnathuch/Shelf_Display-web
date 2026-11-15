@@ -358,6 +358,10 @@
   .evtl thead th:first-child { z-index: 4; }
   .evtl thead th.comp .linkbtn { min-width: 0; min-height: var(--size-target); padding: 0; border: 0; background: transparent; font: inherit; font-weight: bold; color: var(--c-brand-strong); white-space: normal; text-align: center; }
   .evtimeline { width: 100%; }
+  .evcolist { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--size-cell) * 3), 1fr)); gap: var(--space-2); }
+  .evcolist > details[open] { grid-column: 1 / -1; }
+  .evwarn { color: var(--c-err); }
+  .evcolist > details > summary .chip { margin-left: var(--space-1); }
   .evtimeline td { min-width: calc(var(--size-cell) * 6); width: 100%; }
   .evtimeline .tltrack { height: calc(var(--size-target) * 0.8); }
   .evbar { min-width: var(--space-2); padding: 0; border: 0; cursor: pointer; }
@@ -2091,10 +2095,10 @@
       inp.type = 'text'; inp.setAttribute('list', 'ev-branches'); inp.placeholder = 'พิมพ์รหัสหรือชื่อสาขา เช่น PM017'; inp.setAttribute('aria-label', 'เลือกสาขา'); inp.value = evs.branch;
       units.filter(function (u) { return u.is_branch; }).forEach(function (u) { var o = el('option'); o.value = u.code; o.label = u.name; dl.appendChild(o); });
       tb.appendChild(inp); tb.appendChild(dl); v.appendChild(tb);
-      var holder = el('div'); v.appendChild(holder);
-      var go2 = function () { var c = inp.value.trim().toUpperCase(); if (BRANCH_RE.test(c)) { evs.branch = c; evBranch(holder, c); } };
+      var yh = el('div'), holder = el('div'); v.appendChild(yh); v.appendChild(holder);
+      var go2 = function () { var c = inp.value.trim().toUpperCase(); if (BRANCH_RE.test(c)) { evs.branch = c; evBranchYear(yh, c); evBranch(holder, c); } };
       inp.onchange = go2; inp.onkeydown = function (e) { if (e.key === 'Enter') go2(); };
-      if (evs.branch) evBranch(holder, evs.branch); else holder.appendChild(el('p', 'empty-note', 'เลือกสาขาเพื่อดูกิจกรรมในร้านและข้อมูลสาขา'));
+      if (evs.branch) { evBranchYear(yh, evs.branch); evBranch(holder, evs.branch); } else holder.appendChild(el('p', 'empty-note', 'เลือกสาขาเพื่อดูกิจกรรมในร้านและข้อมูลสาขา'));
       return;
     }
     evGrid(v);
@@ -2258,15 +2262,83 @@
     drawCal((mine.filter(function (e) { return e.status === 'booked' && e.end_date >= today(); })[0] || {}).start_date ? mine.filter(function (e) { return e.status === 'booked' && e.end_date >= today(); })[0].start_date.slice(0, 7) : today().slice(0, 7));
   }
 
+  // A year of bookings as bars, one row per key (branch on the company page, company on the branch page).
+  // onOpen(e) opens a booking for editing; null = look only.
+  function evTimeline(sec, list, head, keyOf, labelOf, from, to, onOpen) {
+    var now = today(), tw = el('div', 'tlwrap'), tbl = el('table', 'fronttl evtimeline'), th = el('thead'), hr = el('tr'), tb = el('tbody');
+    var h0 = el('th', 'lbl', head); h0.scope = 'col'; hr.appendChild(h0);
+    var hm2 = el('th'), months = el('div', 'tlmonths'); months.style.setProperty('--n', 12);
+    TH_M.forEach(function (m) { months.appendChild(el('span', '', m)); }); hm2.appendChild(months); hr.appendChild(hm2); th.appendChild(hr); tbl.appendChild(th); tbl.appendChild(tb);
+    var by = {}; list.forEach(function (e) { var k = keyOf(e); (by[k] = by[k] || []).push(e); });
+    Object.keys(by).sort(function (a, b) { return by[a][0].start_date < by[b][0].start_date ? -1 : 1; }).forEach(function (k) {
+      var label = labelOf(k), tr = el('tr'), rh = el('th', '', label); rh.scope = 'row'; tr.appendChild(rh);
+      var td = el('td'), track = el('div', 'tltrack');
+      var nowSp = boardSpan(from, to, now, now); if (nowSp) { var nl = el('span', 'tlnow'); nl.style.left = nowSp.left + '%'; track.appendChild(nl); }
+      by[k].forEach(function (e) {
+        var sp = boardSpan(from, to, e.start_date, e.end_date); if (!sp) return;
+        var bb = el('button', 'tlbar evbar ' + e.kind + (e.status === 'cancelled' ? ' off' : e.end_date < now ? ' past' : ''));
+        bb.type = 'button'; bb.style.left = sp.left + '%'; bb.style.width = sp.width + '%';
+        bb.title = label + ' ' + EV_KIND[e.kind] + ' ' + evWhen(e) + (e.status === 'cancelled' ? ' (ยกเลิก)' : '') + (e.note ? ' · ' + e.note : '');
+        bb.setAttribute('aria-label', bb.title);
+        if (e.status !== 'cancelled' && onOpen) bb.onclick = function () { onOpen(e); };
+        track.appendChild(bb);
+      });
+      td.appendChild(track); tr.appendChild(td); tb.appendChild(tr);
+    });
+    tw.appendChild(tbl); sec.appendChild(tw);
+  }
+
+  // One branch over a year (user 2026-11-15): which companies came, training and booths apart, one row per company; book from here.
+  function evBranchYear(holder, branch) {
+    holder.textContent = ''; holder.appendChild(el('p', 'sub', 'กำลังโหลด...'));
+    var from = evs.year + '-01-01', to = evs.year + '-12-31';
+    var rq = function (g) { return api('ev_grid', { grid: g, from: from, to: to }); };
+    Promise.all([rq('training'), rq('booth')]).then(guard(function (r) {
+      holder.textContent = '';
+      var comps = r[0].all_companies, byId = {}; comps.forEach(function (c) { byId[c.id] = c; });
+      var profiles = {}; r[0].profiles.forEach(function (p) { if (p.branch_code === branch) profiles[branch] = p; });
+      var mine = r[0].events.concat(r[1].events).filter(function (e) { return e.branch_code === branch; });
+      var head = el('section', 'card brandhead'); holder.appendChild(head);
+      var hr = el('div', 'row');
+      hr.appendChild(button('‹', 'alt', function () { evs.year -= 1; evBranchYear(holder, branch); }));
+      hr.appendChild(el('h2', 'sec', 'ไทม์ไลน์ปี ' + (evs.year + 543) + ' · ' + branch));
+      hr.appendChild(button('›', 'alt', function () { evs.year += 1; evBranchYear(holder, branch); }));
+      head.appendChild(hr);
+      var live = mine.filter(function (e) { return e.status === 'booked'; });
+      head.appendChild(el('p', 'sub', 'เทรนนิ่ง ' + live.filter(function (e) { return e.kind === 'training'; }).length + ' นัด · ออกบูธ ' + live.filter(function (e) { return e.kind === 'booth'; }).length + ' · PC ' + live.filter(function (e) { return e.kind === 'pc'; }).length));
+      var formBox = el('div'), reload = function () { evBranchYear(holder, branch); };
+      var open = function (e) {
+        evForm(formBox, { company: e ? byId[e.company_id] : null, companies: comps, branch: branch, event: e,
+          kinds: e ? (e.kind === 'training' ? ['training'] : ['booth', 'pc']) : ['training', 'booth', 'pc'], profiles: profiles, onSaved: reload });
+        formBox.scrollIntoView({ block: 'nearest' });
+      };
+      if (r[0].can_edit) { var ar = el('div', 'row'); ar.appendChild(button('+ ลงนัดให้สาขา ' + branch, '', function () { open(null); })); head.appendChild(ar); }
+      head.appendChild(formBox);
+      [['training', 'เทรนนิ่ง (Small Group Training)'], ['booth', 'ออกบูธ และ PC']].forEach(function (g) {
+        var list = mine.filter(function (e) { return g[0] === 'training' ? e.kind === 'training' : e.kind !== 'training'; });
+        var sec = el('section', 'card'); holder.appendChild(sec);
+        sec.appendChild(el('h3', '', g[1] + ' · ' + list.filter(function (e) { return e.status === 'booked'; }).length + ' นัด'));
+        if (!list.length) { sec.appendChild(el('p', 'empty-note', 'ไม่มีนัดในปีนี้')); return; }
+        evTimeline(sec, list, 'บริษัท', function (e) { return e.company_id; }, function (k) { return (byId[k] || {}).name || '?'; }, from, to, r[0].can_edit ? open : null);
+      });
+    })).catch(function (e) { holder.textContent = ''; show(e.message, 'err'); });
+  }
+
   // Booking form, shared by the grid pane and the company page. opts: company, kinds (allowed), event (edit) or null,
   // branch (fixed) or null (a branch picker, from the company page), profiles (branch -> profile), onDate(iso), onSaved().
   function evForm(box, o) {
     box.textContent = '';
     var e = o.event, card = el('div', 'card'); box.appendChild(card);
-    card.appendChild(el('h3', '', (e ? 'แก้นัด ' : 'ลงนัดใหม่ ') + o.company.name + (o.branch ? ' · ' + o.branch : '')));
+    card.appendChild(el('h3', '', (e ? 'แก้นัด ' : 'ลงนัดใหม่ ') + (o.company ? o.company.name : '') + (o.branch ? (o.company ? ' · ' : '') + o.branch : '')));
     var fm = el('div', 'evform'); card.appendChild(fm);
     function fld(text, type, val, wide) { var l = el('label', 'f' + (wide ? ' wide' : '')), i = el('input', 'input'); i.type = type; i.value = val || ''; l.appendChild(el('span', 't', text)); l.appendChild(i); fm.appendChild(l); return i; }
-    var br = null, hint = el('p', 'hint');
+    var br = null, hint = el('p', 'hint'), cIn = null, picked = o.company;
+    if (!o.company) {
+      cIn = fld('บริษัท', 'search', ''); cIn.placeholder = 'พิมพ์ชื่อบริษัท'; cIn.setAttribute('list', 'ev-form-comps'); cIn.autocomplete = 'off';
+      var cdl = el('datalist'); cdl.id = 'ev-form-comps';
+      o.companies.filter(function (c) { return c.active !== false; }).forEach(function (c) { var op = el('option'); op.value = c.name; cdl.appendChild(op); });
+      fm.appendChild(cdl);
+    }
     if (!o.branch) {
       br = fld('สาขา', 'text', ''); br.placeholder = 'รหัสหรือชื่อสาขา เช่น PM017'; br.setAttribute('list', 'ev-form-branches'); br.autocomplete = 'off';
       var dl = el('datalist'); dl.id = 'ev-form-branches';
@@ -2284,6 +2356,13 @@
       kind.value = e ? e.kind : o.kinds[0]; kl.appendChild(kind); fm.appendChild(kl);
     }
     var k0 = function () { return kind ? kind.value : o.kinds[0]; };
+    // the picked company decides the kinds: training only when it is in the training grid, booth and PC when in the booth grid
+    if (cIn) cIn.onchange = function () {
+      picked = o.companies.filter(function (c) { return c.name === cIn.value.trim(); })[0] || null;
+      if (!picked || !kind) return;
+      var ok = (picked.kinds.indexOf('training') >= 0 ? ['training'] : []).concat(picked.kinds.indexOf('booth') >= 0 ? ['booth', 'pc'] : []);
+      kind.textContent = ''; ok.forEach(function (k) { var x = el('option', '', EV_KIND[k]); x.value = k; kind.appendChild(x); }); byKind();
+    };
     var start = fld('วันที่ (วันเริ่ม)', 'date', e ? e.start_date : '');
     var endL = el('label', 'f'), end = el('input', 'input'); end.type = 'date'; end.value = e ? e.end_date : ''; endL.appendChild(el('span', 't', 'วันสุดท้าย')); endL.appendChild(end); fm.appendChild(endL);
     var t1 = fld('เวลาเริ่ม', 'time', e ? hm(e.start_time) : ''), t2 = fld('เวลาจบ', 'time', e ? hm(e.end_time) : '');
@@ -2300,6 +2379,7 @@
     var row = el('div', 'row'); card.appendChild(row);
     row.appendChild(button(e ? 'บันทึกการแก้ไข' : 'ลงนัด', '', function () {
       var bad = [], tr = k0() === 'training', b0 = o.branch || (br && br.value.trim().toUpperCase());
+      if (cIn && !picked) bad.push([cIn, 'เลือกบริษัทจากรายการ']);
       if (br && !BRANCH_RE.test(b0 || '')) bad.push([br, 'เลือกสาขา (รหัส เช่น PM017)']);
       if (!start.value) bad.push([start, 'เลือกวันที่']);
       if (!tr && end.value && end.value < start.value) bad.push([end, 'วันสุดท้ายต้องไม่ก่อนวันเริ่ม']);
@@ -2307,7 +2387,7 @@
       if (tr && !t2.value) bad.push([t2, 'เทรนนิ่งต้องมีเวลาจบ']);
       if (t1.value && t2.value && t2.value <= t1.value) bad.push([t2, 'เวลาจบต้องหลังเวลาเริ่ม']);
       if (bad.length) { badFields(bad); return; }
-      var b = { kind: k0(), company_id: o.company.id, branch: b0, start_date: start.value, end_date: !tr && end.value ? end.value : start.value,
+      var b = { kind: k0(), company_id: picked.id, branch: b0, start_date: start.value, end_date: !tr && end.value ? end.value : start.value,
         start_time: t1.value || null, end_time: t2.value || null, note: note.value };
       if (e) b.id = e.id;
       api('ev_save', b).then(function (r) {
@@ -2317,7 +2397,7 @@
       }).catch(function (x) { show(x.message, 'err'); });
     }));
     row.appendChild(button('ปิด', 'alt', function () { box.textContent = ''; }));
-    (br || start).focus();
+    (cIn || br || start).focus();
   }
 
   // One company over a year (user 2026-11-15): how it works with us, training and booths apart, one row per branch;
@@ -2375,27 +2455,7 @@
         var sec = el('section', 'card'); body.appendChild(sec);
         sec.appendChild(el('h3', '', g[1] + ' · ' + list.filter(function (e) { return e.status === 'booked'; }).length + ' นัด'));
         if (!list.length) { sec.appendChild(el('p', 'empty-note', 'ไม่มีนัดในปีนี้')); return; }
-        var tw = el('div', 'tlwrap'), tbl = el('table', 'fronttl evtimeline'), th = el('thead'), hr = el('tr'), tb = el('tbody');
-        var h0 = el('th', 'lbl', 'สาขา'); h0.scope = 'col'; hr.appendChild(h0);
-        var hm2 = el('th'), months = el('div', 'tlmonths'); months.style.setProperty('--n', 12);
-        TH_M.forEach(function (m) { months.appendChild(el('span', '', m)); }); hm2.appendChild(months); hr.appendChild(hm2); th.appendChild(hr); tbl.appendChild(th); tbl.appendChild(tb);
-        var by = {}; list.forEach(function (e) { (by[e.branch_code] = by[e.branch_code] || []).push(e); });
-        Object.keys(by).sort(function (a, b) { return by[a][0].start_date < by[b][0].start_date ? -1 : 1; }).forEach(function (bc) {
-          var tr = el('tr'), rh = el('th', '', bc); rh.scope = 'row'; tr.appendChild(rh);
-          var td = el('td'), track = el('div', 'tltrack');
-          var nowSp = boardSpan(from, to, now, now); if (nowSp) { var nl = el('span', 'tlnow'); nl.style.left = nowSp.left + '%'; track.appendChild(nl); }
-          by[bc].forEach(function (e) {
-            var sp = boardSpan(from, to, e.start_date, e.end_date); if (!sp) return;
-            var bb = el('button', 'tlbar evbar ' + e.kind + (e.status === 'cancelled' ? ' off' : e.end_date < now ? ' past' : ''));
-            bb.type = 'button'; bb.style.left = sp.left + '%'; bb.style.width = sp.width + '%';
-            bb.title = bc + ' ' + EV_KIND[e.kind] + ' ' + evWhen(e) + (e.status === 'cancelled' ? ' (ยกเลิก)' : '') + (e.note ? ' · ' + e.note : '');
-            bb.setAttribute('aria-label', bb.title);
-            if (e.status !== 'cancelled' && data.canEdit) bb.onclick = function () { open(e); };
-            track.appendChild(bb);
-          });
-          td.appendChild(track); tr.appendChild(td); tb.appendChild(tr);
-        });
-        tw.appendChild(tbl); sec.appendChild(tw);
+        evTimeline(sec, list, 'สาขา', function (e) { return e.branch_code; }, function (k) { return k; }, from, to, data.canEdit ? open : null);
       });
       body.appendChild(el('p', 'hint', 'แถบสีเข้ม = นัดที่ยังไม่ถึง · สีอ่อน = ผ่านไปแล้ว · กรอบเส้นประ = ยกเลิก · เส้นตั้งสีแดง = วันนี้ · ชี้ที่แถบเพื่อดูวันเวลา'));
     }
@@ -2490,27 +2550,42 @@
   }
 
   // The company list (A19): name, which grids it shows in, an optional vendor no. that links it to the vendor's TTA.
+  // One searchable line per company that opens to edit (user 2026-11-15). Names must not repeat, compared like the API does.
+  function evNorm(s) { return String(s || '').toLowerCase().replace(/[\s.\-_,/()&]+/g, ''); }
   function evCompanies(v) {
     v.appendChild(el('h2', 'sec', 'รายชื่อบริษัท'));
-    v.appendChild(el('p', 'hint', 'บริษัทคือหัวคอลัมน์ของตาราง เลือกได้ว่าแสดงในตารางไหน เลขเวนเดอร์ไม่บังคับ ใส่แล้วผูกกับ TTA ของเวนเดอร์นั้นได้'));
-    var body = el('section', 'card'); v.appendChild(body); body.appendChild(el('p', 'sub', 'กำลังโหลด...'));
+    v.appendChild(el('p', 'hint', 'บริษัทคือหัวคอลัมน์ของตาราง เลือกได้ว่าแสดงในตารางไหน เลขเวนเดอร์ไม่บังคับ ใส่แล้วผูกกับ TTA ของเวนเดอร์นั้นได้ ชื่อห้ามซ้ำกัน (ไม่นับตัวพิมพ์เล็กใหญ่ ช่องว่าง และเครื่องหมาย)'));
+    var body = el('div'); v.appendChild(body); body.appendChild(el('p', 'sub', 'กำลังโหลด...'));
     Promise.all([api('ev_grid', { grid: 'training' }), navLists()]).then(guard(function (r) {
-      var d = r[0], vendors = (r[1] && r[1].vendors) || [], vname = {};
+      var d = r[0], vendors = (r[1] && r[1].vendors) || [], vname = {}, all = d.all_companies;
       vendors.forEach(function (x) { vname[x.no] = x.name; });
       body.textContent = '';
-      // one searchable list of our vendors (MASTER_NAV): "V00123 · บริษัท ..."
       var vdl = el('datalist'); vdl.id = 'ev-vendors'; vendors.forEach(function (x) { var op = el('option'); op.value = x.no + ' · ' + x.name; vdl.appendChild(op); }); body.appendChild(vdl);
-      function row(c) {
-        var r = el('div', 'trow'), name = el('input', 'input'); name.type = 'text'; name.maxLength = 120; name.value = c ? c.name : ''; name.placeholder = 'ชื่อบริษัทใหม่ เช่น Siam Pharmaceutical'; name.setAttribute('aria-label', 'ชื่อบริษัท');
+      function clash(nm, id) { var n = evNorm(nm); return all.filter(function (c) { return c.id !== id && evNorm(c.name) === n; })[0]; }
+      function similar(nm, id) {
+        var n = evNorm(nm); if (n.length < 3) return [];
+        return all.filter(function (c) { var m = evNorm(c.name); return c.id !== id && m !== n && (m.indexOf(n) >= 0 || n.indexOf(m) >= 0); });
+      }
+      // one company's editor (c = null: a new company)
+      function editor(c) {
+        var box = el('div'), r = el('div', 'trow'), name = el('input', 'input'); box.appendChild(r);
+        name.type = 'text'; name.maxLength = 120; name.value = c ? c.name : ''; name.placeholder = 'ชื่อบริษัทใหม่ เช่น Siam Pharmaceutical'; name.setAttribute('aria-label', 'ชื่อบริษัท');
         r.appendChild(name);
         function chk(text, on) { var l = el('label', 'check'), x = el('input'); x.type = 'checkbox'; x.checked = on; l.appendChild(x); l.appendChild(document.createTextNode(text)); r.appendChild(l); return x; }
         var tr = chk('ตารางเทรนนิ่ง', c ? c.kinds.indexOf('training') >= 0 : true), bo = chk('ตารางบูธ/PC', c ? c.kinds.indexOf('booth') >= 0 : false);
         var vn = el('input', 'input evvendor'); vn.type = 'search'; vn.placeholder = 'ค้นเวนเดอร์ (เลขหรือชื่อ)'; vn.setAttribute('list', 'ev-vendors'); vn.autocomplete = 'off';
         vn.value = c && c.vendor_no ? c.vendor_no + (vname[c.vendor_no] ? ' · ' + vname[c.vendor_no] : '') : ''; vn.setAttribute('aria-label', 'เวนเดอร์'); r.appendChild(vn);
         var on = chk('ใช้งาน', c ? c.active !== false : true);
-        if (!d.can_edit) { [name, tr, bo, vn, on].forEach(function (x) { x.disabled = true; }); return r; }
+        var warn = el('p', 'hint'); warn.setAttribute('aria-live', 'polite'); box.appendChild(warn);
+        name.oninput = function () {
+          var x = clash(name.value, c && c.id), sim = x ? [] : similar(name.value, c && c.id);
+          warn.textContent = x ? 'ชื่อซ้ำกับ "' + x.name + '" ที่มีอยู่แล้ว ใช้ชื่อนี้ไม่ได้' : sim.length ? 'ชื่อคล้าย: ' + sim.map(function (y) { return y.name; }).join(', ') + ' ตรวจว่าไม่ใช่บริษัทเดียวกัน' : '';
+        };
+        if (!d.can_edit) { [name, tr, bo, vn, on].forEach(function (x) { x.disabled = true; }); return box; }
         r.appendChild(button(c ? 'บันทึก' : 'เพิ่ม', c ? 'alt' : '', function () {
           if (!name.value.trim()) { badFields([[name, 'ใส่ชื่อบริษัท']]); return; }
+          var dup = clash(name.value, c && c.id);
+          if (dup) { badFields([[name, 'ชื่อซ้ำกับ "' + dup.name + '" ที่มีอยู่แล้ว']]); return; }
           var kinds = []; if (tr.checked) kinds.push('training'); if (bo.checked) kinds.push('booth');
           if (!kinds.length) { show('เลือกอย่างน้อย 1 ตาราง', 'err'); return; }
           var vno = vn.value.split(' · ')[0].trim().toUpperCase();
@@ -2519,10 +2594,37 @@
           api('ev_company_save', b).then(function () { show('บันทึก ' + b.name + ' แล้ว', 'ok'); evs.data = null; events(); })
             .catch(function (x) { show(x.code === 'duplicate' ? 'มีบริษัทชื่อนี้อยู่แล้ว' : x.message, 'err'); });
         }));
-        return r;
+        return box;
       }
-      if (d.can_edit) body.appendChild(row(null)); else body.appendChild(el('p', 'hint', 'ดูได้อย่างเดียว ขอสิทธิ์แก้ไขกิจกรรมในร้านได้จากผู้ดูแลระบบ'));
-      d.all_companies.forEach(function (c) { body.appendChild(row(c)); });
+      if (d.can_edit) { var add = el('section', 'card'); add.appendChild(el('h3', '', 'เพิ่มบริษัท')); add.appendChild(editor(null)); body.appendChild(add); }
+      else body.appendChild(el('p', 'hint', 'ดูได้อย่างเดียว ขอสิทธิ์แก้ไขกิจกรรมในร้านได้จากผู้ดูแลระบบ'));
+      // names that already repeat (before this rule) are listed so someone can fix them
+      var groups = {}; all.forEach(function (c) { var k = evNorm(c.name); (groups[k] = groups[k] || []).push(c.name); });
+      var dups = Object.keys(groups).filter(function (k) { return groups[k].length > 1; });
+      if (dups.length) body.appendChild(el('p', 'hint evwarn', 'ชื่อซ้ำกันอยู่ ' + dups.map(function (k) { return groups[k].join(' / '); }).join(' · ') + ' แก้ชื่อหรือปิดใช้งานตัวที่ไม่ใช้'));
+      var tb = el('div', 'toolbar'), q = el('input', 'input search'), cnt = el('span', 'sub');
+      q.type = 'search'; q.placeholder = 'ค้นชื่อบริษัทหรือเลขเวนเดอร์'; q.setAttribute('aria-label', 'ค้นหาบริษัท'); q.value = evs.coq || '';
+      tb.appendChild(q); tb.appendChild(cnt); body.appendChild(tb);
+      var list = el('div', 'evcolist'); body.appendChild(list);
+      var rows = all.map(function (c) {
+        var det = el('details', 'card fold'), sm = el('summary'), nm = el('b', '', c.name);
+        sm.appendChild(nm);
+        if (c.kinds.indexOf('training') >= 0) sm.appendChild(evChip('training'));
+        if (c.kinds.indexOf('booth') >= 0) sm.appendChild(evChip('booth'));
+        if (c.active === false) sm.appendChild(el('span', 'chip', 'ไม่ใช้งาน'));
+        det.appendChild(sm);
+        if (c.vendor_no) det.title = c.vendor_no + (vname[c.vendor_no] ? ' · ' + vname[c.vendor_no] : '');
+        var built = false;
+        det.addEventListener('toggle', function () { if (det.open && !built) { built = true; var fb = el('div', 'fold-body'); fb.appendChild(editor(c)); det.appendChild(fb); } });
+        list.appendChild(det);
+        return { c: c, node: det, key: (c.name + ' ' + (c.vendor_no || '') + ' ' + (vname[c.vendor_no] || '')).toUpperCase() };
+      });
+      function filter() {
+        evs.coq = q.value; var n = q.value.trim().toUpperCase(), shown = 0;
+        rows.forEach(function (x) { var ok = !n || x.key.indexOf(n) >= 0; x.node.hidden = !ok; if (ok) shown++; });
+        cnt.textContent = shown + ' จาก ' + rows.length + ' บริษัท';
+      }
+      q.oninput = filter; filter();
     })).catch(function (e) { body.textContent = ''; show(e.message, 'err'); });
   }
 
