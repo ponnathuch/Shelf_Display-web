@@ -397,6 +397,7 @@
   .evform { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; margin-top: var(--space-3); }
   .evform label.f { flex: 1 1 calc(var(--size-cell) * 0.9); }
   .evform label.f.wide { flex-basis: 100%; }
+  .evmailframe { display: block; width: 100%; height: calc(var(--size-scroll) * 2); border: 0; }
   .trow > .evvendor { flex: 1 1 calc(var(--size-cell) * 1.6); min-width: var(--size-cell); }
   .agdlg { height: fit-content; max-width: calc(var(--size-pane) * 2); }
   .agdlg .agopt { margin-top: var(--space-3); }
@@ -2077,13 +2078,14 @@
     var v = $('view'); v.textContent = ''; show('');
     if (sess.staff.role === 'STAFF') { evBranch(v, sess.staff.unit); return; }
     var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'มุมมอง');
-    [['training', 'ตารางเทรนนิ่ง'], ['booth', 'ตารางบูธ / PC'], ['company', 'รายบริษัท'], ['branch', 'รายสาขา'], ['companies', 'รายชื่อบริษัท']].forEach(function (x) {
+    [['training', 'ตารางเทรนนิ่ง'], ['booth', 'ตารางบูธ / PC'], ['company', 'รายบริษัท'], ['branch', 'รายสาขา'], ['companies', 'รายชื่อบริษัท'], ['mail', 'อีเมลสรุป']].forEach(function (x) {
       var b = el('button', '', x[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(evs.tab === x[0]));
       b.onclick = function () { if (evs.tab !== x[0]) { evs.tab = x[0]; evs.sel = null; evs.data = null; } events(); }; seg.appendChild(b);
     });
     var top = el('div', 'toolbar'); top.appendChild(seg); v.appendChild(top);
     if (evs.tab === 'companies') { evCompanies(v); return; }
     if (evs.tab === 'company') { evCompany(v); return; }
+    if (evs.tab === 'mail') { evMail(v); return; }
     if (evs.tab === 'branch') {
       var tb = el('div', 'toolbar'), inp = el('input', 'input search'), dl = el('datalist'); dl.id = 'ev-branches';
       inp.type = 'text'; inp.setAttribute('list', 'ev-branches'); inp.placeholder = 'พิมพ์รหัสหรือชื่อสาขา เช่น PM017'; inp.setAttribute('aria-label', 'เลือกสาขา'); inp.value = evs.branch;
@@ -2371,6 +2373,38 @@
     }
     ci.onchange = function () { var n = ci.value.trim().toLowerCase(), c = data && data.companies.filter(function (x) { return x.name.toLowerCase() === n; })[0]; if (c) { evs.company = c.id; paint(); } };
     ys.onchange = function () { evs.year = Number(ys.value); load(); };
+    load();
+  }
+
+  // The summary email to store@ (A13, A13c): marketing picks the period, sees the real email, then sends it through Job Tracker.
+  function evMail(v) {
+    var f = el('div', 'card invfilters');
+    function dateF(text, val) { var l = el('label', 'f'), i = el('input', 'input'); i.type = 'date'; i.value = val; l.appendChild(el('span', 't', text)); l.appendChild(i); f.appendChild(l); return i; }
+    var from = dateF('ตั้งแต่', addDays(today(), 1)), to = dateF('ถึง', addDays(today(), 7));
+    v.appendChild(el('h2', 'sec', 'อีเมลสรุปถึงสาขา (store@)'));
+    v.appendChild(el('p', 'hint', 'ตรวจอีเมลด้านล่างก่อนส่ง ระบบส่งผ่าน Job Tracker ถึงอีเมลกลุ่มสาขา ส่วน "เปลี่ยนจากรอบที่แล้ว" นับจากการส่งครั้งก่อน'));
+    v.appendChild(f);
+    var info = el('p', 'sub'), row = el('div', 'row'), box = el('div', 'card');
+    v.appendChild(info); v.appendChild(row); v.appendChild(box);
+    var frame = el('iframe'); frame.title = 'ตัวอย่างอีเมลสรุป'; frame.className = 'evmailframe'; frame.setAttribute('sandbox', ''); box.appendChild(frame);
+    var data = null;
+    function load() {
+      if (!from.value || !to.value) return;
+      if (to.value < from.value) { badFields([[to, 'วันสุดท้ายต้องไม่ก่อนวันเริ่ม']]); return; }
+      info.textContent = 'กำลังโหลด...';
+      api('ev_summary', { from: from.value, to: to.value }).then(guard(function (d) {
+        data = d;
+        info.textContent = d.bookings + ' นัด · เปลี่ยนจากรอบก่อน ' + d.changes + ' รายการ · ' + (d.last_sent ? 'ส่งครั้งล่าสุด ' + thDate(bkk(d.last_sent).slice(0, 10)) + ' ' + bkk(d.last_sent).slice(11, 16) + ' น. โดย ' + (d.last_by || '-') : 'ยังไม่เคยส่ง');
+        frame.srcdoc = '<!doctype html><meta charset="utf-8"><body style="margin:0">' + d.html.replace(/\{\{JT_URL\}\}/g, '#') + '</body>';
+      })).catch(function (e) { info.textContent = ''; show(e.message, 'err'); });
+    }
+    from.onchange = to.onchange = load;
+    row.appendChild(button('ส่งอีเมลถึงสาขา', '', function () {
+      if (!data) return;
+      if (!confirm('ส่งอีเมลสรุป ' + data.subject + ' (' + data.bookings + ' นัด) ถึงอีเมลกลุ่มสาขา?')) return;
+      api('ev_send', { from: from.value, to: to.value }).then(function (r) { show('ส่งอีเมลแล้ว' + (r.to ? ' ถึง ' + r.to : ''), 'ok'); load(); })
+        .catch(function (e) { show(e.message, 'err'); });
+    }));
     load();
   }
 
