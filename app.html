@@ -1530,6 +1530,52 @@
       eb.appendChild(row);
     }).catch(function (e) { show(e.message, 'err'); });
   }
+  // Many plan pictures at once (user 2026-11-15): files named by branch code, e.g. PM017.jpg, from tools/floor_images.py
+  // (Lock section file first, Template when there is none). Each picture replaces the branch's plan only; the old pins are
+  // cleared and the AI pins the Sections again on the new picture. The AI shares the daily allowance of the photo search.
+  function floorBulk(v) {
+    var ff = fold('นำเข้ารูปผังหลายสาขา', 'เปลี่ยนรูปผังทีละหลายสาขา แล้วให้ AI ปักหมุด Section ใหม่', false), fb = ff.body; v.appendChild(ff.node);
+    fb.appendChild(el('p', 'hint', 'เลือกรูปผังได้หลายไฟล์ ชื่อไฟล์ต้องขึ้นต้นด้วยรหัสสาขา เช่น PM017.jpg ระบบเปลี่ยนเฉพาะรูปผัง ข้อมูลร้านอื่นคงเดิม หมุดเดิมของสาขานั้นจะถูกล้าง เพราะตำแหน่งอ้างอิงรูปเก่า แล้ว AI จะปักหมุดใหม่ให้ Section ที่อ่านเจอ ที่เหลือปักเองได้ในหน้าผังร้าน AI ใช้ได้วันละ 30 ครั้งต่อคน ถ้าครบแล้ว รูปยังอัปโหลดต่อ แต่ต้องกดปักหมุดอัตโนมัติเองภายหลัง'));
+    var fi = el('input'); fi.type = 'file'; fi.multiple = true; fi.accept = 'image/*'; fi.id = 'floor-bulk-files'; fi.setAttribute('aria-label', 'เลือกรูปผังหลายไฟล์');
+    var l = el('label', 'check'), ai = el('input'); ai.type = 'checkbox'; ai.checked = true; ai.id = 'floor-bulk-ai'; l.appendChild(ai); l.appendChild(document.createTextNode('ให้ AI ปักหมุดใหม่หลังอัปโหลด'));
+    var top = el('div', 'row'); top.appendChild(fi); top.appendChild(l); fb.appendChild(top);
+    var list = el('ul', 'evlist'), row = el('div', 'row'); fb.appendChild(list); fb.appendChild(row);
+    var items = [];
+    fi.onchange = function () {
+      list.textContent = ''; row.textContent = ''; items = [];
+      Array.prototype.forEach.call(fi.files, function (f) {
+        var m = /^((?:IC|PM|SD|VC)\d{3})/i.exec(f.name), li = el('li'), st = el('small', '', m ? 'รออัปโหลด' : 'ข้ามไฟล์นี้: ชื่อไฟล์ไม่ขึ้นต้นด้วยรหัสสาขา');
+        li.appendChild(el('span', 'when', m ? m[1].toUpperCase() : '-')); var w = el('span', 'what', f.name); w.appendChild(st); li.appendChild(w); list.appendChild(li);
+        if (m) items.push({ branch: m[1].toUpperCase(), file: f, st: st });
+      });
+      if (!items.length) return;
+      var go = button('อัปโหลด ' + items.length + ' สาขา', '', function () {
+        if (!confirm('เปลี่ยนรูปผัง ' + items.length + ' สาขา และล้างหมุดเดิมของสาขาเหล่านี้?')) return;
+        go.disabled = true; fi.disabled = true; var aiOn = ai.checked, i = 0, ok = 0;
+        (function next() {
+          if (i >= items.length) { show('เปลี่ยนรูปผังแล้ว ' + ok + ' จาก ' + items.length + ' สาขา', ok === items.length ? 'ok' : 'err'); fi.disabled = false; return; }
+          var it = items[i++]; it.st.textContent = 'กำลังอัปโหลด...';
+          toJpegBase64(it.file, 2000).then(function (b64) { return api('floor_image_save', { branch: it.branch, image: b64, clear_pins: true }); })
+            .then(function () {
+              ok++; it.st.textContent = 'เปลี่ยนรูปแล้ว';
+              if (!aiOn) return;
+              it.st.textContent = 'เปลี่ยนรูปแล้ว · AI กำลังอ่านผัง...';
+              return api('floor_autopin', { branch: it.branch }).then(function (r) {
+                var pins = r.pins.map(function (p) { return { id: p.id, x: p.x, y: p.y }; }), all = r.pins.length + r.missing.length;
+                var done = function () { it.st.textContent = 'เปลี่ยนรูปแล้ว · AI ปักหมุดได้ ' + r.pins.length + ' จาก ' + all + ' Section' + (r.missing.length ? ' ที่เหลือปักเองในหน้าผังร้าน' : ''); };
+                return pins.length ? api('slot_pins_save', { branch: it.branch, pins: pins }).then(done) : done();
+              }, function (e) {
+                if (e.code === 'plan_limit') { aiOn = false; it.st.textContent = 'เปลี่ยนรูปแล้ว · ยังไม่ได้ปักหมุด: AI ครบจำนวนต่อวันแล้ว สาขาที่เหลือจะอัปโหลดรูปอย่างเดียว'; return; }
+                it.st.textContent = 'เปลี่ยนรูปแล้ว · AI ปักหมุดไม่ได้: ' + e.message;
+              });
+            })
+            .catch(function (e) { it.st.textContent = 'อัปโหลดไม่ได้: ' + e.message; })
+            .then(next);
+        })();
+      });
+      row.appendChild(go);
+    };
+  }
   // Space core settings (design v3): shelf fixture types and the default count of quota spaces per branch.
   function spaceSettings(v) {
     var ff = fold('ประเภทชั้นวาง', 'Wall Shelf, EndCap, Gondola และจำนวนชั้นเริ่มต้น', true), fb = ff.body; v.appendChild(ff.node);
@@ -4724,7 +4770,7 @@
     var tb = el('div', 'toolbar'); tb.appendChild(seg); v.appendChild(tb);
     if (setTab === 'cashier') { cashierSettings(v); return; }
     if (setTab === 'events') { editorsFold(v, 'สิทธิ์แก้ไขกิจกรรมในร้าน', 'ใครลงนัด แก้ ยกเลิก และส่งอีเมลสรุปได้', 'ev_editors', 'ev_editors_save', 'ผู้ดูแลและผู้อนุมัติ TTA แก้ได้เสมอ คนอื่นที่เลือกไว้ที่นี่ลงนัด เลื่อน ยกเลิกนัด แก้รายชื่อบริษัท แก้ข้อมูลสาขา และกดส่งอีเมลสรุปถึงสาขาได้ คนที่ไม่ได้เลือกดูตารางได้อย่างเดียว สาขายังแก้ข้อมูลของสาขาตัวเองได้เหมือนเดิม'); return; }
-    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและรายการเช่าพื้นที่', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการรายการเช่าพื้นที่ได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติ TTA จัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกรายการเช่าพื้นที่ได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); spaceSettings(v); branchProfiles(v); priceTable(v); return; }
+    if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและรายการเช่าพื้นที่', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการรายการเช่าพื้นที่ได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติ TTA จัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกรายการเช่าพื้นที่ได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); floorBulk(v); spaceSettings(v); branchProfiles(v); priceTable(v); return; }
     var fd = fold('ประเภทตำแหน่งสื่อ', 'เพดานต่อสาขา เพิ่มประเภทใหม่ได้', true), card = fd.body; v.appendChild(fd.node); card.classList.add('tset');
     card.appendChild(el('p', 'hint', 'เพดาน = จำนวนสื่อสูงสุดต่อสาขาในช่วงวันที่ชนกัน เว้นว่าง = ไม่จำกัด ประเภทที่ปิดการใช้งานจะไม่ให้เลือกตอนลงทะเบียน แต่แคมเปญเดิมยังอยู่'));
     var body = el('div'); card.appendChild(body);
