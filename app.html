@@ -1544,7 +1544,7 @@
   // cleared and the AI pins the Sections again on the new picture. The AI shares the daily allowance of the photo search.
   function floorBulk(v) {
     var ff = fold('นำเข้ารูปผังหลายสาขา', 'เปลี่ยนรูปผังทีละหลายสาขา แล้วให้ AI ปักหมุด Section ใหม่', false), fb = ff.body; v.appendChild(ff.node);
-    fb.appendChild(el('p', 'hint', 'เลือกรูปผังได้หลายไฟล์ ชื่อไฟล์ต้องขึ้นต้นด้วยรหัสสาขา เช่น PM017.jpg ระบบเปลี่ยนเฉพาะรูปผัง ข้อมูลร้านอื่นคงเดิม หมุดเดิมของสาขานั้นจะถูกล้าง เพราะตำแหน่งอ้างอิงรูปเก่า แล้ว AI จะปักหมุดใหม่ให้ Section ที่อ่านเจอ ที่เหลือปักเองได้ในหน้าผังร้าน AI ใช้ได้วันละ 30 ครั้งต่อคน ถ้าครบแล้ว รูปยังอัปโหลดต่อ แต่ต้องกดปักหมุดอัตโนมัติเองภายหลัง'));
+    fb.appendChild(el('p', 'hint', 'เลือกรูปผังได้หลายไฟล์ ชื่อไฟล์ต้องขึ้นต้นด้วยรหัสสาขา เช่น PM017.jpg ระบบเปลี่ยนเฉพาะรูปผัง ข้อมูลร้านอื่นคงเดิม หมุดเดิมของสาขานั้นจะถูกล้าง เพราะตำแหน่งอ้างอิงรูปเก่า แล้ว AI จะปักหมุดใหม่ให้ Section ที่อ่านเจอ ที่เหลือปักเองได้ในหน้าผังร้าน AI ปักหมุดได้วันละ 80 สาขาต่อคน ถ้าครบแล้ว รูปยังอัปโหลดต่อ แต่ต้องกดปักหมุดอัตโนมัติเองภายหลัง'));
     var fi = el('input'); fi.type = 'file'; fi.multiple = true; fi.accept = 'image/*'; fi.id = 'floor-bulk-files'; fi.setAttribute('aria-label', 'เลือกรูปผังหลายไฟล์');
     var l = el('label', 'check'), ai = el('input'); ai.type = 'checkbox'; ai.checked = true; ai.id = 'floor-bulk-ai'; l.appendChild(ai); l.appendChild(document.createTextNode('ให้ AI ปักหมุดใหม่หลังอัปโหลด'));
     var top = el('div', 'row'); top.appendChild(fi); top.appendChild(l); fb.appendChild(top);
@@ -1584,6 +1584,46 @@
       });
       row.appendChild(go);
     };
+    // Branches that have the new picture but no pins yet (the AI allowance ran out, or the AI read failed): pin them again
+    // without uploading the pictures again. The AI result is saved straight away; review it on each branch's plan.
+    fb.appendChild(el('h3', '', 'AI ปักหมุดสาขาที่ยังไม่มีหมุด'));
+    fb.appendChild(el('p', 'hint', 'สำหรับสาขาที่มีรูปผังแล้วแต่ยังไม่มีหมุดสักตัว ระบบให้ AI อ่านผังแล้วปักหมุดให้ทีละสาขา ไม่ต้องอัปโหลดรูปซ้ำ AI ปักหมุดได้วันละ 80 สาขาต่อคน'));
+    var rlist = el('ul', 'evlist'), rrow = el('div', 'row'); fb.appendChild(rrow); fb.appendChild(rlist);
+    var find = button('หาสาขาที่ยังไม่มีหมุด', 'alt', function () {
+      rlist.textContent = ''; find.disabled = true; if (rrow.lastChild !== find) rrow.removeChild(rrow.lastChild);
+      api('floor_pin_status').then(function (d) {
+        find.disabled = false;
+        var todo = d.branches.filter(function (b) { return b.sections > 0 && b.pinned === 0; });
+        if (!todo.length) { rlist.appendChild(el('li', '', 'ทุกสาขาที่มีรูปผังมีหมุดแล้ว')); return; }
+        var rows = todo.map(function (b) {
+          var li = el('li'), st = el('small', '', 'รอ AI');
+          li.appendChild(el('span', 'when', b.branch)); var w = el('span', 'what', b.sections + ' Section'); w.appendChild(st); li.appendChild(w); rlist.appendChild(li);
+          return { branch: b.branch, st: st };
+        });
+        var run = button('ให้ AI ปักหมุด ' + rows.length + ' สาขา', '', function () {
+          if (!confirm('ให้ AI ปักหมุด ' + rows.length + ' สาขา?')) return;
+          run.disabled = true; find.disabled = true; var i = 0, ok = 0;
+          (function next() {
+            if (i >= rows.length) { show('AI ปักหมุดแล้ว ' + ok + ' จาก ' + rows.length + ' สาขา', ok === rows.length ? 'ok' : 'err'); find.disabled = false; return; }
+            var it = rows[i++]; it.st.textContent = 'AI กำลังอ่านผัง...';
+            api('floor_autopin', { branch: it.branch }).then(function (r) {
+              var pins = r.pins.map(function (p) { return { id: p.id, x: p.x, y: p.y }; }), all = r.pins.length + r.missing.length;
+              var done = function () { if (pins.length) ok++; it.st.textContent = pins.length ? 'AI ปักหมุดได้ ' + pins.length + ' จาก ' + all + ' Section' : 'AI อ่านรหัส Section บนผังนี้ไม่ได้ ปักเองในหน้าผังร้าน'; };
+              return pins.length ? api('slot_pins_save', { branch: it.branch, pins: pins }).then(done) : done();
+            }).then(next, function (e) {
+              if (e.code === 'plan_limit') {
+                it.st.textContent = 'AI ครบจำนวนต่อวันแล้ว';
+                rows.slice(i).forEach(function (x) { x.st.textContent = 'ยังไม่ได้ทำ: AI ครบจำนวนต่อวันแล้ว ลองใหม่พรุ่งนี้'; });
+                i = rows.length; next(); return;
+              }
+              it.st.textContent = 'AI ปักหมุดไม่ได้: ' + e.message; next();
+            });
+          })();
+        });
+        rrow.appendChild(run);
+      }).catch(function (e) { find.disabled = false; show(e.message, 'err'); });
+    });
+    rrow.appendChild(find);
   }
   // Space core settings (design v3): shelf fixture types and the default count of quota spaces per branch.
   function spaceSettings(v) {
