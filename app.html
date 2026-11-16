@@ -468,6 +468,13 @@
   /* the TTA of a rental line: one card - title and status, main actions, facts, lines, files, history */
   .agcard { margin-top: var(--space-4); padding: var(--space-4); border: 1px solid var(--c-line); border-radius: var(--radius-m); background: var(--c-surface-2); }
   .agcard > .card-head h3 { margin: 0; }
+  .paysave { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--c-line); }
+  /* one payment or one instalment: a small box, its fields side by side */
+  .paycard .brow { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); align-items: end; gap: var(--space-2) var(--space-3);
+    margin-top: var(--space-2); padding: var(--space-2) var(--space-3); background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--radius-s); }
+  .paycard .brow label.f { margin: 0; }
+  .paycard .brow > .chip { justify-self: start; }
+  .paycard .brow > .btn { justify-self: start; }
   .agcard .eyebrow { font-size: var(--fs-xs); color: var(--c-ink-3); }
   .agcard > .row { margin-top: var(--space-3); }
   .agcard .facts, .facts.two { margin-top: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(var(--size-fact), 1fr)); }
@@ -482,7 +489,6 @@
   .filelist .fmain .linkbtn { min-height: var(--size-icon); padding: 0; text-align: left; overflow-wrap: anywhere; }
   .filelist small { display: block; color: var(--c-ink-3); }
   .filelist li > .linkbtn { flex: none; white-space: nowrap; }
-  .paybox > .boxscroll { margin-top: 0; }
   .fieldbad > .t { color: var(--c-err); font-weight: bold; }
   .fielderr { display: block; margin-top: var(--space-1); color: var(--c-err); font-size: var(--fs-s); font-weight: bold; }
   .codes .good { color: var(--c-ok); }
@@ -3927,11 +3933,21 @@
   }
   // Vendor money of one agreement (payments received and dues expected): approvers and finance only; the server sends it to no one else
   function agPayPanel(p, a) {
-    var fold = el('details', 'hist paybox'), box = el('section', 'boxscroll'), list = (a.payments || []).map(function (x) { return { dp_no: x.dp_no || '', received_on: x.received_on || '', amount: x.amount == null ? '' : x.amount, memo_no: x.memo_no || '', note: x.note || '' }; });
+    var box = el('section', 'agcard paycard'), list = (a.payments || []).map(function (x) { return { dp_no: x.dp_no || '', received_on: x.received_on || '', amount: x.amount == null ? '' : x.amount, memo_no: x.memo_no || '', note: x.note || '' }; });
     var dues = (a.dues || []).map(function (x) { return { id: x.id, due_on: x.due_on || '', amount: x.amount == null ? '' : x.amount, note: x.note || '', dp_no: x.dp_no || '', invoice_no: x.invoice_no || '' }; });
     var stSel = el('select', 'input'); Object.keys(PAY_TH).forEach(function (k) { var o = el('option', '', PAY_TH[k]); o.value = k; if (k === (a.pay_status || 'pending')) o.selected = true; stSel.appendChild(o); });
-    box.appendChild(el('h3', '', 'การรับเงินของ TTA (ผู้อนุมัติ TTA และการเงิน)')); var sl = el('label', 'f'); sl.appendChild(el('span', 't', 'สถานะ')); sl.appendChild(stSel); box.appendChild(sl);
-    box.appendChild(el('p', 'sub', 'รับแล้ว ' + baht(a.received || 0) + ' บาท' + (a.paid_pct != null ? ' (' + a.paid_pct + '% ของมูลค่ารวม)' : '')));
+    var ps = a.pay_status || 'pending', th = el('div', 'card-head'), tl = el('div');
+    tl.appendChild(el('div', 'eyebrow', 'การเงินของ TTA · ผู้อนุมัติ TTA และการเงิน'));
+    tl.appendChild(el('h3', '', 'การรับเงินและงวด'));
+    th.appendChild(tl); th.appendChild(el('span', 'chip ' + (ps === 'paid' ? 'ok' : ps === 'none' ? '' : 'warn'), PAY_TH[ps]));
+    box.appendChild(th);
+    var late = (a.dues || []).filter(function (x) { return x.due_on && x.due_on < today() && ps !== 'paid'; }).length;
+    var sdl = el('dl', 'facts');
+    fact(sdl, 'รับแล้ว', baht(a.received || 0) + ' บาท' + (a.paid_pct != null ? ' (' + a.paid_pct + '%)' : ''));
+    fact(sdl, 'มูลค่ารวม', a.total != null ? baht(a.total) + ' บาท' : 'ยังไม่ใส่');
+    fact(sdl, 'งวดค่าเช่า', (a.dues || []).length + ' งวด' + (late ? ' · เลยกำหนด ' + late : ''));
+    box.appendChild(sdl);
+    var sl = el('label', 'f'); sl.appendChild(el('span', 't', 'สถานะการรับเงิน')); sl.appendChild(stSel); box.appendChild(sl);
     function inputs(row, x, defs, repaint) {
       defs.forEach(function (f) {
         var l = el('label', 'f'); l.appendChild(el('span', 't', f[1])); var inp = el('input', 'input'); inp.type = f[2]; if (f[2] === 'number') inp.min = 0; inp.value = x[f[0]];
@@ -3949,12 +3965,15 @@
       });
       if (!list.length) rowsEl.appendChild(el('p', 'sub', 'ยังไม่มีรายการรับเงิน'));
     }
-    paint(); box.appendChild(rowsEl);
-    var addRow = el('div', 'row');
-    addRow.appendChild(button('+ เพิ่มรายการรับเงิน', 'alt', function () { list.push({ dp_no: '', received_on: '', amount: '', memo_no: '', note: '' }); paint(); }));
-    box.appendChild(addRow);
-    box.appendChild(el('h3', '', 'งวดค่าเช่าพื้นที่ (รายได้หมวด 1)'));
-    box.appendChild(el('p', 'hint', 'ค่าเช่าชั้นวางแบ่งจ่ายเป็นงวดได้ หนึ่งงวดตั้ง DP หนึ่งเลข กิจกรรม (รายได้หมวด 2) ไม่ต้องใส่ที่นี่ แต่ละกิจกรรมตั้ง DP ของตัวเองในคิวงานการเงิน'));
+    var psec = el('div', 'agsub'), phd = el('div', 'agsub-head');
+    phd.appendChild(el('h4', '', 'รายการรับเงิน · ' + list.length));
+    phd.appendChild(button('+ เพิ่มรายการรับเงิน', 'alt', function () { list.push({ dp_no: '', received_on: '', amount: '', memo_no: '', note: '' }); paint(); }));
+    psec.appendChild(phd); paint(); psec.appendChild(rowsEl); box.appendChild(psec);
+    var dsec = el('div', 'agsub'), dhd = el('div', 'agsub-head');
+    dhd.appendChild(el('h4', '', 'งวดค่าเช่าพื้นที่ (รายได้หมวด 1) · ' + dues.length));
+    dhd.appendChild(button('+ เพิ่มงวด', 'alt', function () { dues.push({ due_on: '', amount: '', note: '' }); paintDues(); }));
+    dsec.appendChild(dhd); box.appendChild(dsec);
+    dsec.appendChild(el('p', 'hint', 'ค่าเช่าชั้นวางแบ่งจ่ายเป็นงวดได้ หนึ่งงวดตั้ง DP หนึ่งเลข กิจกรรม (รายได้หมวด 2) ไม่ต้องใส่ที่นี่ แต่ละกิจกรรมตั้ง DP ของตัวเองในคิวงานการเงิน'));
     var dueEl = el('div');
     function paintDues() {
       dueEl.textContent = '';
@@ -3968,18 +3987,16 @@
       });
       if (!dues.length) dueEl.appendChild(el('p', 'sub', 'ยังไม่มีงวดที่ต้องได้รับ'));
     }
-    stSel.onchange = paintDues; paintDues(); box.appendChild(dueEl);
-    var row = el('div', 'row');
-    row.appendChild(button('+ เพิ่มงวด', 'alt', function () { dues.push({ due_on: '', amount: '', note: '' }); paintDues(); }));
-    row.appendChild(button('บันทึกการรับเงิน', '', function () {
+    stSel.onchange = paintDues; paintDues(); dsec.appendChild(dueEl);
+    var row = el('div', 'row paysave');
+    row.appendChild(button('บันทึกการรับเงินและงวด', '', function () {
       if (dues.some(function (x) { return !x.due_on; })) { show('ใส่วันครบกำหนดของทุกงวดก่อน', 'err'); return; }
       var pays = list.map(function (x) { return { dp_no: x.dp_no, received_on: x.received_on, amount: x.amount === '' ? null : Number(x.amount), memo_no: x.memo_no, note: x.note }; });
       var dueBody = dues.map(function (x) { var o = { due_on: x.due_on, amount: x.amount === '' ? null : Number(x.amount), note: x.note }; if (x.id) o.id = x.id; return o; });
       api('agreement_pay_save', { id: a.id, pay_status: stSel.value, payments: pays, dues: dueBody }).then(function () { afterNote = ['บันทึกการรับเงินแล้ว', 'ok']; contracts(); }).catch(function (e) { show(e.message, 'err'); });
     }));
     box.appendChild(row);
-    fold.appendChild(el('summary', '', 'การรับเงินและงวด · ' + PAY_TH[a.pay_status || 'pending'] + ' · รับแล้ว ' + baht(a.received || 0) + ' บาท · ' + (a.dues || []).length + ' งวด'));
-    fold.appendChild(box); p.appendChild(fold);
+    p.appendChild(box);
   }
   // Loaded once per page; a failure (lists not pushed yet) leaves the form as plain text boxes.
   var navCache = null;
@@ -4020,7 +4037,8 @@
     ttaWatch(tta, a.id);
     var from = fld('เริ่ม', 'date', a.start_date), to = fld('สิ้นสุด', 'date', a.end_date), total = fld('มูลค่ารวม (บาท)', 'number', a.total); total.min = 0;
     var pur = purchaseSel(g, a.purchase, 'ฝ่าย Med/Nonmed');
-    d.appendChild(g);
+    var p1 = formPart(1, 'ข้อมูล TTA', 'เลข TTA เวนเดอร์ แบรนด์ ช่วงเวลา มูลค่ารวม และฝ่าย');
+    p1.appendChild(g); d.appendChild(p1);
     // A name not in the NAV list is still accepted, only flagged.
     var nav = null, vHint = el('span', 'hint'); vendor.parentNode.appendChild(vHint);
     function vendorNo() {
@@ -4038,7 +4056,7 @@
     navAttach(d, brand, vendor, function (r) { nav = r; vendorCheck(); });
     // other items (design v3 Q35: media, training, fees): no place, only an amount and a period, counted in the value
     var items = (a.items || []).map(function (x) { return { id: x.id, item: x.item, amount: x.amount == null ? '' : Number(x.amount), start_date: x.start_date || '', end_date: x.end_date || '', rate_id: x.rate_id || null, note: x.note || '' }; });
-    var ib = el('section', 'boxscroll'); ib.appendChild(el('h3', '', 'รายการอื่น (สื่อ อบรม ค่าธรรมเนียม)'));
+    var ib = formPart(2, 'รายการอื่น (สื่อ อบรม ค่าธรรมเนียม)');
     ib.appendChild(el('p', 'hint', 'รายการที่ไม่มีตำแหน่ง มีแค่ยอดเงินและช่วงเวลา นับรวมในมูลค่า TTA เลือกจากตารางราคาของปีที่เริ่ม TTA หรือพิมพ์ชื่อเอง ราคาที่ใส่ให้แก้ได้'));
     var dl = el('datalist'); dl.id = 'ag-items-' + (a.id || 'new'); ib.appendChild(dl);
     var irows = el('div'), sum = el('p', 'sub'), rateList = [], rateNote = el('p', 'sub'); ib.appendChild(rateNote);
@@ -4093,8 +4111,9 @@
     irow.appendChild(button('ใช้ยอดนี้เป็นมูลค่ารวม', 'alt', function () { total.value = (Number(a.line_value) || 0) + itemsTotal(); total.dispatchEvent(new Event('input')); }));
     ib.appendChild(irow); ib.appendChild(sum); d.appendChild(ib);
     paintItems(); sumNote();
-    var dz = people.length ? peoplePicker(d, a.designated || []) : { getCodes: function () { return a.designated || []; } };
-    var note = fld('หมายเหตุ', 'textarea', a.note); note.rows = 2; d.appendChild(note.parentNode);
+    var p3 = formPart(3, 'ผู้อนุมัติและหมายเหตุ'); d.appendChild(p3);
+    var dz = people.length ? peoplePicker(p3, a.designated || []) : { getCodes: function () { return a.designated || []; } };
+    var note = fld('หมายเหตุ', 'textarea', a.note); note.rows = 2; p3.appendChild(note.parentNode);
     var row = el('div', 'row');
     var save = button('บันทึก', '', function () {
       var miss = emptyOf([[tta, 'ใส่เลข TTA'], [brand, 'ใส่แบรนด์'], [from, 'ใส่วันเริ่ม'], [to, 'ใส่วันสิ้นสุด']].concat(a.id ? [] : [[pur, 'เลือก Med หรือ Nonmed']])); if (miss.length) { badFields(miss); return; }
@@ -4252,7 +4271,7 @@
   }
   // Install photos from the branches: Job Tracker opens one job per branch; progress and the photo report live there.
   function installBox(p, r) {
-    var c = r.c, box = el('section', 'boxscroll'), info = el('p', 'sub', c.jt_batch_code ? 'ชุดงาน ' + c.jt_batch_code + ' กำลังโหลดความคืบหน้า...' : 'ยังไม่ได้ขอรูปติดตั้งจากสาขา');
+    var c = r.c, box = el('section', 'agcard'), info = el('p', 'sub', c.jt_batch_code ? 'ชุดงาน ' + c.jt_batch_code + ' กำลังโหลดความคืบหน้า...' : 'ยังไม่ได้ขอรูปติดตั้งจากสาขา');
     box.appendChild(el('h3', '', 'รูปติดตั้งจากสาขา')); box.appendChild(info);
     if (c.jt_batch_code) {
       api('install_status', { kind: r.kind, id: c.id }).then(function (d) {
