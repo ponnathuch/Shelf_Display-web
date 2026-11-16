@@ -1771,12 +1771,26 @@
           st.textContent = ''; act.textContent = ''; list.textContent = '';
           if (draft) { st.appendChild(el('span', 'chip warn', 'ร่าง ยังไม่ยืนยัน')); if (d.can_edit) act.appendChild(confirmBtn(rows)); }
           else st.appendChild(el('span', 'sub', rows.length ? 'ยืนยันแล้ว ' + rows.length + ' รายการ' : 'ยังไม่มีราคาของปีนี้'));
+          if (d.can_edit) { if (act.firstChild) act.appendChild(document.createTextNode(' ')); act.appendChild(nextBtn()); }
           [['shelf', 'ชั้นวาง'], ['other', 'รายการอื่น (สื่อ อบรม ชั้นของเวนเดอร์)']].forEach(function (g) {
             var part = rows.filter(function (x) { return x.kind === g[0]; }); if (!part.length && g[0] === 'shelf') return;
             list.appendChild(el('h3', 'sec', g[1]));
             part.forEach(function (x) { list.appendChild(rateRow(x)); });
             if (g[0] === 'other' && d.can_edit) list.appendChild(newRow(draft));
           });
+        }
+        // next year's card = a draft copy of the latest year, edited and confirmed like any draft
+        function nextBtn() {
+          var last = Math.max.apply(null, d.rates.map(function (x) { return x.year; })), y = last + 1;
+          var b = button('เริ่มตารางราคาปี ' + y, '', function () {
+            if (!confirm('คัดลอกราคาปี ' + last + ' ทั้งหมดเป็นร่างของปี ' + y + ' แล้วค่อยแก้ราคาและกดยืนยัน?')) return;
+            b.disabled = true;
+            api('rates_copy', { year: y }).then(function (r) { rateYear = y; show('เริ่มตารางราคาปี ' + y + ' แล้ว (ร่าง ' + r.copied + ' รายการ) แก้ราคาแล้วกดยืนยัน', 'ok'); load(); })
+              .catch(function (e) { b.disabled = false; show(e.code === 'rate_exists' ? 'ปี ' + y + ' มีราคาอยู่แล้ว' : e.message, 'err'); });
+          });
+          // nothing to copy from, or the latest year is still a draft: confirm it before starting the next
+          if (!isFinite(last) || d.rates.some(function (x) { return x.year === last && x.draft; })) b.hidden = true;
+          return b;
         }
         function confirmBtn(rows) {
           return button('ยืนยันราคาปี ' + rateYear, '', function () {
