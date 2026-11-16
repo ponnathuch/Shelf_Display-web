@@ -289,6 +289,16 @@
   .invside .shelfpick { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
   .invside .shelfpick select.input { width: auto; min-height: 0; padding: var(--space-0) var(--space-1); }
   .invside .shelfpick small { flex-basis: 100%; }
+  .invside tr.bkpick .shelfpick { display: flex; gap: var(--space-2); margin-bottom: var(--space-1); }
+  .invside tr.bkpick .shelfpick small { flex-basis: auto; }
+  .invside tr.bkpick .hint { margin: 0; }
+  .stepper { display: inline-flex; align-items: center; border: 1px solid var(--c-line); border-radius: var(--radius-s); background: var(--c-surface); }
+  .stepper output { min-width: 2em; text-align: center; font-weight: 600; }
+  .stepbtn { min-width: 2em; min-height: 2em; border: 0; background: transparent; color: var(--c-brand); font: inherit; font-weight: 600; cursor: pointer; }
+  .stepbtn:disabled { color: var(--c-line); cursor: default; }
+  .stepbtn:focus-visible { outline: var(--outline-w) solid var(--c-brand); outline-offset: calc(-1 * var(--outline-w)); }
+  .invside.bktable { width: auto; }
+  .invside.bktable td, .invside.bktable th { padding-right: var(--space-4); }
   .invside tr.bkpick td { background: var(--c-brand-soft); }
   .invside tr.bkpick .btn { min-height: 0; padding: var(--space-0) var(--space-3); }
   /* Brand view: plain data tables that breathe, scrolling inside their own box */
@@ -2816,38 +2826,46 @@
     if (next && next.classList && next.classList.contains('bkpick')) { next.remove(); btn.setAttribute('aria-expanded', 'false'); return; }
     btn.setAttribute('aria-expanded', 'true');
     var tr = el('tr', 'bkpick'), td = el('td'); td.colSpan = 4; tr.appendChild(td);
-    var rs = runs(p.free), sf = el('select', 'input'), st = el('select', 'input'), note = el('small', 'hint');
-    sf.setAttribute('aria-label', 'ชั้นแรก ' + p.code); st.setAttribute('aria-label', 'ชั้นสุดท้าย ' + p.code);
+    var rs = runs(p.free), min = p.top_n || 1, note = el('small', 'hint');
+    function end(k) { return rs.filter(function (r) { return k >= r[0] && k <= r[1]; })[0][1]; }
+    function low(k) { return Math.min(k === 1 ? min : k, end(k)); } // shelf 1 brings the sign and the rate card top N
     // shelf 1 comes with the sign: not offered while someone else rents the sign alone
-    p.free.filter(function (k) { return k !== 1 || p.sign_free; }).forEach(function (k) { var o = el('option', '', String(k)); o.value = k; sf.appendChild(o); });
-    function fillTo() {
-      var a = Number(sf.value), run = rs.filter(function (r) { return a >= r[0] && a <= r[1]; })[0], keep = Number(st.value);
-      st.textContent = '';
-      for (var k = a; k <= run[1]; k++) { var o = el('option', '', String(k)); o.value = k; st.appendChild(o); }
-      st.value = keep >= a && keep <= run[1] ? keep : run[1];
-      tell();
+    var starts = p.free.filter(function (k) { return k !== 1 || p.sign_free; });
+    if (!starts.length) { note.textContent = 'ชั้นที่ว่างมีแค่ชั้น 1 แต่ป้ายหัวชั้นมีคนเช่าอยู่ จองไม่ได้'; td.appendChild(note); row.parentNode.insertBefore(tr, row.nextSibling); return; }
+    var a = starts.filter(function (k) { return k !== 1 || end(1) >= min; })[0] || starts[0], z = low(a);
+    function step(name, move) {
+      var w = el('span', 'stepper'), dn = el('button', 'stepbtn', '−'), out = el('output'), up = el('button', 'stepbtn', '+');
+      dn.type = up.type = 'button'; dn.setAttribute('aria-label', name + ' ลดลง'); up.setAttribute('aria-label', name + ' เพิ่มขึ้น');
+      out.setAttribute('aria-label', name); out.setAttribute('aria-live', 'polite');
+      dn.onclick = function () { move(-1); }; up.onclick = function () { move(1); };
+      w.appendChild(dn); w.appendChild(out); w.appendChild(up); return { w: w, dn: dn, up: up, out: out };
     }
-    function tell() {
-      var a = Number(sf.value), z = Number(st.value);
-      note.textContent = (a === 1 && z === p.shelves ? 'ทั้งตู้ ' + p.shelves + ' ชั้น รวมป้ายหัวชั้น' : a === 1 ? 'รวมป้ายหัวชั้น · เริ่มชั้น 1 ต้องเช่าอย่างน้อยตามขั้นต่ำชั้นบนของ Rate card' : 'ไม่รวมป้ายหัวชั้น (ป้ายไปกับคนที่เช่าชั้น 1)') +
-        (!p.sign_free && p.free.indexOf(1) !== -1 ? ' · ป้ายหัวชั้นมีคนเช่าอยู่ จึงเลือกชั้น 1 ไม่ได้' : '');
-    }
-    sf.onchange = fillTo; st.onchange = tell;
-    var box = el('div', 'shelfpick');
-    box.appendChild(document.createTextNode('ชั้น ')); box.appendChild(sf); box.appendChild(document.createTextNode(' ถึง ')); box.appendChild(st);
+    var A = step('ชั้นแรก ' + p.code, function (d) {
+      var i = starts.indexOf(a) + d; if (i < 0 || i >= starts.length) return;
+      a = starts[i]; z = Math.max(low(a), Math.min(z, end(a))); paint();
+    });
+    var Z = step('ชั้นสุดท้าย ' + p.code, function (d) { z = Math.max(low(a), Math.min(end(a), z + d)); paint(); });
     var go = button('ใส่ตะกร้า', '', function () {
-      var a = Number(sf.value), z = Number(st.value);
       bkAdd(p, go, a === 1 && z === p.shelves ? { whole: true } : { shelf_from: a, shelf_to: z }, function () { tr.remove(); btn.textContent = 'อยู่ในตะกร้า'; btn.disabled = true; });
     });
-    box.appendChild(go); td.appendChild(box); td.appendChild(note);
-    if (!sf.options.length) { box.hidden = true; note.textContent = 'ชั้นที่ว่างมีแค่ชั้น 1 แต่ป้ายหัวชั้นมีคนเช่าอยู่ จองไม่ได้'; }
-    else fillTo();
+    function paint() {
+      var i = starts.indexOf(a), bad = a === 1 && z < min;
+      A.out.textContent = a; Z.out.textContent = z;
+      A.dn.disabled = i === 0; A.up.disabled = i === starts.length - 1; Z.dn.disabled = z <= low(a); Z.up.disabled = z >= end(a); go.disabled = bad;
+      note.textContent = bad ? 'เริ่มชั้น 1 ต้องเช่าอย่างน้อย ' + min + ' ชั้น (Rate card) แต่ว่างต่อกันแค่ ' + end(1) + ' ชั้น'
+        : (a === 1 && z === p.shelves ? 'ทั้งตู้ ' + p.shelves + ' ชั้น รวมป้ายหัวชั้น' : a === 1 ? 'รวมป้ายหัวชั้น · เริ่มชั้น 1 เช่าอย่างน้อย ' + min + ' ชั้น (Rate card)' : 'ไม่รวมป้ายหัวชั้น (ป้ายไปกับคนที่เช่าชั้น 1)') +
+          (!p.sign_free && p.free.indexOf(1) !== -1 ? ' · ป้ายหัวชั้นมีคนเช่าอยู่ จึงเลือกชั้น 1 ไม่ได้' : '');
+    }
+    var box = el('div', 'shelfpick');
+    box.appendChild(document.createTextNode('ชั้น')); box.appendChild(A.w); box.appendChild(document.createTextNode('ถึง')); box.appendChild(Z.w);
+    box.appendChild(el('small', '', 'จาก ' + p.shelves + ' ชั้น')); box.appendChild(go);
+    td.appendChild(box); td.appendChild(note); paint();
     row.parentNode.insertBefore(tr, row.nextSibling);
-    sf.focus();
+    A.up.disabled ? Z.up.focus() : A.up.focus();
   }
   // onTake (cart only): a Section line gets shelf pickers; picking calls onTake(line, take)
   function bkLineTable(b, onRemove, onTake) {
-    var t = el('table', 'invside'), h = el('thead'), hr = el('tr'), tb = el('tbody');
+    var t = el('table', 'invside bktable'), h = el('thead'), hr = el('tr'), tb = el('tbody');
     ['สาขา', 'จุด', 'ชนิด', 'ที่เช่า', 'เกรด', 'บาท/เดือน', ''].forEach(function (x, i) { var th = el('th', i === 5 ? 'num' : '', x); th.scope = 'col'; hr.appendChild(th); });
     h.appendChild(hr); t.appendChild(h);
     b.lines.forEach(function (l) {
