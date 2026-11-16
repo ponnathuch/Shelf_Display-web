@@ -510,6 +510,7 @@
 
   var ROLE_TH = { ADMIN: 'ผู้ดูแลระบบ', APPROVER: 'ผู้อนุมัติสื่อ', REGISTRANT: 'ผู้ลงทะเบียน', STAFF: 'สาขา', WAREHOUSE: 'คลัง' };
   var ERR = {
+    has_dp: 'ลบงวดหรือกิจกรรมนี้ไม่ได้ เพราะตั้ง DP หรือออกใบแจ้งหนี้แล้ว',
     period_mismatch: 'ตะกร้าเป็นช่วงวันอื่นอยู่', empty: 'ตะกร้ายังว่างอยู่', extended: 'ใบจองนี้ต่อเวลาไปแล้ว 1 ครั้ง ต่ออีกไม่ได้',
     state: 'สถานะของรายการนี้เปลี่ยนไปแล้ว โหลดหน้าใหม่แล้วลองอีกครั้ง', cart_not_empty: 'ตะกร้ายังมีรายการอยู่', too_many: 'ตะกร้าเต็มแล้ว (ไม่เกิน 300 จุด)',
     'missing:purchase': 'ยังไม่ได้เลือก Med หรือ Nonmed ของ TTA ใหม่', 'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
@@ -2825,7 +2826,7 @@
     var at = x.branch ? x.branch + ' ' + x.code + ' ' : '';
     return x.rule === 'min_months' ? at + 'เช่าขั้นต่ำ ' + x.months + ' เดือน' : x.rule === 'size' ? at + 'ไม่ขายในสาขาขนาด ' + x.size
       : x.rule === 'off_sale' ? at + 'ปิดขายในตารางราคา' : x.rule === 'no_price' ? at + 'ยังไม่มีราคาในตาราง'
-        : x.rule === 'draft' ? 'ตารางราคาปี ' + (x.year + 543) + ' ยังเป็นร่าง' : at + x.rule;
+        : x.rule === 'draft' ? 'ตารางราคาปี ' + (x.year + 543) + ' ยังเป็นร่าง' : x.rule === 'clash' ? at + 'ชนกับ ' + x.by + ' ที่ส่งพร้อมกัน' : at + x.rule;
   }
   function bkIssues(b) { return Array.isArray(b.rule_issues) ? b.rule_issues : []; }
   var BK_ST = { held: ['กันไว้ รอยืนยัน', 'warn'], booked: ['จองแล้ว', 'ok'], released: ['หมดเวลากัน', ''], cancelled: ['ยกเลิกแล้ว', ''], rejected: ['ส่งกลับ', 'err'] };
