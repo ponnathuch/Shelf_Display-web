@@ -161,6 +161,13 @@
   .cform .grid { margin-bottom: var(--space-4); }
   .cform label.f { margin-bottom: var(--space-4); }
   .cform fieldset.card { margin: var(--space-4) 0; }
+  .cform fieldset.formpart { border: 1px solid var(--c-line-strong); background: var(--c-surface-2); }
+  .formpart legend { display: flex; align-items: center; gap: var(--space-2); }
+  .formpart .partno { display: inline-flex; align-items: center; justify-content: center; min-width: 1.75em; height: 1.75em; border-radius: var(--radius-pill);
+    background: var(--c-brand); color: var(--c-on-brand); font-size: var(--fs-s); }
+  .formpart .specrow { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--radius-s); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2); }
+  .formpart .specno { flex-basis: 100%; }
+  .formpart .specrow label.f.wide { flex: 1 1 100%; }
   .trow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--c-line); }
   .trow > input[type=text] { flex: 1 1 var(--size-cell); min-width: var(--size-cell); }
   .trow > .cap { width: var(--size-cell); }
@@ -5039,16 +5046,18 @@
     var name = fld('ชื่อ/คำอธิบาย', s && s.name), cat = fld('หมวดสินค้า', s && s.category);
     var kind = sel('ชนิด', [['header', 'หัวชั้น'], ['glass', 'กระจกหน้าร้าน'], ['temp', 'ป้ายสื่อชั่วคราว (ผูกแคมเปญสื่อ)'], ['hang', 'ป้ายแขวน (เช่าขั้นต่ำ 3 เดือน)'], ['front', 'ป้ายหน้าร้าน (Storefront)']], s ? s.kind : 'glass');
     var tenant = sel('ผู้ใช้ตำแหน่ง', [['icare', 'iCare ติดเอง'], ['rent', 'ให้ซัพพลายเออร์เช่า']], s ? s.tenant : 'icare');
-    var note = fld('หมายเหตุ', s && s.note); d.appendChild(g);
+    var note = fld('หมายเหตุ', s && s.note);
+    var info = formPart(1, 'ข้อมูลตำแหน่ง', 'รหัส หมวดสินค้า และใครใช้ตำแหน่งนี้'); info.appendChild(g); d.appendChild(info);
     // sign specs of this place: edit one size, add or remove a line
     var specs = ((s && s.specs) || []).map(function (x) { return { sign_type: x.sign_type || '', sign_text: x.sign_text || '', material: x.material || '', qty: x.qty == null ? '' : x.qty, width_cm: x.width_cm == null ? '' : x.width_cm, height_cm: x.height_cm == null ? '' : x.height_cm, size_text: x.size_text || '', note: x.note || '' }; });
     var specBox = el('div');
     function paintSpecs() {
       specBox.textContent = '';
       specs.forEach(function (x, i) {
-        var r = el('div', 'brow');
-        [['sign_type', 'ประเภทป้าย', 'text'], ['sign_text', 'ข้อความบนป้าย', 'text'], ['material', 'วัสดุ', 'text'], ['width_cm', 'กว้าง (cm)', 'number'], ['height_cm', 'สูง (cm)', 'number'], ['qty', 'จำนวน', 'number'], ['note', 'หมายเหตุ', 'text']].forEach(function (f) {
-          var l = el('label', 'f'); l.appendChild(el('span', 't', f[1])); var inp = el('input', 'input'); inp.type = f[2]; if (f[2] === 'number') inp.min = 0; inp.value = x[f[0]];
+        var r = el('div', 'brow specrow');
+        r.appendChild(el('b', 'specno', 'ป้าย ' + (i + 1)));
+        [['sign_text', 'ข้อความบนป้าย', 'text'], ['sign_type', 'ประเภทป้าย', 'text'], ['material', 'วัสดุ', 'text'], ['width_cm', 'กว้าง (cm)', 'number'], ['height_cm', 'สูง (cm)', 'number'], ['qty', 'จำนวน', 'number'], ['note', 'หมายเหตุ', 'text']].forEach(function (f) {
+          var l = el('label', f[0] === 'sign_text' ? 'f wide' : 'f'); l.appendChild(el('span', 't', f[1])); var inp = el('input', 'input'); inp.type = f[2]; if (f[2] === 'number') inp.min = 0; inp.value = x[f[0]];
           inp.oninput = function () { x[f[0]] = inp.value; }; l.appendChild(inp); r.appendChild(l);
         });
         if (x.size_text) r.appendChild(el('span', 'sub', 'ขนาดเดิมในไฟล์: ' + x.size_text));
@@ -5057,9 +5066,10 @@
       });
       if (!specs.length) specBox.appendChild(el('p', 'sub', 'ยังไม่มีรายการป้าย'));
     }
-    { d.appendChild(el('h3', '', 'รายการป้ายของตำแหน่งนี้')); paintSpecs(); d.appendChild(specBox); d.appendChild(button('+ เพิ่มรายการป้าย', 'alt', function () { specs.push({ sign_type: '', sign_text: '', material: '', qty: 1, width_cm: '', height_cm: '', size_text: '', note: '' }); paintSpecs(); })); }
+    { var sbox = formPart(2, 'ป้ายที่ติดตำแหน่งนี้', 'ข้อความ วัสดุ และขนาดของป้ายที่พิมพ์ติดจริง หลายชิ้นใส่ทีละรายการ เช่น ป้ายหัวชั้น และป้ายขอบชั้น'); d.appendChild(sbox);
+      paintSpecs(); sbox.appendChild(specBox); sbox.appendChild(button('+ เพิ่มรายการป้าย', 'alt', function () { specs.push({ sign_type: '', sign_text: '', material: '', qty: 1, width_cm: '', height_cm: '', size_text: '', note: '' }); paintSpecs(); })); }
     var shelf = s && (s.kind === 'header' || s.fixture) ? shelfEditor(d, s) : null;
-    if (!s) d.appendChild(el('p', 'hint', 'ชั้นวางสำหรับขาย: บันทึกตำแหน่งก่อน แล้วกด "แก้ไข" อีกครั้งเพื่อกำหนดประเภทและจำนวนชั้น'));
+    if (!s) d.appendChild(formPart(3, 'ชั้นวางสำหรับขาย', 'บันทึกตำแหน่งก่อน แล้วกด "แก้ไข" อีกครั้งเพื่อกำหนดประเภทและจำนวนชั้น'));
     var al = el('label', 'check'), act = el('input'); act.type = 'checkbox'; act.checked = s ? s.active : true; al.appendChild(act); al.appendChild(document.createTextNode('ใช้งานอยู่ (ติ๊กออก = เลิกใช้)')); d.appendChild(al);
     var row = el('div', 'row');
     row.appendChild(button('บันทึก', '', function () {
@@ -5091,7 +5101,7 @@
   // The shelf part of the place form: fixture type (by code or chosen), number of shelves, slots per shelf, checked or not.
   function shelfEditor(d, s) {
     var types = flo.data.types || [], fx = s.fixture;
-    var box = el('fieldset', 'card'); box.appendChild(el('legend', '', 'ชั้นวางสำหรับขาย'));
+    var box = formPart(3, 'ชั้นวางสำหรับขาย', 'ประเภทและจำนวนชั้นที่ใช้คิดราคาและจองชั้น');
     var g = el('div', 'grid');
     var tl = el('label', 'f'); tl.appendChild(el('span', 't', 'ประเภทชั้นวาง')); var ts = el('select', 'input');
     var auto = el('option', '', fx && fx.by_prefix ? 'ตามรหัสพื้นที่ (' + invName(fx.type_name) + ')' : 'ตามรหัสพื้นที่ (ไม่ใช่ชั้นวาง)'); auto.value = ''; ts.appendChild(auto);
@@ -5202,6 +5212,13 @@
       row.appendChild(go2); row.appendChild(button('ยกเลิก', 'alt', function () { renderFloor(holder); })); d.appendChild(row);
       holder.textContent = ''; holder.appendChild(d);
     }).catch(function (e) { show(e.message, 'err'); });
+  }
+  // one numbered part of the place form; the parts look apart so staff know which box they are filling
+  function formPart(n, title, hint) {
+    var f = el('fieldset', 'card formpart'), lg = el('legend');
+    lg.appendChild(el('span', 'partno', String(n))); lg.appendChild(document.createTextNode(title)); f.appendChild(lg);
+    if (hint) f.appendChild(el('p', 'hint', hint));
+    return f;
   }
   // the words on a place's signs, each once (a Section with a header and shelf strips usually has one)
   function signWords(s) {
