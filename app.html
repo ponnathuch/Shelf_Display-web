@@ -3706,8 +3706,8 @@
   var CON_KIND = { cashier: 'ชั้นแคชเชียร์', sign: 'พื้นที่', deal: 'รายการอื่น' };
   function contracts() {
     $('bar').hidden = true; show(''); $('view').textContent = ''; loading(); formBack = null;
-    Promise.all([api('cashier_packages'), api('cashier_list'), api('sign_list'), api('agreement_list')]).then(guard(function (r) {
-      done(); noteAfterLoad(); cash.packages = r[0].packages; cash.contracts = r[1].contracts.map(normEnd); cash.canEdit = r[1].can_edit;
+    Promise.all([api('cashier_packages'), api('cashier_list'), api('sign_list'), api('agreement_list'), api('money_queue').catch(function () { return null; })]).then(guard(function (r) {
+      done(); noteAfterLoad(); cash.packages = r[0].packages; cash.contracts = r[1].contracts.map(normEnd); cash.canEdit = r[1].can_edit; con.mq = r[4];
       con.edit = { cashier: r[1].can_edit, sign: r[2].can_edit }; con.rows = []; con.canPay = r[3].can_pay === true; con.canApprove = r[3].can_approve === true; con.ags = r[3].agreements;
       var agById = {}; con.ags.forEach(function (a) { agById[a.id] = a; });
       cash.contracts.forEach(function (c) {
@@ -3766,6 +3766,7 @@
     k.appendChild(kpiCard('ค่าเช่าต่อเดือนรวม', baht(income), 'บาท (รายการเช่าที่ใช้งานอยู่ ไม่นับที่ไม่เก็บเงิน)', '', go2('live')));
     k.appendChild(kpiCard('แบรนด์ที่มีรายการเช่า', Object.keys(brands).length, 'ที่ใช้งานอยู่ตอนนี้', '', go2('live')));
     v.appendChild(k);
+    if (con.mq) moneyQueue(v, con.mq);
     var bar = el('div', 'toolbar'), seg = el('div', 'seg'), tseg = el('div', 'seg');
     seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'กรองตามสถานะ'); tseg.setAttribute('role', 'group'); tseg.setAttribute('aria-label', 'กรองตามประเภท');
     [['wait', 'รออนุมัติ'], ['live', 'ใช้งานอยู่'], ['soon', 'ใกล้หมด'], ['next', 'ยังไม่เริ่ม'], ['ended', 'หมดอายุ'], ['cancelled', 'ยกเลิก']].forEach(function (t) {
@@ -3820,10 +3821,57 @@
   }
   // Open the sign form with no floor plan loaded: it fetches the places of the branches it needs.
   function openSignFromContracts(c, renew) { flo.branch = ''; flo.data = null; formBack = contracts; signForm($('view'), c, undefined, renew); }
+  // Booking step 4 (accounting 2026-11-16): shelf rent (income group 1) is paid in instalments with one DP each; each activity
+  // (income group 2: training, marketing) has one DP; then one invoice per DP. Only TTAs approved from 16 Nov 2026.
+  function moneyQueue(v, q) {
+    var n = q.dp.length + q.invoice.length + q.no_dues.length;
+    if (!n && !q.can_dp && !q.can_invoice) return;
+    var f = fold('งานการเงินของ TTA' + (n ? ' (' + n + ')' : ''), 'ตั้ง DP ใน NAV และออกใบแจ้งหนี้ ทีละงวดค่าเช่าและทีละกิจกรรม', n > 0), fb = f.body; v.appendChild(f.node);
+    if (!n) { fb.appendChild(el('p', 'empty-note', 'ไม่มีงานค้าง')); return; }
+    function reload(msg) { api('money_queue').then(function (x) { con.mq = x; show(msg, 'ok'); renderContracts(); }).catch(function (e) { show(e.message, 'err'); }); }
+    function who(x) { return (x.tta_no || 'TTA ยังไม่มีเลข') + ' · ' + x.brand; }
+    function table(title, hint, rows, cols, act) {
+      fb.appendChild(el('h3', '', title + ' (' + rows.length + ')')); if (hint) fb.appendChild(el('p', 'hint', hint));
+      if (!rows.length) { fb.appendChild(el('p', 'empty-note', 'ไม่มีงานค้าง')); return; }
+      var t = el('table', 'invside'), h = el('thead'), hr = el('tr'), tb = el('tbody');
+      cols.concat(['']).forEach(function (c) { var th = el('th', '', c[0]); th.scope = 'col'; hr.appendChild(th); }); h.appendChild(hr); t.appendChild(h);
+      rows.forEach(function (x) { var tr = el('tr'); cols.forEach(function (c) { var td = el('td'); c[1](td, x); tr.appendChild(td); }); var ta = el('td'); act(ta, x); tr.appendChild(ta); tb.appendChild(tr); });
+      t.appendChild(tb); var w = el('div', 'slotwrap'); w.appendChild(t); fb.appendChild(w);
+    }
+    function txt(get) { return function (td, x) { td.textContent = get(x); }; }
+    function open(td, x) {
+      var b = el('button', 'linkbtn', who(x)); b.type = 'button'; b.onclick = function () { con.sel = 'a' + x.id; con.view = cashState({ status: 'active', start_date: x.start_date, end_date: x.end_date }); con.type = 'all'; con.what = 'all'; con.pay = 'all'; con.team = 'all'; con.needle = ''; renderContracts(); }; td.appendChild(b);
+    }
+    function numberBox(td, x, label, action, done) {
+      var i = el('input', 'input'); i.type = 'text'; i.maxLength = 60; i.setAttribute('aria-label', label + ' ' + who(x) + ' ' + partName(x.part));
+      var b = button('บันทึก', '', function () {
+        if (!i.value.trim()) { badFields([[i, 'ใส่' + label]]); return; }
+        b.disabled = true;
+        api(action, { kind: x.part.kind, id: x.part.id, no: i.value.trim() }).then(function () { reload(done + ' ' + i.value.trim() + ' แล้ว'); })
+          .catch(function (e) { b.disabled = false; show(e.code === 'no_dp' ? 'งวดนี้ยังไม่ได้ตั้ง DP' : e.message, 'err'); });
+      });
+      var w = el('div', 'row'); w.appendChild(i); w.appendChild(b); td.appendChild(w);
+    }
+    function partName(p) { return p.kind === 'due' ? 'ค่าเช่าพื้นที่ งวด ' + thDate(p.on) : 'กิจกรรม ' + p.label; }
+    var due = function (td, x) {
+      var p = x.part; td.appendChild(el('b', '', partName(p)));
+      td.appendChild(el('small', '', (p.kind === 'due' ? 'รายได้หมวด 1 แบ่งงวดได้' : 'รายได้หมวด 2 หนึ่ง DP') + (p.amount != null ? ' · ' + baht(p.amount) + ' บาท' : '') + (p.kind === 'item' && p.on ? ' · ' + thDate(p.on) : '')));
+    };
+    var vend = txt(function (x) { return (x.vendor || '-') + (x.vendor_no ? ' (' + x.vendor_no + ')' : ''); });
+    if (q.can_dp) table('รอตั้ง DP ใน NAV', 'ตั้ง DP ภายใน 30 วันหลังอนุมัติ TTA ค่าเช่าพื้นที่ (หมวด 1) หนึ่ง DP ต่อหนึ่งงวด กิจกรรม (หมวด 2) หนึ่ง DP ต่อหนึ่งกิจกรรม', q.dp,
+      [['TTA', open], ['เวนเดอร์ (เลข NAV)', vend], ['รายการ', due], ['อนุมัติมาแล้ว', function (td, x) { td.appendChild(el('span', 'chip ' + (x.days >= 30 ? 'err' : x.days >= 20 ? 'warn' : ''), x.days + ' วัน')); }]],
+      function (td, x) { numberBox(td, x, 'เลข DP', 'due_dp_set', 'บันทึก DP'); });
+    if (q.can_invoice) table('รอออกใบแจ้งหนี้', 'หนึ่งใบแจ้งหนี้ต่อหนึ่ง DP ออกหลังตั้ง DP แล้ว', q.invoice,
+      [['TTA', open], ['เวนเดอร์ (เลข NAV)', vend], ['รายการ', function (td, x) { due(td, x); if (x.part.on && x.part.on <= addDays(today(), 7)) td.appendChild(el('span', 'chip warn', x.part.on < today() ? 'เลยกำหนด' : 'ใกล้ครบกำหนด')); }],
+        ['DP', txt(function (x) { return x.part.dp_no; })]],
+      function (td, x) { numberBox(td, x, 'เลขใบแจ้งหนี้', 'due_invoice_set', 'บันทึกใบแจ้งหนี้'); });
+    if (q.no_dues.length) table('ค่าเช่าพื้นที่ยังไม่ได้แบ่งงวด', 'ผู้อนุมัติ TTA หรือการเงินใส่งวดค่าเช่าใน TTA ก่อน (หัวข้อ การรับเงินและงวด) จึงตั้ง DP ของค่าเช่าได้ กิจกรรมตั้ง DP ได้เลย', q.no_dues,
+      [['TTA', open], ['เวนเดอร์ (เลข NAV)', vend], ['อนุมัติมาแล้ว', txt(function (x) { return x.days + ' วัน'; })]], function () {});
+  }
   // Vendor money of one agreement (payments received and dues expected): approvers and finance only; the server sends it to no one else
   function agPayPanel(p, a) {
     var fold = el('details', 'hist paybox'), box = el('section', 'boxscroll'), list = (a.payments || []).map(function (x) { return { dp_no: x.dp_no || '', received_on: x.received_on || '', amount: x.amount == null ? '' : x.amount, memo_no: x.memo_no || '', note: x.note || '' }; });
-    var dues = (a.dues || []).map(function (x) { return { id: x.id, due_on: x.due_on || '', amount: x.amount == null ? '' : x.amount, note: x.note || '' }; });
+    var dues = (a.dues || []).map(function (x) { return { id: x.id, due_on: x.due_on || '', amount: x.amount == null ? '' : x.amount, note: x.note || '', dp_no: x.dp_no || '', invoice_no: x.invoice_no || '' }; });
     var stSel = el('select', 'input'); Object.keys(PAY_TH).forEach(function (k) { var o = el('option', '', PAY_TH[k]); o.value = k; if (k === (a.pay_status || 'pending')) o.selected = true; stSel.appendChild(o); });
     box.appendChild(el('h3', '', 'การรับเงินของ TTA (ผู้อนุมัติ TTA และการเงิน)')); var sl = el('label', 'f'); sl.appendChild(el('span', 't', 'สถานะ')); sl.appendChild(stSel); box.appendChild(sl);
     box.appendChild(el('p', 'sub', 'รับแล้ว ' + baht(a.received || 0) + ' บาท' + (a.paid_pct != null ? ' (' + a.paid_pct + '% ของมูลค่ารวม)' : '')));
@@ -3848,7 +3896,8 @@
     var addRow = el('div', 'row');
     addRow.appendChild(button('+ เพิ่มรายการรับเงิน', 'alt', function () { list.push({ dp_no: '', received_on: '', amount: '', memo_no: '', note: '' }); paint(); }));
     box.appendChild(addRow);
-    box.appendChild(el('h3', '', 'งวดที่ต้องได้รับ'));
+    box.appendChild(el('h3', '', 'งวดค่าเช่าพื้นที่ (รายได้หมวด 1)'));
+    box.appendChild(el('p', 'hint', 'ค่าเช่าชั้นวางแบ่งจ่ายเป็นงวดได้ หนึ่งงวดตั้ง DP หนึ่งเลข กิจกรรม (รายได้หมวด 2) ไม่ต้องใส่ที่นี่ แต่ละกิจกรรมตั้ง DP ของตัวเองในคิวงานการเงิน'));
     var dueEl = el('div');
     function paintDues() {
       dueEl.textContent = '';
@@ -3856,6 +3905,7 @@
         var r = el('div', 'brow');
         inputs(r, x, [['due_on', 'วันครบกำหนด', 'date'], ['amount', 'ยอด (บาท)', 'number'], ['note', 'หมายเหตุ', 'text']], paintDues);
         if (x.due_on && x.due_on < today() && stSel.value !== 'paid') r.appendChild(el('span', 'chip err', 'เลยกำหนด'));
+        if (x.dp_no) r.appendChild(el('span', 'chip', 'DP ' + x.dp_no)); if (x.invoice_no) r.appendChild(el('span', 'chip ok', 'ใบแจ้งหนี้ ' + x.invoice_no));
         r.appendChild(button('ลบงวด', 'danger', function () { dues.splice(i, 1); paintDues(); }));
         dueEl.appendChild(r);
       });
@@ -3930,7 +3980,7 @@
     vendor.addEventListener('input', vendorCheck);
     navAttach(d, brand, vendor, function (r) { nav = r; vendorCheck(); });
     // other items (design v3 Q35: media, training, fees): no place, only an amount and a period, counted in the value
-    var items = (a.items || []).map(function (x) { return { item: x.item, amount: x.amount == null ? '' : Number(x.amount), start_date: x.start_date || '', end_date: x.end_date || '', rate_id: x.rate_id || null, note: x.note || '' }; });
+    var items = (a.items || []).map(function (x) { return { id: x.id, item: x.item, amount: x.amount == null ? '' : Number(x.amount), start_date: x.start_date || '', end_date: x.end_date || '', rate_id: x.rate_id || null, note: x.note || '' }; });
     var ib = el('section', 'boxscroll'); ib.appendChild(el('h3', '', 'รายการอื่น (สื่อ อบรม ค่าธรรมเนียม)'));
     ib.appendChild(el('p', 'hint', 'รายการที่ไม่มีตำแหน่ง มีแค่ยอดเงินและช่วงเวลา นับรวมในมูลค่า TTA เลือกจากตารางราคาของปีที่เริ่ม TTA หรือพิมพ์ชื่อเอง ราคาที่ใส่ให้แก้ได้'));
     var dl = el('datalist'); dl.id = 'ag-items-' + (a.id || 'new'); ib.appendChild(dl);
@@ -4000,7 +4050,7 @@
       });
       if (ibad.length) { badFields(ibad); return; }
       save.disabled = true;
-      api('agreement_save', { items: used.map(function (x) { return { item: x.item, amount: Number(x.amount), start_date: x.start_date || null, end_date: x.end_date || null, rate_id: x.rate_id, note: x.note || null }; }), id: a.id || undefined, purchase: pur.value || undefined, tta_no: tta.value, vendor: vendor.value, vendor_no: vendorNo(), brand: brand.value, start_date: from.value, end_date: to.value, total: total.value === '' ? null : Number(total.value), designated: dz.getCodes(), note: note.value })
+      api('agreement_save', { items: used.map(function (x) { return { id: x.id, item: x.item, amount: Number(x.amount), start_date: x.start_date || null, end_date: x.end_date || null, rate_id: x.rate_id, note: x.note || null }; }), id: a.id || undefined, purchase: pur.value || undefined, tta_no: tta.value, vendor: vendor.value, vendor_no: vendorNo(), brand: brand.value, start_date: from.value, end_date: to.value, total: total.value === '' ? null : Number(total.value), designated: dz.getCodes(), note: note.value })
         .then(function (r) { afterNote = r.tta_dup ? ['บันทึก TTA แล้ว แต่เลข TTA นี้ซ้ำกับ TTA อื่น ตรวจเลขอีกครั้ง', 'err'] : ['บันทึก TTA แล้ว', 'ok']; contracts(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', contracts)); d.appendChild(row); v.appendChild(d);
@@ -4022,7 +4072,7 @@
     var dl = el('dl', 'facts one');
     fact(dl, 'เลข TTA', a.tta_no); fact(dl, 'เวนเดอร์', a.vendor); fact(dl, 'ฝ่าย', PURCHASE[a.purchase] || 'ยังไม่ระบุ Med/Nonmed'); fact(dl, 'ช่วงเวลา', a.start_date ? thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) : '');
     fact(dl, 'มูลค่ารวม', a.total != null ? baht(a.total) + ' บาท' : ''); fact(dl, 'ผู้ลงทะเบียน', a.registrant_name);
-    fact(dl, 'รายการอื่น', (a.items || []).map(function (x) { return x.item + ' ' + baht(x.amount) + ' บาท' + (x.start_date ? ' (' + thDate(x.start_date) + (x.end_date ? ' ถึง ' + thDate(x.end_date) : '') + ')' : ''); }).join(', '));
+    fact(dl, 'รายการอื่น', (a.items || []).map(function (x) { return x.item + ' ' + baht(x.amount) + ' บาท' + (x.start_date ? ' (' + thDate(x.start_date) + (x.end_date ? ' ถึง ' + thDate(x.end_date) : '') + ')' : '') + (x.dp_no ? ' · DP ' + x.dp_no : '') + (x.invoice_no ? ' · ใบแจ้งหนี้ ' + x.invoice_no : ''); }).join(', '));
     fact(dl, 'อนุมัติโดย', a.approved_by && a.approved_by !== 'migrated' ? a.approved_by + (a.approved_at ? ' · ' + thDate(bkk(a.approved_at).slice(0, 10)) : '') : '');
     box.appendChild(dl);
     var chips = el('div', 'chips');
@@ -5300,7 +5350,7 @@
     var v = $('view'); v.textContent = '';
     var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'หมวดการตั้งค่า');
     // media settings for media approvers, cashier/floor settings for contract approvers
-    var tabs = [['media', 'สื่อ', isApprover()], ['cashier', 'ชั้นแคชเชียร์', isContract()], ['floor', 'ผังร้าน', isContract()], ['events', 'กิจกรรมในร้าน', isContract()]].filter(function (t) { return t[2]; });
+    var tabs = [['media', 'สื่อ', isApprover()], ['cashier', 'ชั้นแคชเชียร์', isContract()], ['floor', 'ผังร้าน', isContract()], ['events', 'กิจกรรมในร้าน', isContract()], ['money', 'TTA และการเงิน', isContract()]].filter(function (t) { return t[2]; });
     if (!tabs.some(function (t) { return t[0] === setTab; })) setTab = tabs[0][0];
     tabs.forEach(function (t) {
       var x = el('button', '', t[1]); x.type = 'button'; x.setAttribute('aria-pressed', String(setTab === t[0]));
@@ -5308,6 +5358,11 @@
     });
     var tb = el('div', 'toolbar'); tb.appendChild(seg); v.appendChild(tb);
     if (setTab === 'cashier') { cashierSettings(v); return; }
+    if (setTab === 'money') {
+      editorsFold(v, 'ผู้ตั้ง DP ใน NAV', 'ใครเห็นคิวรอตั้ง DP และใส่เลข DP ได้', 'dp_setters', 'dp_setters_save', 'ผู้ดูแลและผู้อนุมัติ TTA ใส่ได้เสมอ คนที่เลือกไว้ที่นี่เห็นคิว "รอตั้ง DP ใน NAV" ในหน้า TTA และได้ LINE เตือนวันที่ 20 และ 27 หลังอนุมัติ TTA ถ้ายังมีงวดที่ไม่ได้ตั้ง DP');
+      editorsFold(v, 'ผู้ออกใบแจ้งหนี้', 'ใครเห็นคิวรอออกใบแจ้งหนี้และใส่เลขใบแจ้งหนี้ได้', 'invoicers', 'invoicers_save', 'ผู้ดูแล ผู้อนุมัติ TTA และรายชื่อการเงินใน Job Tracker (SHD_FINANCE) ใส่ได้เสมอ เพิ่มคนอื่นได้ที่นี่');
+      return;
+    }
     if (setTab === 'events') { editorsFold(v, 'สิทธิ์แก้ไขกิจกรรมในร้าน', 'ใครลงนัด แก้ ยกเลิก และส่งอีเมลสรุปได้', 'ev_editors', 'ev_editors_save', 'ผู้ดูแลและผู้อนุมัติ TTA แก้ได้เสมอ คนอื่นที่เลือกไว้ที่นี่ลงนัด เลื่อน ยกเลิกนัด แก้รายชื่อบริษัท แก้ข้อมูลสาขา และกดส่งอีเมลสรุปถึงสาขาได้ คนที่ไม่ได้เลือกดูตารางได้อย่างเดียว สาขายังแก้ข้อมูลของสาขาตัวเองได้เหมือนเดิม'); return; }
     if (setTab === 'floor') { editorsFold(v, 'สิทธิ์จัดการผังและรายการเช่าพื้นที่', 'ใครอัปโหลดผัง แก้ตำแหน่ง และจัดการรายการเช่าพื้นที่ได้', 'floor_editors', 'floor_editors_save', 'ผู้ดูแลและผู้อนุมัติ TTA จัดการผังได้เสมอ คนอื่นที่เลือกไว้ที่นี่อัปโหลดผัง นำเข้าไฟล์ Lock section แก้ตำแหน่ง และเพิ่ม/แก้/ยกเลิกรายการเช่าพื้นที่ได้ คนที่ไม่ได้เลือกดูได้อย่างเดียว'); floorBulk(v); spaceSettings(v); branchProfiles(v); priceTable(v); return; }
     var fd = fold('ประเภทตำแหน่งสื่อ', 'เพดานต่อสาขา เพิ่มประเภทใหม่ได้', true), card = fd.body; v.appendChild(fd.node); card.classList.add('tset');
