@@ -454,6 +454,34 @@
   .gapnote { margin: var(--space-3) 0; }
   .lacknote { margin: var(--space-3) 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-s); border: 1px solid var(--c-warn-line); background: var(--c-warn-soft); color: var(--c-warn); font-weight: bold; }
   .conacts { margin: var(--space-2) 0 var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--c-line); }
+  /* "more" menu: the rarely used and the risky actions, out of the main row */
+  .more { position: relative; display: inline-block; }
+  .more > summary { list-style: none; }
+  .more > summary::-webkit-details-marker { display: none; }
+  .more > summary::after { content: ''; display: inline-block; margin-left: var(--space-2); width: var(--space-1); height: var(--space-1);
+    border: solid currentColor; border-width: 0 var(--outline-w) var(--outline-w) 0; transform: translateY(-25%) rotate(45deg); }
+  .more .pop { position: absolute; left: 0; z-index: 20; min-width: min(16rem, calc(100vw - var(--space-6))); margin-top: var(--space-1); padding: var(--space-1);
+    display: grid; gap: var(--space-1); background: var(--c-surface); border: 1px solid var(--c-line-strong); border-radius: var(--radius-m); box-shadow: var(--shadow-1); }
+  .more .pop.end { left: auto; right: 0; }
+  .more .pop .btn { width: 100%; text-align: left; justify-content: flex-start; border-color: transparent; }
+  .more .pop .btn.danger { border-top: 1px solid var(--c-line); border-radius: 0 0 var(--radius-s) var(--radius-s); }
+  /* the TTA of a rental line: one card - title and status, main actions, facts, lines, files, history */
+  .agcard { margin-top: var(--space-4); padding: var(--space-4); border: 1px solid var(--c-line); border-radius: var(--radius-m); background: var(--c-surface-2); }
+  .agcard > .card-head h3 { margin: 0; }
+  .agcard .eyebrow { font-size: var(--fs-xs); color: var(--c-ink-3); }
+  .agcard > .row { margin-top: var(--space-3); }
+  .agcard .facts, .facts.two { margin-top: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(var(--size-fact), 1fr)); }
+  .agsub { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--c-line); }
+  .agsub-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .agsub-head h4 { margin: 0; font-size: var(--fs-m); }
+  .agsub .chips { margin-top: var(--space-2); }
+  .filelist { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-1); }
+  .filelist li { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); background: var(--c-surface);
+    border: 1px solid var(--c-line); border-radius: var(--radius-s); }
+  .filelist .fmain { flex: 1 1 auto; min-width: 0; }
+  .filelist .fmain .linkbtn { min-height: var(--size-icon); padding: 0; text-align: left; overflow-wrap: anywhere; }
+  .filelist small { display: block; color: var(--c-ink-3); }
+  .filelist li > .linkbtn { flex: none; white-space: nowrap; }
   .paybox > .boxscroll { margin-top: 0; }
   .fieldbad > .t { color: var(--c-err); font-weight: bold; }
   .fielderr { display: block; margin-top: var(--space-1); color: var(--c-err); font-size: var(--fs-s); font-weight: bold; }
@@ -548,6 +576,21 @@
   }
   // kind: 'err' interrupts the reader (role=alert); others are polite status updates
   document.addEventListener('click', function (e) { if (e.target && e.target.id === 'msg') show(''); });
+  document.addEventListener('click', function (e) { document.querySelectorAll('details.more[open]').forEach(function (d) { if (!d.contains(e.target)) d.open = false; }); });
+  // a "more" menu: add(b) puts a button in it; picking one closes the menu
+  function moreMenu(label) {
+    var d = el('details', 'more'), pop = el('div', 'pop');
+    d.appendChild(el('summary', 'btn alt', label)); d.appendChild(pop);
+    d.add = function (b) { b.addEventListener('click', function () { d.open = false; }); pop.appendChild(b); };
+    d.empty = function () { return !pop.children.length; };
+    // opens to the right of its button, or to the left when that would leave the screen
+    d.addEventListener('toggle', function () {
+      if (!d.open) return;
+      pop.classList.remove('end');
+      if (pop.getBoundingClientRect().right > document.documentElement.clientWidth) pop.classList.add('end');
+    });
+    return d;
+  }
   function show(text, kind) {
     var m = $('msg');
     m.hidden = !text; m.textContent = text || '';
@@ -4080,12 +4123,35 @@
   // Agreement block of the contract panel: facts, its lines, the approval buttons and the history
   // Signed TTA files: kept in Job Tracker's Drive folder, opened through shd-api (branch IT blocks Drive links)
   function agFiles(box, a, mine) {
-    var files = a.files || [], me = sess.staff && sess.staff.u, sec = el('div', 'gapnote');
-    sec.appendChild(el('h4', '', 'ไฟล์ TTA ที่เซ็นแล้ว' + (files.length ? ' (' + files.length + ')' : '')));
-    if (!files.length) sec.appendChild(el('p', 'sub', 'ยังไม่มีไฟล์ แนบ TTA ที่เซ็นแล้ว (PDF หรือรูป) ได้ที่นี่'));
+    var files = a.files || [], me = sess.staff && sess.staff.u, sec = el('div', 'agsub'), hd = el('div', 'agsub-head');
+    hd.appendChild(el('h4', '', 'ไฟล์ TTA ที่เซ็นแล้ว' + (files.length ? ' · ' + files.length : '')));
+    sec.appendChild(hd);
+    if (a.status !== 'cancelled' && (mine || con.canPay) && files.length < 20) {
+      var fi = el('input'); fi.type = 'file'; fi.accept = '.pdf,image/jpeg,image/png'; fi.hidden = true;
+      var add = button('+ แนบไฟล์', 'alt', function () { fi.click(); });
+      add.title = 'PDF, JPG หรือ PNG ไม่เกิน 5 MB ต่อไฟล์';
+      fi.onchange = function () {
+        var file = fi.files && fi.files[0]; fi.value = '';
+        if (!file) return;
+        if (['application/pdf', 'image/jpeg', 'image/png'].indexOf(file.type) === -1) { show(ERR.bad_file, 'err'); return; }
+        if (file.size > 5 * 1024 * 1024) { show(ERR.too_big, 'err'); return; }
+        add.disabled = true; add.textContent = 'กำลังแนบ...';
+        var rd = new FileReader();
+        rd.onload = function () {
+          api('agreement_file_add', { id: a.id, name: file.name, mime: file.type, data: String(rd.result).split(',')[1] })
+            .then(function () { afterNote = ['แนบไฟล์ ' + file.name + ' แล้ว', 'ok']; contracts(); })
+            .catch(function (e) { add.disabled = false; add.textContent = '+ แนบไฟล์'; show(e.message, 'err'); });
+        };
+        rd.onerror = function () { add.disabled = false; add.textContent = '+ แนบไฟล์'; show('อ่านไฟล์ไม่ได้', 'err'); };
+        rd.readAsDataURL(file);
+      };
+      hd.appendChild(add); hd.appendChild(fi);
+    }
+    if (!files.length) sec.appendChild(el('p', 'sub', 'ยังไม่มีไฟล์ · แนบ TTA ที่เซ็นแล้วเป็น PDF หรือรูป ไม่เกิน 5 MB ต่อไฟล์ เก็บใน Google Drive ของบริษัท'));
+    var ul = el('ul', 'filelist');
     files.forEach(function (f) {
-      var row = el('div', 'row');
-      var open = el('button', 'linkbtn', f.name); open.type = 'button';
+      var li = el('li'), main = el('div', 'fmain');
+      var open = el('button', 'linkbtn', f.name); open.type = 'button'; open.setAttribute('aria-label', 'เปิดไฟล์ ' + f.name);
       open.onclick = function () {
         var w = window.open('', '_blank'); // opened on the click so the browser does not block it
         open.disabled = true;
@@ -4098,63 +4164,53 @@
           setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
         }).catch(function (e) { open.disabled = false; if (w) w.close(); show(e.message, 'err'); });
       };
-      open.setAttribute('aria-label', 'เปิดไฟล์ ' + f.name);
-      row.appendChild(open);
-      row.appendChild(el('small', '', (f.by || '') + (f.at ? ' · ' + thDate(bkk(f.at).slice(0, 10)) : '') + (f.size ? ' · ' + Math.max(1, Math.round(f.size / 1024)) + ' KB' : '')));
-      if (f.user === me || isContract()) row.appendChild(button('เอาออก', 'danger', function () {
-        if (!confirm('เอาไฟล์ ' + f.name + ' ออกจาก TTA นี้?' + String.fromCharCode(10) + 'ไฟล์จะย้ายไปถังขยะของ Google Drive')) return;
-        api('agreement_file_del', { id: a.id, file: f.id }).then(function () { afterNote = ['เอาไฟล์ออกแล้ว', 'ok']; contracts(); }).catch(function (e) { show(e.message, 'err'); });
-      }));
-      sec.appendChild(row);
-    });
-    if (a.status !== 'cancelled' && (mine || con.canPay) && files.length < 20) {
-      var fi = el('input'); fi.type = 'file'; fi.accept = '.pdf,image/jpeg,image/png'; fi.hidden = true;
-      var add = button('+ แนบไฟล์ TTA', 'alt', function () { fi.click(); });
-      fi.onchange = function () {
-        var file = fi.files && fi.files[0]; fi.value = '';
-        if (!file) return;
-        if (['application/pdf', 'image/jpeg', 'image/png'].indexOf(file.type) === -1) { show(ERR.bad_file, 'err'); return; }
-        if (file.size > 5 * 1024 * 1024) { show(ERR.too_big, 'err'); return; }
-        add.disabled = true; add.textContent = 'กำลังแนบ...';
-        var rd = new FileReader();
-        rd.onload = function () {
-          api('agreement_file_add', { id: a.id, name: file.name, mime: file.type, data: String(rd.result).split(',')[1] })
-            .then(function () { afterNote = ['แนบไฟล์ ' + file.name + ' แล้ว', 'ok']; contracts(); })
-            .catch(function (e) { add.disabled = false; add.textContent = '+ แนบไฟล์ TTA'; show(e.message, 'err'); });
+      main.appendChild(open);
+      main.appendChild(el('small', '', [f.by, f.at ? thDate(bkk(f.at).slice(0, 10)) : '', f.size ? Math.max(1, Math.round(f.size / 1024)) + ' KB' : ''].filter(Boolean).join(' · ')));
+      li.appendChild(main);
+      if (f.user === me || isContract()) {
+        var rm = el('button', 'linkbtn', 'เอาออก'); rm.type = 'button'; rm.setAttribute('aria-label', 'เอาไฟล์ ' + f.name + ' ออก');
+        rm.onclick = function () {
+          if (!confirm('เอาไฟล์ ' + f.name + ' ออกจาก TTA นี้?' + String.fromCharCode(10) + 'ไฟล์จะย้ายไปถังขยะของ Google Drive')) return;
+          api('agreement_file_del', { id: a.id, file: f.id }).then(function () { afterNote = ['เอาไฟล์ออกแล้ว', 'ok']; contracts(); }).catch(function (e) { show(e.message, 'err'); });
         };
-        rd.onerror = function () { add.disabled = false; add.textContent = '+ แนบไฟล์ TTA'; show('อ่านไฟล์ไม่ได้', 'err'); };
-        rd.readAsDataURL(file);
-      };
-      var ar = el('div', 'row'); ar.appendChild(add); ar.appendChild(fi); sec.appendChild(ar);
-      sec.appendChild(el('p', 'hint', 'PDF, JPG หรือ PNG ไม่เกิน 5 MB ต่อไฟล์ เก็บใน Google Drive ของบริษัท แยกโฟลเดอร์ต่อ TTA'));
-    }
+        li.appendChild(rm);
+      }
+      ul.appendChild(li);
+    });
+    if (files.length) sec.appendChild(ul);
     box.appendChild(sec);
   }
   function agBlock(p, r) {
     var a = r.ag; if (!a) return;
-    var box = el('section', 'boxscroll'), live = a.status !== 'cancelled', review = a.status === 'active' && a.needs_review;
+    var box = el('section', 'agcard'), live = a.status !== 'cancelled', review = a.status === 'active' && a.needs_review;
     var mine = a.registrant_user === (sess.staff && sess.staff.u), waiting = a.status === 'pending' || review;
-    box.appendChild(el('h3', '', (r.kind === 'deal' ? 'TTA ' : 'TTA ที่รายการนี้อยู่ ') + (a.tta_no || '')));
-    var dl = el('dl', 'facts one');
-    fact(dl, 'เลข TTA', a.tta_no); fact(dl, 'เวนเดอร์', a.vendor); fact(dl, 'ฝ่าย', PURCHASE[a.purchase] || 'ยังไม่ระบุ Med/Nonmed'); fact(dl, 'ช่วงเวลา', a.start_date ? thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) : '');
+    var th = el('div', 'card-head'), tl = el('div');
+    if (r.kind !== 'deal') tl.appendChild(el('div', 'eyebrow', 'TTA ที่รายการนี้อยู่'));
+    tl.appendChild(el('h3', '', 'TTA ' + (a.tta_no || '(ยังไม่มีเลข)')));
+    th.appendChild(tl);
+    th.appendChild(el('span', 'chip ' + (a.status === 'cancelled' ? 'err' : waiting ? 'warn' : 'ok'), a.status === 'cancelled' ? 'ยกเลิกแล้ว' : review ? 'ต้องอนุมัติใหม่' : a.status === 'pending' ? 'รออนุมัติ' : 'อนุมัติแล้ว'));
+    box.appendChild(th);
+    var dl = el('dl', 'facts');
+    fact(dl, 'เวนเดอร์', a.vendor); fact(dl, 'ฝ่าย', PURCHASE[a.purchase] || 'ยังไม่ระบุ Med/Nonmed'); fact(dl, 'ช่วงเวลา', a.start_date ? thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) : '');
     fact(dl, 'มูลค่ารวม', a.total != null ? baht(a.total) + ' บาท' : ''); fact(dl, 'ผู้ลงทะเบียน', a.registrant_name);
     fact(dl, 'รายการอื่น', (a.items || []).map(function (x) { return x.item + ' ' + baht(x.amount) + ' บาท' + (x.start_date ? ' (' + thDate(x.start_date) + (x.end_date ? ' ถึง ' + thDate(x.end_date) : '') + ')' : '') + (x.dp_no ? ' · DP ' + x.dp_no : '') + (x.invoice_no ? ' · ใบแจ้งหนี้ ' + x.invoice_no : ''); }).join(', '));
     fact(dl, 'อนุมัติโดย', a.approved_by && a.approved_by !== 'migrated' ? a.approved_by + (a.approved_at ? ' · ' + thDate(bkk(a.approved_at).slice(0, 10)) : '') : '');
-    box.appendChild(dl);
-    agFiles(box, a, mine);
-    var chips = el('div', 'chips');
-    chips.appendChild(el('span', 'chip ' + (a.status === 'cancelled' ? 'err' : waiting ? 'warn' : 'ok'), a.status === 'cancelled' ? 'ยกเลิกแล้ว' : review ? 'ต้องอนุมัติใหม่' : a.status === 'pending' ? 'รออนุมัติ' : 'อนุมัติแล้ว'));
-    box.appendChild(chips);
     if (a.wait) box.appendChild(el('p', 'sub', 'รอข้อมูล: ' + a.wait.note + ' · ' + a.wait.name + ' · ' + thDate(bkk(a.wait.at).slice(0, 10))));
+    box.appendChild(dl);
+    var lsec = el('div', 'agsub'), lh = el('div', 'agsub-head');
+    lh.appendChild(el('h4', '', 'รายการเช่าใน TTA นี้ · ' + (a.lines || []).length)); lsec.appendChild(lh);
     var ls = el('div', 'chips');
     (a.lines || []).forEach(function (x) {
       var key = (x.kind === 'cashier' ? 'c' : 's') + x.id, b = button(CON_KIND[x.kind] + ' ' + (x.sys_no || x.brand), 'alt', function () { con.sel = key; renderContracts(); });
       b.appendChild(el('span', 'chip ' + (x.status === 'active' ? 'ok' : x.status === 'cancelled' ? 'err' : 'warn'), { active: 'ใช้งาน', pending: 'รออนุมัติ', cancelled: 'ยกเลิก' }[x.status] || x.status));
       if (key === r.key) b.setAttribute('aria-current', 'true'); ls.appendChild(b);
     });
-    box.appendChild(ls);
-    var row = el('div', 'row');
-    function act(label, cls, fn) { var b = button(label, cls, function () { b.disabled = true; fn(function (e) { b.disabled = false; if (e.message) show(e.message, 'err'); }); }); row.appendChild(b); }
+    if ((a.lines || []).length) lsec.appendChild(ls); else lsec.appendChild(el('p', 'sub', 'ยังไม่มีรายการเช่า'));
+    box.appendChild(lsec);
+    agFiles(box, a, mine);
+    var row = el('div', 'row'), menu = moreMenu('จัดการ TTA');
+    // more = true: into the menu (rare or risky); the row keeps what is done most
+    function act(label, cls, fn, more) { var b = button(label, cls, function () { b.disabled = true; fn(function (e) { b.disabled = false; if (e.message) show(e.message, 'err'); }); }); if (more) menu.add(b); else row.appendChild(b); }
     function run(action, body, ok) { return function (bad) { api(action, body).then(function () { afterNote = [ok, 'ok']; contracts(); }).catch(bad); }; }
     // a cancelled contract only shows its agreement: the agreement is handled from one of its live contracts
     if (live && r.c.status === 'cancelled') box.appendChild(el('p', 'hint gapnote', 'รายการนี้ยกเลิกแล้ว จัดการ TTA ได้จากรายการเช่าที่ยังใช้งานอยู่ใน TTA (กดชื่อรายการเช่าด้านบน)'));
@@ -4164,15 +4220,15 @@
         var why = (prompt('ถอนอนุมัติ TTA ' + (a.tta_no || '') + ' กลับเป็นรออนุมัติ\n\nเหตุผล:') || '').trim();
         if (!why) { bad({ message: 'ใส่เหตุผลก่อน' }); return; }
         run('agreement_unapprove', { id: a.id, reason: why }, 'ถอนอนุมัติแล้ว')(bad);
-      });
+      }, true);
       if ((con.canApprove || mine) && waiting) act('รอข้อมูล', 'alt', function (bad) {
         var n = (prompt('TTA ' + (a.tta_no || '') + ' ยังอนุมัติไม่ได้ เพราะรออะไรอยู่\n\n(ไม่เกิน 200 ตัวอักษร)', a.wait ? a.wait.note : '') || '').trim().slice(0, 200);
         if (!n) { bad({ message: 'พิมพ์ว่ารออะไรอยู่ก่อน' }); return; }
         run('agreement_wait', { id: a.id, note: n }, 'บันทึกแล้ว: ' + n)(bad);
       });
-      if (con.canApprove || mine) act('แก้ TTA/มูลค่า/รายการอื่น', 'alt', function () { agreementForm(a); });
-      if (con.edit.cashier) act('+ รายการเช่าชั้นแคชเชียร์ใน TTA นี้', 'alt', function () { formAgreement = a.id; formBack = contracts; cashierForm(null); });
-      if (con.edit.sign) act('+ รายการเช่าพื้นที่ใน TTA นี้', 'alt', function () { formAgreement = a.id; openSignFromContracts(null); });
+      if (con.canApprove || mine) act('แก้ TTA/มูลค่า', 'alt', function () { agreementForm(a); });
+      if (con.edit.cashier) act('+ รายการเช่าชั้นแคชเชียร์ใน TTA นี้', 'alt', function () { formAgreement = a.id; formBack = contracts; cashierForm(null); }, true);
+      if (con.edit.sign) act('+ รายการเช่าพื้นที่ใน TTA นี้', 'alt', function () { formAgreement = a.id; openSignFromContracts(null); }, true);
       if (con.canApprove || (mine && a.status === 'pending')) act('ยกเลิกทั้ง TTA (ทุกรายการ)', 'danger', function (bad) {
         // cancels every line too, and cannot be undone here: the user types the TTA number (or the brand when there is none)
         var key = String(a.tta_no || a.brand).trim(), live = (a.lines || []).filter(function (x) { return x.status !== 'cancelled'; });
@@ -4180,10 +4236,11 @@
         if (typed === null) { bad({ message: '' }); return; }
         if (typed.trim().toLowerCase() !== key.toLowerCase()) { alert('พิมพ์ไม่ตรงกับ "' + key + '" จึงยังไม่ยกเลิก'); bad({ message: '' }); return; }
         run('agreement_cancel', { id: a.id }, 'ยกเลิก TTA แล้ว')(bad);
-      });
+      }, true);
     }
-    box.appendChild(row);
-    var det = el('details', 'card hist'), loaded = false; det.appendChild(el('summary', '', 'ประวัติ'));
+    if (!menu.empty()) row.appendChild(menu);
+    if (row.children.length) box.insertBefore(row, th.nextSibling); // main actions right under the title
+    var det = el('details', 'hist'), loaded = false; det.appendChild(el('summary', '', 'ประวัติ'));
     det.addEventListener('toggle', function () {
       if (!det.open || loaded) return; loaded = true;
       api('agreement_events', { id: a.id }).then(function (d) {
@@ -4253,14 +4310,14 @@
     else chips.appendChild(el('span', 'chip ' + (st === 'live' ? 'ok' : st === 'cancelled' ? 'err' : ''), { live: 'ใช้งานอยู่', next: 'ยังไม่เริ่ม', ended: 'หมดอายุแล้ว', cancelled: 'ยกเลิกแล้ว' }[st]));
     left.appendChild(chips); head.appendChild(left); head.appendChild(button('ปิด', 'alt', function () { con.sel = null; renderContracts(); })); p.appendChild(head);
     if (con.backHome && con.backHome.key === r.key) p.insertBefore(button('← ' + (con.backHome.label || 'กลับไทม์ไลน์ป้ายหน้าร้าน (Storefront)'), 'alt back', function () { var bh = con.backHome; con.backHome = null; if (bh.fn) bh.fn(); else { frontKeep = bh; go('home'); } }), head);
-    agBlock(p, r);
-    var dl = el('dl', 'facts one');
+    var dl = el('dl', 'facts two');
     fact(dl, 'ช่วงเวลา', thDate(c.start_date) + ' ถึง ' + thDate(c.end_date) + (c._raw ? ' (ตามวันหมดอายุโฆษณา)' : ''));
     fact(dl, 'เวนเดอร์', c.vendor); fact(dl, 'ค่าเช่า', r.rent != null ? baht(r.rent) + ' บาท/เดือน' : ''); fact(dl, 'ขอบเขต', r.scope);
     if (c.sys_no) fact(dl, 'เลขในระบบ', c.sys_no + (c.renewed_from ? ' (ต่อจาก ' + ((con.rows.filter(function (x) { return x.kind === 'sign' && x.c.id === c.renewed_from; })[0] || { c: {} }).c.sys_no || 'รายการเช่าเดิม') + ')' : ''));
     fact(dl, 'เลข TTA', c.agreement_no); fact(dl, 'เลขโฆษณา', c.ad_no ? c.ad_no + (c.ad_expiry ? ' (หมดอายุ ' + thDate(c.ad_expiry) + ')' : '') : '');
     fact(dl, 'ติดต่อ', c.supplier_contact); fact(dl, 'วิธีวาง/ข้อห้าม', c.how_to_place); fact(dl, 'หลังสิ้นสุดให้ทำอย่างไร', c.return_to); fact(dl, 'หมายเหตุ', c.note);
     p.appendChild(dl);
+    agBlock(p, r);
     if (con.canPay && r.ag) agPayPanel(p, r.ag);
     if (r.kind === 'sign') {
       var by = {}; c.slots.forEach(function (x) { var s = takeText(x); (by[x.branch_code] = by[x.branch_code] || []).push(x.code + (s ? ' (' + s + ')' : '')); });
@@ -4280,11 +4337,13 @@
       else if (r.kind === 'sign' && (st === 'ended' || (st === 'live' && daysTo(c.end_date) <= 60))) row.appendChild(button('ต่อรายการเช่า', '', function () { openSignFromContracts(c, true); }));
       row.appendChild(button(r.kind === 'cashier' ? 'แก้ข้อมูล/สาขา/แพ็กเกจ' : 'แก้ข้อมูล/ตำแหน่ง/ค่าเช่า', '', function () { if (r.kind === 'cashier') { formBack = contracts; cashierForm(c); } else openSignFromContracts(c); }));
       if (r.kind === 'cashier' && act) row.appendChild(button('แจ้งคลังอีกครั้ง', 'alt', function () { notifyCashier(c); }));
-      if (con.canApprove) row.appendChild(button('ย้ายไป TTA อื่น', 'alt', function () { moveLine(r); }));
-      row.appendChild(button('ยกเลิกเฉพาะรายการนี้', 'danger', function () {
+      var lm = moreMenu('อื่นๆ');
+      if (con.canApprove) lm.add(button('ย้ายไป TTA อื่น', 'alt', function () { moveLine(r); }));
+      lm.add(button('ยกเลิกเฉพาะรายการนี้', 'danger', function () {
         if (!confirm('ยกเลิกเฉพาะรายการเช่า ' + c.brand + ' นี้ ?\n\nTTA และรายการเช่าอื่นใน TTA ยังอยู่')) return;
         api(r.kind === 'cashier' ? 'cashier_cancel' : 'sign_cancel', { id: c.id }).then(contracts).catch(function (e) { show(e.message, 'err'); });
       }));
+      row.appendChild(lm);
       // the contract's own buttons sit right under its name, above the agreement, so they are found without scrolling
       row.classList.add('conacts'); p.insertBefore(row, head.nextSibling);
     }
