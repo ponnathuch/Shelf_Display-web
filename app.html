@@ -477,6 +477,8 @@
 
   var ROLE_TH = { ADMIN: 'ผู้ดูแลระบบ', APPROVER: 'ผู้อนุมัติสื่อ', REGISTRANT: 'ผู้ลงทะเบียน', STAFF: 'สาขา', WAREHOUSE: 'คลัง' };
   var ERR = {
+    period_mismatch: 'ตะกร้าเป็นช่วงวันอื่นอยู่', empty: 'ตะกร้ายังว่างอยู่', extended: 'ใบจองนี้ต่อเวลาไปแล้ว 1 ครั้ง ต่ออีกไม่ได้',
+    state: 'สถานะของรายการนี้เปลี่ยนไปแล้ว โหลดหน้าใหม่แล้วลองอีกครั้ง', cart_not_empty: 'ตะกร้ายังมีรายการอยู่', too_many: 'ตะกร้าเต็มแล้ว (ไม่เกิน 300 จุด)',
     'missing:purchase': 'ยังไม่ได้เลือก Med หรือ Nonmed ของ TTA ใหม่', 'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
     'missing:dates': 'ยังไม่ได้ใส่วันเริ่ม และวันสิ้นสุด (หรือติ๊ก "ไม่มีวันหมดอายุ")', 'missing:agreement_no': 'ยังไม่ได้ใส่เลข TTA',
     hang_min: 'ป้ายแขวนต้องเช่าอย่างน้อย 3 เดือน ปรับวันสิ้นสุด หรือเอาตำแหน่งป้ายแขวนออก',
@@ -2093,6 +2095,7 @@
   // ---------- Inventory: what is free to sell in every branch for a whole period (design v3 P1-P23) ----------
   // Availability = branches x kinds; a cell counts places free all period (Sections: whole / some shelves) and opens the
   // list on the right with sign size and default price. Pending agreements hold places too. Office only (prices).
+  var bks = { mine: true, sel: {}, count: null }; // Booking tab: whose bookings, ticked rows, cart size
   var inv = { tab: 'avail', from: '', to: '', off: {}, grade: '', size: '', chain: '', q: '', data: null, keep: null, brand: '', brands: null, bd: null, ended: false, back: null, bq: '', bg: '', sb: null, sfrom: '', sto: '', team: '', sq: '' };
   var INV_KIND = { sign: 'ป้ายหัวชั้น', glass: 'กระจก', cashier: 'แคชเชียร์', hang: 'ป้ายแขวน', front: 'ป้ายหน้าร้าน (Storefront)' };
   // names shown on the sales pages: international words, with the old file's name on hover (design v3, 2026-11-11)
@@ -2729,11 +2732,15 @@
     if (!inv.reuse) { inv.data = null; inv.sb = null; inv.bd = null; } inv.reuse = false;
     if (inv.back) { var bk = inv.back, b0 = button('← ' + bk.label, 'alt', function () { inv.back = null; bk.fn(); }); b0.classList.add('backbtn'); v.appendChild(b0); }
     var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'มุมมอง');
-    [['avail', 'ว่าง (Availability)'], ['brand', 'แบรนด์ (Brand view)'], ['board', 'TTA ภาพรวม (By supplier)'], ['matrix', 'แบรนด์ × สาขา']].forEach(function (x) {
+    [['avail', 'ว่าง (Availability)'], ['book', 'จอง (Booking)'], ['brand', 'แบรนด์ (Brand view)'], ['board', 'TTA ภาพรวม (By supplier)'], ['matrix', 'แบรนด์ × สาขา']].forEach(function (x) {
       var b = el('button', '', x[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(inv.tab === x[0]));
+      if (x[0] === 'book') { var n = el('span'); n.id = 'bkTabN'; b.appendChild(n); }
       b.onclick = function () { inv.tab = x[0]; inv.reuse = true; inventory(); }; seg.appendChild(b);
     });
     var top = el('div', 'toolbar'); top.appendChild(seg); v.appendChild(top);
+    if (bks.count === null) api('bk_cart').then(function (r) { bks.count = r.cart ? r.cart.lines.length : 0; bkBadge(); }).catch(function () {});
+    else bkBadge();
+    if (inv.tab === 'book') { invBook(v); return; }
     if (inv.tab === 'brand') { invBrand(v); return; }
     if (inv.tab === 'board' || inv.tab === 'matrix') { invBoard(v); return; }
     var tb = el('div', 'card invfilters');
@@ -2752,6 +2759,249 @@
     }
     from.onchange = to.onchange = function () { if (from.value && to.value) load(); };
     if (inv.data && inv.data.start_date === inv.from && inv.data.end_date === inv.to) invPaint(body, tb); else load();
+  }
+  // ---------- Display booking (docs/DESIGN-booking.md): cart -> request (keeps its places 7 days) -> booked ----------
+  var BK_ST = { held: ['กันไว้ รอยืนยัน', 'warn'], booked: ['จองแล้ว', 'ok'], released: ['หมดเวลากัน', ''], cancelled: ['ยกเลิกแล้ว', ''], rejected: ['ส่งกลับ', 'err'] };
+  function thTime(ts) { var t = bkk(ts); return thDate(t.slice(0, 10)) + ' ' + t.slice(11, 16) + ' น.'; }
+  // what "+ ตะกร้า" asks for at a free place: the whole Section, else its first run of free shelves, else the place (its sign)
+  function bkTake(p) {
+    if (!p.type) return {};
+    if (p.free.length === p.shelves) return { whole: true };
+    var r = runs(p.free)[0]; return { shelf_from: r[0], shelf_to: r[1] };
+  }
+  function bkTakeText(l) {
+    if (l.whole) return 'ทั้งตู้' + (l.shelves ? ' ' + l.shelves + ' ชั้น' : '');
+    if (l.shelf_from) return 'ชั้น ' + runText([l.shelf_from, l.shelf_to]) + (l.shelves ? ' / ' + l.shelves : '');
+    return l.kind === 'header' ? 'ป้ายหัวชั้น' : 'ทั้งจุด';
+  }
+  function bkKind(l) { return l.type ? invName(l.type) : l.kind === 'header' ? 'ป้ายหัวชั้น' : INV_KIND[l.kind] || l.kind || '-'; }
+  function bkBadge() { var n = $('bkTabN'); if (n) n.textContent = bks.count ? ' · ' + bks.count : ''; }
+  function bkAdd(p, btn) {
+    btn.disabled = true;
+    var body = { slot_id: p.id, start_date: inv.from, end_date: inv.to }, t = bkTake(p);
+    Object.keys(t).forEach(function (k) { body[k] = t[k]; });
+    (function send() {
+      api('bk_cart_add', body).then(function () {
+        btn.textContent = 'อยู่ในตะกร้า'; bks.count = (bks.count || 0) + 1; bkBadge();
+        show('ใส่ ' + p.branch_code + ' ' + p.code + ' ในตะกร้าแล้ว ดูและส่งคำขอได้ที่แท็บ จอง (Booking)');
+      }).catch(function (e) {
+        if (e.code === 'period_mismatch' && confirm('ตะกร้าของคุณเป็นช่วง ' + thDate(e.data.start_date) + ' ถึง ' + thDate(e.data.end_date) +
+          '\nเปลี่ยนเป็นช่วงที่เลือกอยู่ (' + thDate(inv.from) + ' ถึง ' + thDate(inv.to) + ') ไหม? รายการเดิมในตะกร้าจะถูกตรวจว่ายังว่างตามช่วงใหม่')) { body.move_period = true; send(); return; }
+        btn.disabled = false;
+        show(e.code === 'slot_taken' ? p.branch_code + ' ' + p.code + ' ไม่ว่างแล้วในช่วงนี้: ' + (e.data.by || []).join(', ') : e.message, 'err');
+      });
+    })();
+  }
+  function bkLineTable(b, onRemove) {
+    var t = el('table', 'invside'), h = el('thead'), hr = el('tr'), tb = el('tbody');
+    ['สาขา', 'จุด', 'ชนิด', 'ที่เช่า', 'เกรด', 'บาท/เดือน', ''].forEach(function (x, i) { var th = el('th', i === 5 ? 'num' : '', x); th.scope = 'col'; hr.appendChild(th); });
+    h.appendChild(hr); t.appendChild(h);
+    b.lines.forEach(function (l) {
+      var tr = el('tr'), c2 = el('td');
+      tr.appendChild(el('td', '', l.branch_code || '-'));
+      c2.appendChild(el('b', '', l.code || String(l.slot_id))); if (l.category) c2.appendChild(el('small', '', l.category)); tr.appendChild(c2);
+      tr.appendChild(el('td', '', bkKind(l)));
+      var c4 = el('td', '', bkTakeText(l));
+      if (l.gone) c4.appendChild(el('small', 'chip err', 'จุดนี้ถูกปิดแล้ว'));
+      if (l.clash && l.clash.length) c4.appendChild(el('small', 'chip err', 'ไม่ว่างแล้ว: ' + l.clash.join(', ')));
+      tr.appendChild(c4);
+      tr.appendChild(el('td', '', l.grade || '-'));
+      tr.appendChild(el('td', 'num', l.price == null ? 'ตามตกลง' : baht(l.price)));
+      var c7 = el('td');
+      if (onRemove) {
+        var x = el('button', 'linkbtn', 'เอาออก'); x.type = 'button'; x.setAttribute('aria-label', 'เอา ' + (l.branch_code || '') + ' ' + (l.code || '') + ' ออกจากตะกร้า');
+        x.onclick = function () { onRemove(l); }; c7.appendChild(x);
+      }
+      tr.appendChild(c7); tb.appendChild(tr);
+    });
+    t.appendChild(tb); var wr = el('div', 'slotwrap'); wr.appendChild(t); return wr; // wide table scrolls inside, not the page
+  }
+  function bkSums(b) {
+    return 'รวมต่อเดือน ' + baht(b.monthly) + ' บาท · ' + b.months + ' เดือน · ทั้งช่วง ' + baht(b.total) + ' บาท' + (b.unpriced ? ' · ยังไม่มีราคาในตาราง ' + b.unpriced + ' จุด' : '');
+  }
+  // printable quote in a new window (Print > Save as PDF); built with DOM nodes, never HTML strings from data
+  function bkQuote(b) {
+    var w = window.open('', '_blank'); if (!w) { show('เบราว์เซอร์บล็อกหน้าต่างใหม่ อนุญาตป๊อปอัปของหน้านี้แล้วลองใหม่', 'err'); return; }
+    var d = w.document;
+    var mk = function (tag, text, cls) { var e = d.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+    d.title = 'ใบเสนอ ' + (b.bk_no || 'ร่าง');
+    // ds-allow-hardcode:start the quote is a separate print document; the app's CSS tokens do not exist there
+    d.head.appendChild(mk('style', 'body{font-family:Sarabun,Tahoma,sans-serif;color:#111;margin:24px;font-size:14px}table{border-collapse:collapse;width:100%;margin:12px 0}' +
+      'th,td{border:1px solid #999;padding:4px 6px;text-align:left}.n{text-align:right}h1{font-size:20px;margin:0 0 4px}p{margin:2px 0}.pr{float:right;padding:6px 12px}.fine{color:#555;font-size:12px}@media print{.pr{display:none}}'));
+    // ds-allow-hardcode:end
+    var bd = d.body, pr = mk('button', 'พิมพ์ / บันทึกเป็น PDF', 'pr'); pr.onclick = function () { w.print(); }; bd.appendChild(pr);
+    bd.appendChild(mk('h1', 'ใบเสนอพื้นที่วางสื่อในร้าน'));
+    bd.appendChild(mk('p', 'เลขที่ ' + (b.bk_no || 'ร่าง (ยังไม่ได้ส่งคำขอ)') + ' · วันที่ ' + thDate(today())));
+    if (b.brand || b.vendor) bd.appendChild(mk('p', 'แบรนด์ ' + (b.brand || '-') + (b.vendor ? ' · เวนเดอร์ ' + b.vendor : '')));
+    bd.appendChild(mk('p', 'ช่วงเวลา ' + thDate(b.start_date) + ' ถึง ' + thDate(b.end_date) + ' (' + b.months + ' เดือน) · ' + b.branches + ' สาขา · ' + b.lines.length + ' จุด'));
+    if (b.status === 'held' && b.held_until) bd.appendChild(mk('p', 'กันพื้นที่ไว้ถึง ' + thTime(b.held_until)));
+    var t = mk('table'), hr = mk('tr');
+    ['#', 'สาขา', 'จุด', 'ชนิด', 'ที่เช่า', 'เกรด', 'บาท/เดือน', 'รวม ' + b.months + ' เดือน'].forEach(function (x, i) { hr.appendChild(mk('th', x, i >= 6 ? 'n' : '')); });
+    t.appendChild(hr);
+    b.lines.forEach(function (l, i) {
+      var tr = mk('tr');
+      [String(i + 1), l.branch_code || '', (l.code || '') + (l.category ? ' ' + l.category : ''), bkKind(l), bkTakeText(l), l.grade || '-',
+        l.price == null ? 'ตามตกลง' : baht(l.price), l.price == null ? '-' : baht(l.price * b.months)].forEach(function (x, k) { tr.appendChild(mk('td', x, k >= 6 ? 'n' : '')); });
+      t.appendChild(tr);
+    });
+    var tf = mk('tr'), c1 = mk('td', 'รวม'); c1.colSpan = 6; tf.appendChild(c1);
+    tf.appendChild(mk('td', baht(b.monthly), 'n')); tf.appendChild(mk('td', baht(b.total), 'n')); t.appendChild(tf);
+    bd.appendChild(t);
+    bd.appendChild(mk('p', 'ราคาตั้งต้นตามตารางราคา (Rate card) ปี ' + (Number(String(b.start_date).slice(0, 4)) + 543) + ' และเกรดของสาขา' +
+      (b.draft ? ' (ตารางราคาปีนี้ยังเป็นร่าง)' : '') + (b.unpriced ? ' · จุดที่ยังไม่มีราคาในตาราง ' + b.unpriced + ' จุด ราคาตามตกลง' : ''), 'fine'));
+    if (b.note) bd.appendChild(mk('p', 'หมายเหตุ: ' + b.note));
+  }
+  function invBook(v) {
+    var body = el('div'); v.appendChild(body);
+    body.appendChild(el('p', 'sub', 'กำลังโหลด...'));
+    Promise.all([api('bk_cart'), api('bk_list')]).then(guard(function (r) { bkPaint(body, r[0].cart, r[1]); }))
+      .catch(function (e) { body.textContent = ''; show(e.message, 'err'); });
+  }
+  // repaint the tab; the page clears the message bar on the way, so the result just shown stays
+  function bkReload() { var m = $('msg'), t = m.hidden ? '' : m.textContent, k = /err/.test(m.className) ? 'err' : ''; inv.reuse = true; inventory(); if (t) show(t, k); }
+  function bkPaint(body, cart, L) {
+    body.textContent = '';
+    bks.count = cart ? cart.lines.length : 0; bkBadge();
+    // my cart
+    body.appendChild(el('h2', 'sec', 'ตะกร้าของฉัน'));
+    var cc = el('section', 'card'); body.appendChild(cc);
+    if (!cart || !cart.lines.length) {
+      cc.appendChild(el('p', 'empty-note', 'ยังไม่มีรายการ ไปที่แท็บ ว่าง (Availability) กดช่องของสาขา แล้วกด "+ ตะกร้า" ที่จุดที่ต้องการ'));
+    } else {
+      cc.appendChild(el('p', 'sub', 'ช่วง ' + thDate(cart.start_date) + ' ถึง ' + thDate(cart.end_date) + ' · ' + cart.branches + ' สาขา · ' + cart.lines.length + ' จุด · ราคาจากตารางราคาตามเกรดสาขา'));
+      if (cart.draft) cc.appendChild(el('p', 'hint', 'ตารางราคาปีนี้ยังเป็นร่าง ราคาอาจเปลี่ยน'));
+      var bad = cart.lines.filter(function (l) { return l.gone || (l.clash && l.clash.length); });
+      if (bad.length) cc.appendChild(el('p', 'chip err', bad.length + ' จุดไม่ว่างแล้ว เอาออกก่อนส่งคำขอ'));
+      cc.appendChild(bkLineTable(cart, function (l) {
+        api('bk_cart_remove', { slot_ids: [l.slot_id] }).then(bkReload).catch(function (e) { show(e.message, 'err'); });
+      }));
+      cc.appendChild(el('p', '', bkSums(cart)));
+      var acts = el('div', 'toolbar');
+      acts.appendChild(button('ใบเสนอ (พิมพ์ / PDF)', 'alt', function () { bkQuote(cart); }));
+      acts.appendChild(button('ล้างตะกร้า', 'alt', function () {
+        if (confirm('เอาทุกจุดออกจากตะกร้า?')) api('bk_cart_remove', {}).then(bkReload).catch(function (e) { show(e.message, 'err'); });
+      }));
+      cc.appendChild(acts);
+      var f = el('div', 'card invfilters');
+      var inp = function (text, tag) { var l = el('label', 'f'), i = el(tag || 'input', 'input'); l.appendChild(el('span', 't', text)); l.appendChild(i); f.appendChild(l); return i; };
+      var br = inp('แบรนด์ *'), pu = inp('Med / Nonmed *', 'select'), ve = inp('เวนเดอร์'), no = inp('หมายเหตุ', 'textarea');
+      br.maxLength = 120; ve.maxLength = 200; no.maxLength = 2000;
+      [['', 'เลือก'], ['med', 'Med'], ['nonmed', 'Nonmed']].forEach(function (o) { var x = el('option', '', o[1]); x.value = o[0]; pu.appendChild(x); });
+      cc.appendChild(f);
+      var send = button('ส่งคำขอจอง (กันพื้นที่ ' + L.hold_days + ' วัน)', '', function () {
+        var miss = emptyOf([[br, 'ใส่ชื่อแบรนด์'], [pu, 'เลือก Med หรือ Nonmed']]);
+        if (miss.length) { badFields(miss); return; }
+        send.disabled = true;
+        api('bk_submit', { brand: br.value.trim(), purchase: pu.value, vendor: ve.value.trim(), note: no.value.trim() }).then(function (r) {
+          show('ส่งคำขอ ' + (r.bk_no || '') + ' แล้ว กันพื้นที่ไว้ถึง ' + thTime(r.held_until) + ' รอ Merchandise ยืนยัน'); bkReload();
+        }).catch(function (e) {
+          send.disabled = false;
+          var gone = e.code === 'slot_taken' || e.code === 'slot_gone';
+          show(gone ? 'จุดเหล่านี้ไม่ว่างแล้ว เอาออกจากตะกร้าก่อน: ' + e.data.slots.join(', ') : e.message, 'err');
+          if (gone) bkReload();
+        });
+      });
+      cc.appendChild(send);
+    }
+    // bookings
+    body.appendChild(el('h2', 'sec', 'ใบจอง'));
+    var lc = el('section', 'card'); body.appendChild(lc);
+    var bar = el('div', 'toolbar'), seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'ใบจองของใคร');
+    [[true, 'ของฉัน'], [false, 'ทั้งหมด']].forEach(function (x) {
+      var b = el('button', '', x[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(bks.mine === x[0]));
+      b.onclick = function () { bks.mine = x[0]; bkPaint(body, cart, L); }; seg.appendChild(b);
+    });
+    bar.appendChild(seg); lc.appendChild(bar);
+    var rows = L.bookings.filter(function (b) { return !bks.mine || b.owner_user === L.me; });
+    var waiting = rows.filter(function (b) { return b.status === 'held' && b.live; });
+    if (L.can_decide && waiting.length) {
+      bar.appendChild(button('ยืนยันการจองที่เลือก', '', function () {
+        var ids = waiting.filter(function (b) { return bks.sel[b.id]; }).map(function (b) { return b.id; });
+        if (!ids.length) { show('ติ๊กใบจองที่จะยืนยันก่อน', 'err'); return; }
+        api('bk_decide', { ids: ids, ok: true }).then(function (r) {
+          bks.sel = {}; show('ยืนยันแล้ว ' + r.done + ' ใบ' + (r.skipped ? ' · ข้าม ' + r.skipped + ' ใบที่หมดเวลากันแล้ว' : '')); bkReload();
+        }).catch(function (e) { show(e.message, 'err'); });
+      }));
+    }
+    if (!rows.length) lc.appendChild(el('p', 'empty-note', bks.mine ? 'ยังไม่มีใบจองของคุณ' : 'ยังไม่มีใบจอง'));
+    else {
+      var t = el('table', 'invside'), h = el('thead'), hr = el('tr'), tb = el('tbody');
+      [L.can_decide ? 'เลือก' : '', 'เลขที่', 'แบรนด์', 'ผู้ขอ', 'ช่วง', 'จุด', 'บาท/เดือน', 'สถานะ'].forEach(function (x, i) { var th = el('th', i === 6 ? 'num' : '', x); th.scope = 'col'; hr.appendChild(th); });
+      h.appendChild(hr); t.appendChild(h);
+      rows.forEach(function (b) {
+        var tr = el('tr'), c0 = el('td');
+        if (L.can_decide && b.status === 'held' && b.live) {
+          var cb = el('input'); cb.type = 'checkbox'; cb.checked = !!bks.sel[b.id]; cb.setAttribute('aria-label', 'เลือก ' + b.bk_no);
+          cb.onchange = function () { bks.sel[b.id] = cb.checked; }; c0.appendChild(cb);
+        }
+        tr.appendChild(c0);
+        var c1 = el('td'), op = el('button', 'linkbtn', b.bk_no || '#' + b.id); op.type = 'button'; op.onclick = function () { bkOpen({ id: b.id }, L); };
+        c1.appendChild(op); tr.appendChild(c1);
+        tr.appendChild(el('td', '', (b.brand || '-') + (b.purchase ? ' · ' + (b.purchase === 'med' ? 'Med' : 'Nonmed') : '')));
+        tr.appendChild(el('td', '', b.owner_name || b.owner_user));
+        tr.appendChild(el('td', '', thDate(b.start_date) + ' - ' + thDate(b.end_date)));
+        tr.appendChild(el('td', '', b.lines + ' จุด · ' + b.branches + ' สาขา'));
+        tr.appendChild(el('td', 'num', baht(b.monthly)));
+        var s = BK_ST[b.status] || [b.status, ''], c8 = el('td'); c8.appendChild(el('span', 'chip ' + s[1], s[0]));
+        if (b.status === 'held' && b.live) c8.appendChild(el('small', '', ' ถึง ' + thTime(b.held_until) + (b.extended ? ' (ต่อแล้ว)' : '')));
+        if (b.decide_note) c8.appendChild(el('small', '', ' ' + b.decide_note));
+        tr.appendChild(c8); tb.appendChild(tr);
+      });
+      t.appendChild(tb); var wr = el('div', 'slotwrap'); wr.appendChild(t); lc.appendChild(wr);
+    }
+    // the team's carts (design answer 7: everyone can look, only the owner changes)
+    var others = L.carts.filter(function (c) { return c.owner_user !== L.me; });
+    if (others.length) {
+      body.appendChild(el('h2', 'sec', 'ตะกร้าของคนในทีม'));
+      var tc = el('section', 'card'); body.appendChild(tc);
+      others.forEach(function (c) {
+        var p = el('p'), b = el('button', 'linkbtn', c.owner_name || c.owner_user); b.type = 'button';
+        b.onclick = function () { bkOpen({ owner: c.owner_user }, L); };
+        p.appendChild(b); p.appendChild(document.createTextNode(' · ' + c.lines + ' จุด · ' + thDate(c.start_date) + ' - ' + thDate(c.end_date))); tc.appendChild(p);
+      });
+    }
+    var det = el('section', 'card'); det.id = 'bkDetail'; det.hidden = true; det.setAttribute('aria-live', 'polite'); body.appendChild(det);
+  }
+  function bkOpen(q, L) {
+    var det = $('bkDetail'); if (!det) return;
+    det.hidden = false; det.textContent = ''; det.appendChild(el('p', 'sub', 'กำลังโหลด...'));
+    var fail2 = function (e) { show(e.message, 'err'); };
+    api('bk_get', q).then(guard(function (r) {
+      var b = r.booking; det.textContent = '';
+      var s = BK_ST[b.status] || (b.status === 'cart' ? ['ตะกร้า (ยังไม่ส่ง)', ''] : [b.status, '']);
+      det.appendChild(el('h3', '', (b.bk_no || 'ตะกร้าของ ' + (b.owner_name || b.owner_user)) + (b.brand ? ' · ' + b.brand : '')));
+      var st = el('p'); st.appendChild(el('span', 'chip ' + s[1], s[0]));
+      st.appendChild(document.createTextNode(' ผู้ขอ ' + (b.owner_name || b.owner_user) + ' · ' + thDate(b.start_date) + ' ถึง ' + thDate(b.end_date) +
+        (b.status === 'held' && b.live ? ' · กันถึง ' + thTime(b.held_until) : '') + (b.vendor ? ' · เวนเดอร์ ' + b.vendor : '')));
+      det.appendChild(st);
+      if (b.decided_by) det.appendChild(el('p', 'sub', (b.status === 'booked' ? 'ยืนยันโดย ' : b.status === 'rejected' ? 'ส่งกลับโดย ' : 'โดย ') + b.decided_by + ' ' + thTime(b.decided_at) + (b.decide_note ? ' · ' + b.decide_note : '')));
+      if (b.note) det.appendChild(el('p', 'sub', 'หมายเหตุ: ' + b.note));
+      det.appendChild(bkLineTable(b, null)); det.appendChild(el('p', '', bkSums(b)));
+      var acts = el('div', 'toolbar');
+      acts.appendChild(button('ใบเสนอ (พิมพ์ / PDF)', 'alt', function () { bkQuote(b); }));
+      if (r.mine && b.status === 'held' && b.live && !b.extended) acts.appendChild(button('ต่อเวลาอีก ' + L.hold_days + ' วัน', 'alt', function () {
+        api('bk_extend', { id: b.id }).then(function (x) { show('ต่อเวลาแล้ว กันถึง ' + thTime(x.held_until)); bkReload(); }).catch(fail2);
+      }));
+      if (r.can_decide && b.status === 'held' && b.live) {
+        acts.appendChild(button('ยืนยันการจอง', '', function () {
+          api('bk_decide', { ids: [b.id], ok: true }).then(function () { show('ยืนยันการจอง ' + b.bk_no + ' แล้ว'); bkReload(); }).catch(fail2);
+        }));
+        acts.appendChild(button('ส่งกลับ', 'alt', function () {
+          var why = prompt('เหตุผลที่ส่งกลับ (ผู้ขอจะเห็นข้อความนี้)'); if (!why || !why.trim()) return;
+          api('bk_decide', { ids: [b.id], ok: false, note: why.trim() }).then(function () { show('ส่งกลับ ' + b.bk_no + ' แล้ว'); bkReload(); }).catch(fail2);
+        }));
+      }
+      if ((r.mine || r.can_decide) && (b.status === 'held' || b.status === 'booked') && !b.contract_id) acts.appendChild(button('ยกเลิกใบจอง', 'alt', function () {
+        if (!confirm('ยกเลิก ' + b.bk_no + '? พื้นที่จะว่างให้คนอื่นจองได้ทันที')) return;
+        api('bk_cancel', { id: b.id }).then(function () { show('ยกเลิก ' + b.bk_no + ' แล้ว'); bkReload(); }).catch(fail2);
+      }));
+      if (r.mine && b.status !== 'cart') acts.appendChild(button('คัดลอกกลับไปตะกร้า', 'alt', function () {
+        api('bk_reopen', { id: b.id }).then(function () { show('คัดลอกรายการกลับไปตะกร้าแล้ว แก้แล้วส่งคำขอใหม่ได้'); bkReload(); })
+          .catch(function (e) { show(e.code === 'cart_not_empty' ? 'ตะกร้าของคุณยังมีรายการอยู่ ส่งคำขอหรือล้างตะกร้าก่อน' : e.message, 'err'); });
+      }));
+      det.appendChild(acts);
+      det.scrollIntoView({ block: 'start' });
+    })).catch(function (e) { det.textContent = ''; fail2(e); });
   }
   function invPaint(body, tb) {
     var d = inv.data, cols = invCols(d);
@@ -2830,7 +3080,7 @@
           t1.appendChild(el('b', '', p.code + (p.confirmed === false ? '*' : ''))); if (p.category) t1.appendChild(el('small', '', p.category));
           var whole = p.type && p.free.length === p.shelves;
           t2.appendChild(document.createTextNode(!p.type ? (p.kind === 'header' ? 'ป้ายว่าง' : 'ว่าง') : whole ? 'ทั้งตู้ ' + p.shelves + ' ชั้น' : 'ชั้น ' + runs(p.free).map(runText).join(', ') + ' / ' + p.shelves));
-          var more = [p.taken.length ? 'มี ' + p.taken.map(function (h) { return h.brand + (h.status === 'pending' ? ' (รออนุมัติ)' : ''); }).join(', ') : '', p.spec].filter(Boolean).join(' · ');
+          var more = [p.taken.length ? 'มี ' + p.taken.map(function (h) { return h.brand + (h.status === 'pending' ? ' (รออนุมัติ)' : h.status === 'held' ? ' (กันไว้)' : h.status === 'booked' ? ' (จองแล้ว)' : ''); }).join(', ') : '', p.spec].filter(Boolean).join(' · ');
           if (more) t2.appendChild(el('small', '', more));
           t3.textContent = p.price_whole != null ? baht(p.price_whole) : p.type && p.price_free != null ? baht(p.price_free) : '-';
           var fb = el('button', 'linkbtn', 'ผัง'); fb.type = 'button'; fb.setAttribute('aria-label', 'ดูผัง ' + p.code);
@@ -2839,6 +3089,10 @@
             flo.branch = b.code; flo.sel = p.id; flo.view = p.kind === 'glass' ? 'glass' : p.kind === 'hang' ? 'hang' : 'active';
             flo.backTo = { label: 'กลับไปพื้นที่ว่าง', fn: function () { inv.reuse = true; go('inventory'); } }; window.scrollTo(0, 0); go('floor');
           };
+          var cb = el('button', 'linkbtn', '+ ตะกร้า'); cb.type = 'button';
+          cb.setAttribute('aria-label', 'ใส่ ' + p.code + (p.type && !whole ? ' ชั้น ' + runText(runs(p.free)[0]) : '') + ' ในตะกร้า');
+          cb.title = p.type ? (whole ? 'จองทั้งตู้' : 'จองชั้น ' + runText(runs(p.free)[0])) : 'จองจุดนี้';
+          cb.onclick = function () { bkAdd(p, cb); }; t4.appendChild(cb); t4.appendChild(document.createTextNode(' '));
           t4.appendChild(fb); [t1, t2, t3, t4].forEach(function (td) { tr.appendChild(td); }); sb.appendChild(tr);
         });
         st.appendChild(sb); side.appendChild(st);
@@ -4487,7 +4741,8 @@
           if (pick) { b.agreement_id = pick; agId = pick; }
           if (!b.id && !b.agreement_id) { if (!pur || !pur.value) { save.disabled = false; if (pur) badFields([[pur, 'เลือก Med หรือ Nonmed สำหรับ TTA ใหม่']]); return; } b.purchase = pur.value; }
           api('sign_save', b).then(function (r) { savedId = r.id; flo.signsReq = null; return pm.flush(r.id); }).then(function () { var msg = edit ? 'บันทึกแล้ว' : agId ? 'บันทึกแล้ว TTA ต้องอนุมัติรายการนี้ก่อนจึงจะแจ้งคลังได้' : 'บันทึกแล้ว รออนุมัติ TTA ก่อนจึงจะแจ้งคลังและแสดงให้สาขาเห็น'; if (formBack) { afterNote = [msg, 'ok']; formBack(); } else { show(msg, 'ok'); loadFloor(holder); } })
-            .catch(function (e) { save.disabled = false; show(e.code === 'slot_taken' ? 'ตำแหน่งเหล่านี้มีรายการเช่าอื่นอยู่ในช่วงวันที่ชนกัน: ' + e.data.slots.join(', ') + ' (เอาออกหรือเปลี่ยนวันที่)' : e.message, 'err'); });
+            .catch(function (e) { save.disabled = false; show(e.code === 'slot_taken' ? 'ตำแหน่งเหล่านี้มีรายการเช่าอื่นอยู่ในช่วงวันที่ชนกัน: ' + e.data.slots.join(', ') + ' (เอาออกหรือเปลี่ยนวันที่)'
+              : e.code === 'slot_booked' ? 'ตำแหน่งเหล่านี้มีใบจองของคนอื่นกันไว้อยู่: ' + e.data.slots.join(', ') + ' (ติดต่อผู้จอง หรือเอาออก)' : e.message, 'err'); });
         });
       });
     });
