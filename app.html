@@ -2887,7 +2887,8 @@
     var at = x.branch ? x.branch + ' ' + x.code + ' ' : '';
     return x.rule === 'min_months' ? at + 'เช่าขั้นต่ำ ' + x.months + ' เดือน' : x.rule === 'size' ? at + 'ไม่ขายในสาขาขนาด ' + x.size
       : x.rule === 'off_sale' ? at + 'ปิดขายในตารางราคา' : x.rule === 'no_price' ? at + 'ยังไม่มีราคาในตาราง'
-        : x.rule === 'draft' ? 'ตารางราคาปี ' + (x.year + 543) + ' ยังเป็นร่าง' : x.rule === 'clash' ? at + 'ชนกับ ' + x.by + ' ที่ส่งพร้อมกัน' : at + x.rule;
+        : x.rule === 'draft' ? 'ตารางราคาปี ' + (x.year + 543) + ' ยังเป็นร่าง' : x.rule === 'clash' ? at + 'ชนกับ ' + x.by + ' ที่ส่งพร้อมกัน'
+          : x.rule === 'max_brands' ? at + (x.item === 'Hanging strip' ? 'ป้ายแขวน' : 'ป้ายตั้งหน้าร้าน') + 'ในสาขานี้มีครบ ' + x.max + ' แบรนด์แล้ว' : at + x.rule;
   }
   function bkIssues(b) { return Array.isArray(b.rule_issues) ? b.rule_issues : []; }
   var BK_ST = { held: ['กันไว้ รอยืนยัน', 'warn'], booked: ['จองแล้ว', 'ok'], released: ['หมดเวลากัน', ''], cancelled: ['ยกเลิกแล้ว', ''], rejected: ['ส่งกลับ', 'err'] };
