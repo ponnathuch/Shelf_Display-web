@@ -2774,7 +2774,15 @@
     })).catch(function (e) { body.textContent = ''; show(e.message, 'err'); });
   }
 
+  // A Job Tracker task card opens a page at its tab (#/inventory/book, #/contracts/wait): read once, then drop it from the
+  // address so the next visit opens as usual
+  function deepTab(page) {
+    var m = location.hash.match(new RegExp('^#/' + page + '/([a-z_]+)$'));
+    if (m) history.replaceState(null, '', location.pathname + location.search + '#/' + page);
+    return m ? m[1] : '';
+  }
   function inventory() {
+    if (deepTab('inventory') === 'book') inv.tab = 'book';
     var v = $('view'); v.textContent = ''; show('');
     // coming in from another page (a TTA may have changed): load again; a tab switch or the way back from a plan reuses the data
     if (!inv.reuse) { inv.data = null; inv.sb = null; inv.bd = null; } inv.reuse = false;
@@ -3706,6 +3714,7 @@
   var PAY_TH = { pending: 'ยังไม่ได้รับเงิน', partial: 'รับบางส่วน', paid: 'รับเงินแล้ว', none: 'ไม่เก็บเงิน' };
   var CON_KIND = { cashier: 'ชั้นแคชเชียร์', sign: 'พื้นที่', deal: 'รายการอื่น' };
   function contracts() {
+    if (deepTab('contracts') === 'wait') { con.view = 'wait'; con.sel = null; }
     $('bar').hidden = true; show(''); $('view').textContent = ''; loading(); formBack = null;
     Promise.all([api('cashier_packages'), api('cashier_list'), api('sign_list'), api('agreement_list'), api('money_queue').catch(function () { return null; })]).then(guard(function (r) {
       done(); noteAfterLoad(); cash.packages = r[0].packages; cash.contracts = r[1].contracts.map(normEnd); cash.canEdit = r[1].can_edit; con.mq = r[4];
