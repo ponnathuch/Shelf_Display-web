@@ -275,6 +275,20 @@
   .invside .num { text-align: right; white-space: nowrap; }
   .invside small { display: block; color: var(--c-ink-2); }
   .invside .linkbtn { min-height: 0; padding: 0; }
+  /* side panel actions: the cart button stands apart from the plan link */
+  .invside .invacts { display: flex; align-items: center; gap: var(--space-3); white-space: nowrap; }
+  .invside .linkbtn.cartbtn { padding: var(--space-0) var(--space-2); border: 1px solid var(--c-brand-line); border-radius: var(--radius-pill);
+    background: var(--c-brand-soft); color: var(--c-brand-strong); text-decoration: none; }
+  .invside .linkbtn.cartbtn:disabled { border-color: var(--c-line); background: transparent; color: var(--c-ink-2); }
+  /* booking request form: three fields in a row, the note and the send button under them */
+  .bkform { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--size-field), 1fr)); gap: var(--space-3); align-items: end;
+    margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--c-line); }
+  .bkform label.f { margin-bottom: 0; }
+  .bkform .wide { grid-column: 1 / -1; }
+  .bkform .send { grid-column: 1 / -1; justify-self: start; }
+  .invside .shelfpick { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+  .invside .shelfpick select.input { width: auto; min-height: 0; padding: var(--space-0) var(--space-1); }
+  .invside .shelfpick small { flex-basis: 100%; }
   /* Brand view: plain data tables that breathe, scrolling inside their own box */
   .brandhead .brandtitle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
   .brandhead .brandtitle h2 { margin: 0 var(--space-2) 0 0; font-size: var(--fs-xl); }
@@ -2792,7 +2806,8 @@
       });
     })();
   }
-  function bkLineTable(b, onRemove) {
+  // onTake (cart only): a Section line gets shelf pickers; picking calls onTake(line, take)
+  function bkLineTable(b, onRemove, onTake) {
     var t = el('table', 'invside'), h = el('thead'), hr = el('tr'), tb = el('tbody');
     ['สาขา', 'จุด', 'ชนิด', 'ที่เช่า', 'เกรด', 'บาท/เดือน', ''].forEach(function (x, i) { var th = el('th', i === 5 ? 'num' : '', x); th.scope = 'col'; hr.appendChild(th); });
     h.appendChild(hr); t.appendChild(h);
@@ -2801,7 +2816,24 @@
       tr.appendChild(el('td', '', l.branch_code || '-'));
       c2.appendChild(el('b', '', l.code || String(l.slot_id))); if (l.category) c2.appendChild(el('small', '', l.category)); tr.appendChild(c2);
       tr.appendChild(el('td', '', bkKind(l)));
-      var c4 = el('td', '', bkTakeText(l));
+      var c4 = el('td');
+      if (onTake && l.shelves > 1) {
+        // from / to shelf (1 = top); all of them = the whole Section
+        var from = l.whole ? 1 : l.shelf_from || 1, to = l.whole ? l.shelves : l.shelf_to || l.shelves;
+        var pick = el('span', 'shelfpick'), sf = el('select', 'input'), stt = el('select', 'input');
+        sf.setAttribute('aria-label', 'ชั้นแรก ' + l.code); stt.setAttribute('aria-label', 'ชั้นสุดท้าย ' + l.code);
+        for (var k = 1; k <= l.shelves; k++) { var o1 = el('option', '', String(k)); o1.value = k; sf.appendChild(o1); var o2 = el('option', '', String(k)); o2.value = k; stt.appendChild(o2); }
+        sf.value = from; stt.value = to;
+        var change = function () {
+          var a = Number(sf.value), z = Number(stt.value);
+          if (z < a) { if (this === sf) { z = a; stt.value = a; } else { a = z; sf.value = z; } }
+          onTake(l, a === 1 && z === l.shelves ? { whole: true } : { shelf_from: a, shelf_to: z });
+        };
+        sf.onchange = change; stt.onchange = change;
+        pick.appendChild(document.createTextNode('ชั้น ')); pick.appendChild(sf); pick.appendChild(document.createTextNode(' ถึง ')); pick.appendChild(stt);
+        pick.appendChild(el('small', '', from === 1 && to === l.shelves ? 'ทั้งตู้ ' + l.shelves + ' ชั้น' : 'จาก ' + l.shelves + ' ชั้น'));
+        c4.appendChild(pick);
+      } else c4.textContent = bkTakeText(l);
       if (l.gone) c4.appendChild(el('small', 'chip err', 'จุดนี้ถูกปิดแล้ว'));
       if (l.clash && l.clash.length) c4.appendChild(el('small', 'chip err', 'ไม่ว่างแล้ว: ' + l.clash.join(', ')));
       tr.appendChild(c4);
@@ -2874,6 +2906,12 @@
       if (bad.length) cc.appendChild(el('p', 'chip err', bad.length + ' จุดไม่ว่างแล้ว เอาออกก่อนส่งคำขอ'));
       cc.appendChild(bkLineTable(cart, function (l) {
         api('bk_cart_remove', { slot_ids: [l.slot_id] }).then(bkReload).catch(function (e) { show(e.message, 'err'); });
+      }, function (l, take) {
+        // same place again with other shelves: the server checks they are free and the price follows
+        var body = { slot_id: l.slot_id, start_date: cart.start_date, end_date: cart.end_date };
+        Object.keys(take).forEach(function (k) { body[k] = take[k]; });
+        api('bk_cart_add', body).then(function () { show(l.branch_code + ' ' + l.code + ' เปลี่ยนเป็น ' + bkTakeText(Object.assign({ shelves: l.shelves }, take)) + ' แล้ว'); bkReload(); })
+          .catch(function (e) { show(e.code === 'slot_taken' ? 'ชั้นที่เลือกของ ' + l.branch_code + ' ' + l.code + ' ไม่ว่าง: ' + (e.data.by || []).join(', ') : e.message, 'err'); bkReload(); });
       }));
       cc.appendChild(el('p', '', bkSums(cart)));
       var acts = el('div', 'toolbar');
@@ -2882,8 +2920,9 @@
         if (confirm('เอาทุกจุดออกจากตะกร้า?')) api('bk_cart_remove', {}).then(bkReload).catch(function (e) { show(e.message, 'err'); });
       }));
       cc.appendChild(acts);
-      var f = el('div', 'card invfilters');
-      var inp = function (text, tag) { var l = el('label', 'f'), i = el(tag || 'input', 'input'); l.appendChild(el('span', 't', text)); l.appendChild(i); f.appendChild(l); return i; };
+      var f = el('div', 'bkform');
+      f.appendChild(el('h3', 'wide', 'ส่งคำขอจอง'));
+      var inp = function (text, tag) { var l = el('label', 'f' + (tag === 'textarea' ? ' wide' : '')), i = el(tag || 'input', 'input'); l.appendChild(el('span', 't', text)); l.appendChild(i); f.appendChild(l); return i; };
       var br = inp('แบรนด์ *'), pu = inp('Med / Nonmed *', 'select'), ve = inp('เวนเดอร์'), no = inp('หมายเหตุ', 'textarea');
       br.maxLength = 120; ve.maxLength = 200; no.maxLength = 2000;
       [['', 'เลือก'], ['med', 'Med'], ['nonmed', 'Nonmed']].forEach(function (o) { var x = el('option', '', o[1]); x.value = o[0]; pu.appendChild(x); });
@@ -2901,7 +2940,7 @@
           if (gone) bkReload();
         });
       });
-      cc.appendChild(send);
+      send.classList.add('send'); f.appendChild(send);
     }
     // bookings
     body.appendChild(el('h2', 'sec', 'ใบจอง'));
@@ -3089,10 +3128,10 @@
             flo.branch = b.code; flo.sel = p.id; flo.view = p.kind === 'glass' ? 'glass' : p.kind === 'hang' ? 'hang' : 'active';
             flo.backTo = { label: 'กลับไปพื้นที่ว่าง', fn: function () { inv.reuse = true; go('inventory'); } }; window.scrollTo(0, 0); go('floor');
           };
-          var cb = el('button', 'linkbtn', '+ ตะกร้า'); cb.type = 'button';
+          var cb = el('button', 'linkbtn cartbtn', '+ ตะกร้า'); cb.type = 'button'; t4.className = 'invacts';
           cb.setAttribute('aria-label', 'ใส่ ' + p.code + (p.type && !whole ? ' ชั้น ' + runText(runs(p.free)[0]) : '') + ' ในตะกร้า');
           cb.title = p.type ? (whole ? 'จองทั้งตู้' : 'จองชั้น ' + runText(runs(p.free)[0])) : 'จองจุดนี้';
-          cb.onclick = function () { bkAdd(p, cb); }; t4.appendChild(cb); t4.appendChild(document.createTextNode(' '));
+          cb.onclick = function () { bkAdd(p, cb); }; t4.appendChild(cb);
           t4.appendChild(fb); [t1, t2, t3, t4].forEach(function (td) { tr.appendChild(td); }); sb.appendChild(tr);
         });
         st.appendChild(sb); side.appendChild(st);
