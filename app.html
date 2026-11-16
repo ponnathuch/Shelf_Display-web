@@ -289,6 +289,8 @@
   .invside .shelfpick { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
   .invside .shelfpick select.input { width: auto; min-height: 0; padding: var(--space-0) var(--space-1); }
   .invside .shelfpick small { flex-basis: 100%; }
+  .invside tr.bkpick td { background: var(--c-brand-soft); }
+  .invside tr.bkpick .btn { min-height: 0; padding: var(--space-0) var(--space-3); }
   /* Brand view: plain data tables that breathe, scrolling inside their own box */
   .brandhead .brandtitle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
   .brandhead .brandtitle h2 { margin: 0 var(--space-2) 0 0; font-size: var(--fs-xl); }
@@ -2784,27 +2786,64 @@
     var r = runs(p.free)[0]; return { shelf_from: r[0], shelf_to: r[1] };
   }
   function bkTakeText(l) {
-    if (l.whole) return 'ทั้งตู้' + (l.shelves ? ' ' + l.shelves + ' ชั้น' : '');
-    if (l.shelf_from) return 'ชั้น ' + runText([l.shelf_from, l.shelf_to]) + (l.shelves ? ' / ' + l.shelves : '');
+    if (l.whole) return 'ทั้งตู้' + (l.shelves ? ' ' + l.shelves + ' ชั้น' : '') + (l.kind === 'header' ? ' + ป้ายหัวชั้น' : '');
+    if (l.shelf_from) return 'ชั้น ' + runText([l.shelf_from, l.shelf_to]) + (l.shelves ? ' / ' + l.shelves : '') + (l.shelf_from === 1 ? ' + ป้ายหัวชั้น' : '');
     return l.kind === 'header' ? 'ป้ายหัวชั้น' : 'ทั้งจุด';
   }
   function bkKind(l) { return l.type ? invName(l.type) : l.kind === 'header' ? 'ป้ายหัวชั้น' : INV_KIND[l.kind] || l.kind || '-'; }
   function bkBadge() { var n = $('bkTabN'); if (n) n.textContent = bks.count ? ' · ' + bks.count : ''; }
-  function bkAdd(p, btn) {
+  function bkTopMin(e) { return 'เริ่มที่ชั้น 1 (ได้ป้ายหัวชั้นด้วย) ต้องเช่าอย่างน้อย ' + e.data.n + ' ชั้นบนตาม Rate card'; }
+  function bkAdd(p, btn, take, done) {
     btn.disabled = true;
-    var body = { slot_id: p.id, start_date: inv.from, end_date: inv.to }, t = bkTake(p);
+    var body = { slot_id: p.id, start_date: inv.from, end_date: inv.to }, t = take || bkTake(p);
     Object.keys(t).forEach(function (k) { body[k] = t[k]; });
     (function send() {
       api('bk_cart_add', body).then(function () {
-        btn.textContent = 'อยู่ในตะกร้า'; bks.count = (bks.count || 0) + 1; bkBadge();
+        btn.textContent = 'อยู่ในตะกร้า'; bks.count = (bks.count || 0) + 1; bkBadge(); if (done) done();
         show('ใส่ ' + p.branch_code + ' ' + p.code + ' ในตะกร้าแล้ว ดูและส่งคำขอได้ที่แท็บ จอง (Booking)');
       }).catch(function (e) {
         if (e.code === 'period_mismatch' && confirm('ตะกร้าของคุณเป็นช่วง ' + thDate(e.data.start_date) + ' ถึง ' + thDate(e.data.end_date) +
           '\nเปลี่ยนเป็นช่วงที่เลือกอยู่ (' + thDate(inv.from) + ' ถึง ' + thDate(inv.to) + ') ไหม? รายการเดิมในตะกร้าจะถูกตรวจว่ายังว่างตามช่วงใหม่')) { body.move_period = true; send(); return; }
         btn.disabled = false;
-        show(e.code === 'slot_taken' ? p.branch_code + ' ' + p.code + ' ไม่ว่างแล้วในช่วงนี้: ' + (e.data.by || []).join(', ') : e.message, 'err');
+        show(e.code === 'slot_taken' ? p.branch_code + ' ' + p.code + ' ไม่ว่างแล้วในช่วงนี้: ' + (e.data.by || []).join(', ') : e.code === 'top_min' ? bkTopMin(e) : e.message, 'err');
       });
     })();
+  }
+  // A Section: pick its shelves under the row before they go in the cart. Shelf 1 = top; it brings the header sign
+  // (included in the shelf price, user 2026-11-16) and the top N of the rate card at least.
+  function bkPicker(p, btn, row) {
+    var next = row.nextSibling;
+    if (next && next.classList && next.classList.contains('bkpick')) { next.remove(); btn.setAttribute('aria-expanded', 'false'); return; }
+    btn.setAttribute('aria-expanded', 'true');
+    var tr = el('tr', 'bkpick'), td = el('td'); td.colSpan = 4; tr.appendChild(td);
+    var rs = runs(p.free), sf = el('select', 'input'), st = el('select', 'input'), note = el('small', 'hint');
+    sf.setAttribute('aria-label', 'ชั้นแรก ' + p.code); st.setAttribute('aria-label', 'ชั้นสุดท้าย ' + p.code);
+    // shelf 1 comes with the sign: not offered while someone else rents the sign alone
+    p.free.filter(function (k) { return k !== 1 || p.sign_free; }).forEach(function (k) { var o = el('option', '', String(k)); o.value = k; sf.appendChild(o); });
+    function fillTo() {
+      var a = Number(sf.value), run = rs.filter(function (r) { return a >= r[0] && a <= r[1]; })[0], keep = Number(st.value);
+      st.textContent = '';
+      for (var k = a; k <= run[1]; k++) { var o = el('option', '', String(k)); o.value = k; st.appendChild(o); }
+      st.value = keep >= a && keep <= run[1] ? keep : run[1];
+      tell();
+    }
+    function tell() {
+      var a = Number(sf.value), z = Number(st.value);
+      note.textContent = (a === 1 && z === p.shelves ? 'ทั้งตู้ ' + p.shelves + ' ชั้น รวมป้ายหัวชั้น' : a === 1 ? 'รวมป้ายหัวชั้น · เริ่มชั้น 1 ต้องเช่าอย่างน้อยตามขั้นต่ำชั้นบนของ Rate card' : 'ไม่รวมป้ายหัวชั้น (ป้ายไปกับคนที่เช่าชั้น 1)') +
+        (!p.sign_free && p.free.indexOf(1) !== -1 ? ' · ป้ายหัวชั้นมีคนเช่าอยู่ จึงเลือกชั้น 1 ไม่ได้' : '');
+    }
+    sf.onchange = fillTo; st.onchange = tell;
+    var box = el('div', 'shelfpick');
+    box.appendChild(document.createTextNode('ชั้น ')); box.appendChild(sf); box.appendChild(document.createTextNode(' ถึง ')); box.appendChild(st);
+    var go = button('ใส่ตะกร้า', '', function () {
+      var a = Number(sf.value), z = Number(st.value);
+      bkAdd(p, go, a === 1 && z === p.shelves ? { whole: true } : { shelf_from: a, shelf_to: z }, function () { tr.remove(); btn.textContent = 'อยู่ในตะกร้า'; btn.disabled = true; });
+    });
+    box.appendChild(go); td.appendChild(box); td.appendChild(note);
+    if (!sf.options.length) { box.hidden = true; note.textContent = 'ชั้นที่ว่างมีแค่ชั้น 1 แต่ป้ายหัวชั้นมีคนเช่าอยู่ จองไม่ได้'; }
+    else fillTo();
+    row.parentNode.insertBefore(tr, row.nextSibling);
+    sf.focus();
   }
   // onTake (cart only): a Section line gets shelf pickers; picking calls onTake(line, take)
   function bkLineTable(b, onRemove, onTake) {
@@ -2831,7 +2870,7 @@
         };
         sf.onchange = change; stt.onchange = change;
         pick.appendChild(document.createTextNode('ชั้น ')); pick.appendChild(sf); pick.appendChild(document.createTextNode(' ถึง ')); pick.appendChild(stt);
-        pick.appendChild(el('small', '', from === 1 && to === l.shelves ? 'ทั้งตู้ ' + l.shelves + ' ชั้น' : 'จาก ' + l.shelves + ' ชั้น'));
+        pick.appendChild(el('small', '', (from === 1 && to === l.shelves ? 'ทั้งตู้ ' + l.shelves + ' ชั้น' : 'จาก ' + l.shelves + ' ชั้น') + (from === 1 ? ' · รวมป้ายหัวชั้น' : '')));
         c4.appendChild(pick);
       } else c4.textContent = bkTakeText(l);
       if (l.gone) c4.appendChild(el('small', 'chip err', 'จุดนี้ถูกปิดแล้ว'));
@@ -2911,7 +2950,7 @@
         var body = { slot_id: l.slot_id, start_date: cart.start_date, end_date: cart.end_date };
         Object.keys(take).forEach(function (k) { body[k] = take[k]; });
         api('bk_cart_add', body).then(function () { show(l.branch_code + ' ' + l.code + ' เปลี่ยนเป็น ' + bkTakeText(Object.assign({ shelves: l.shelves }, take)) + ' แล้ว'); bkReload(); })
-          .catch(function (e) { show(e.code === 'slot_taken' ? 'ชั้นที่เลือกของ ' + l.branch_code + ' ' + l.code + ' ไม่ว่าง: ' + (e.data.by || []).join(', ') : e.message, 'err'); bkReload(); });
+          .catch(function (e) { show(e.code === 'slot_taken' ? 'ชั้นที่เลือกของ ' + l.branch_code + ' ' + l.code + ' ไม่ว่าง: ' + (e.data.by || []).join(', ') : e.code === 'top_min' ? bkTopMin(e) : e.message, 'err'); bkReload(); });
       }));
       cc.appendChild(el('p', '', bkSums(cart)));
       var acts = el('div', 'toolbar');
@@ -3131,7 +3170,8 @@
           var cb = el('button', 'linkbtn cartbtn', '+ ตะกร้า'); cb.type = 'button'; t4.className = 'invacts';
           cb.setAttribute('aria-label', 'ใส่ ' + p.code + (p.type && !whole ? ' ชั้น ' + runText(runs(p.free)[0]) : '') + ' ในตะกร้า');
           cb.title = p.type ? (whole ? 'จองทั้งตู้' : 'จองชั้น ' + runText(runs(p.free)[0])) : 'จองจุดนี้';
-          cb.onclick = function () { bkAdd(p, cb); }; t4.appendChild(cb);
+          if (p.type) { cb.setAttribute('aria-expanded', 'false'); cb.title = 'เลือกชั้นที่จะจอง'; cb.setAttribute('aria-label', 'เลือกชั้นของ ' + p.code + ' เพื่อใส่ตะกร้า'); }
+          cb.onclick = function () { if (p.type) bkPicker(p, cb, tr); else bkAdd(p, cb); }; t4.appendChild(cb);
           t4.appendChild(fb); [t1, t2, t3, t4].forEach(function (td) { tr.appendChild(td); }); sb.appendChild(tr);
         });
         st.appendChild(sb); side.appendChild(st);
