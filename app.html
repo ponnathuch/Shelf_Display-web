@@ -3870,10 +3870,20 @@
     var ib = el('section', 'boxscroll'); ib.appendChild(el('h3', '', 'รายการอื่น (สื่อ อบรม ค่าธรรมเนียม)'));
     ib.appendChild(el('p', 'hint', 'รายการที่ไม่มีตำแหน่ง มีแค่ยอดเงินและช่วงเวลา นับรวมในมูลค่า TTA เลือกจากตารางราคาของปีที่เริ่ม TTA หรือพิมพ์ชื่อเอง ราคาที่ใส่ให้แก้ได้'));
     var dl = el('datalist'); dl.id = 'ag-items-' + (a.id || 'new'); ib.appendChild(dl);
-    var irows = el('div'), sum = el('p', 'sub'), rateList = [];
-    function yearRates() { var y = Number((from.value || '').slice(0, 4)); return rateList.filter(function (x) { return x.year === y; }); }
+    var irows = el('div'), sum = el('p', 'sub'), rateList = [], rateNote = el('p', 'sub'); ib.appendChild(rateNote);
+    // the start year's card; before a start date, this year's; a year with no card yet falls back to the latest one before it
+    function rateYearOf() {
+      var y = Number((from.value || '').slice(0, 4)) || new Date().getFullYear();
+      var have = rateList.map(function (x) { return x.year; }).filter(function (k) { return k <= y; });
+      return have.length ? Math.max.apply(null, have) : null;
+    }
+    function yearRates() { var y = rateYearOf(); return rateList.filter(function (x) { return x.year === y; }); }
     function fillDl() {
       dl.textContent = '';
+      var y = rateYearOf(), sy = Number((from.value || '').slice(0, 4));
+      rateNote.textContent = y === null ? 'ยังไม่มีตารางราคา พิมพ์ชื่อรายการเองได้'
+        : 'รายการให้เลือกมาจากตารางราคาปี ' + y + (!sy ? ' (ยังไม่ได้ใส่วันเริ่ม ใส่แล้วจะใช้ตารางของปีที่เริ่ม)' : sy !== y ? ' (ปี ' + sy + ' ยังไม่มีตารางราคา)' : '')
+          + (rateList.some(function (x) { return x.year === y && x.draft; }) ? ' · ยังเป็นร่าง' : '');
       yearRates().forEach(function (x) { var o = el('option'); o.value = x.item; o.label = x.whole_price != null ? baht(x.whole_price) + ' บาท ' + (x.unit || '') : 'ยังไม่มีราคา'; dl.appendChild(o); });
     }
     api('rates').then(function (r) { rateList = r.rates.filter(function (x) { return x.kind === 'other' && x.on_sale !== false; }); fillDl(); }).catch(function () { /* typing the name still works */ });
@@ -4200,7 +4210,8 @@
   // ---------- sign specs from the branch Template files ----------
   // Input: sheets = [{ name, rows: [{ A: 'text', B: ... }] }] (every sheet, every row). Output: { items, blocks, skipped }.
   // Header columns are found by keyword, not by position: the Templates differ in order and spelling between branches.
-  var SPEC_COL = [['code', /^(section|ลำดับ)$/i], ['no', /^no\.?$/i], ['material', /^วัสดุ/], ['qty', /จำนวน/], ['size', /^ขนาด/], ['note', /หมายเหตุ/]];
+  var SIGN_TEXT = /ข้อความ\s*\/\s*รายละเอียดป้าย|^ชื่อป้าย|รูปแบบป้าย\s*\/\s*ข้อความ/; // same as tools/tpl_import.py
+  var SPEC_COL = [['code', /^(section|ลำดับ)$/i], ['no', /^no\.?$/i], ['material', /^วัสดุ/], ['qty', /จำนวน/], ['size', /^ขนาด/], ['note', /หมายเหตุ/], ['sign_text', SIGN_TEXT]];
   var SPEC_CODE = /^[A-Z]{1,4}\d{1,3}[A-Z]?$/i;
   function parseSpecSheets(sheets) {
     var items = [], blocks = [], skipped = [];
@@ -4225,6 +4236,7 @@
         var code = (row[cols.code] || '').replace(/\s+/g, '').toUpperCase(), material = (row[cols.material] || '').replace(/\s+/g, ' ').trim();
         if (cols.no && /^[A-Z]+$/.test(code) && row[cols.no]) code += row[cols.no].replace(/\s+/g, ''); // the Template splits OA | 01 into two columns
         var qty = row[cols.qty] || '', note = (row[cols.note] || '').replace(/\s+/g, ' ').trim(), sizeText = '', w2 = null, h2 = null;
+        var words = cols.sign_text ? (row[cols.sign_text] || '').replace(/\s+/g, ' ').trim() : '';
         if (sizeCols) { w2 = row[sizeCols.w] === undefined || row[sizeCols.w] === '' ? null : Number(row[sizeCols.w]); h2 = row[sizeCols.h] === undefined || row[sizeCols.h] === '' ? null : Number(row[sizeCols.h]); }
         else if (cols.size) {
           sizeText = (row[cols.size] || '').replace(/\s+/g, ' ').trim();
@@ -4232,12 +4244,12 @@
           if (m) { w2 = Number(m[1]); h2 = Number(m[2]); sizeText = ''; }
         }
         if (w2 !== null && isNaN(w2)) w2 = null; if (h2 !== null && isNaN(h2)) h2 = null;
-        if (!material && qty === '' && w2 === null && !sizeText) return; // an empty row
-        if (code && !SPEC_CODE.test(code)) { if (material || qty !== '') skipped.push(sh.name.trim() + ' แถว ' + (i + 1) + ': รหัส "' + code + '" ไม่ใช่รหัสตำแหน่ง'); return; }
+        if (!material && qty === '' && w2 === null && !sizeText && !words) return; // an empty row
+        if (code && !SPEC_CODE.test(code)) { if (material || qty !== '' || words) skipped.push(sh.name.trim() + ' แถว ' + (i + 1) + ': รหัส "' + code + '" ไม่ใช่รหัสตำแหน่ง'); return; }
         if (code) last = code; else code = last; // a second line under the same place (several sizes)
         if (!code) return;
         var q = qty === '' ? null : Math.round(Number(qty));
-        items.push({ code: code, sign_type: type, material: material, qty: isNaN(q) ? null : q, width_cm: w2, height_cm: h2, size_text: sizeText, note: note });
+        items.push({ code: code, sign_type: type, sign_text: words, material: material, qty: isNaN(q) ? null : q, width_cm: w2, height_cm: h2, size_text: sizeText, note: note });
       });
       if (items.length > n0) blocks.push({ sheet: sh.name.trim(), count: items.length - n0 });
     });
@@ -4415,6 +4427,7 @@
     if (!sl.active) chips.appendChild(el('span', 'chip err', 'เลิกใช้')); else if (!(sl.signs || []).length) chips.appendChild(el('span', 'chip ok', 'ว่าง'));
     left.appendChild(chips); head.appendChild(left); head.appendChild(button('ปิด', 'alt', function () { flo.sel = null; renderFloor(holder); })); p.appendChild(head);
     var t = [sl.name, sl.category, sl.note].filter(Boolean).join(' · '); if (t) p.appendChild(el('p', 'sub', t));
+    if (signWords(sl)) p.appendChild(el('p', '', 'ข้อความบนป้าย: ' + signWords(sl)));
     if ((sl.specs || []).length) { // what is printed here and how big (from the Template)
       var sp = el('div', 'boxscroll'); sp.appendChild(el('h3', '', 'ป้ายที่ใช้ตำแหน่งนี้'));
       sl.specs.forEach(function (x) { sp.appendChild(el('p', 'sub', specLine(x))); });
@@ -4912,7 +4925,7 @@
       rows.forEach(function (s) {
         var r = el('tr'), c0 = el('th', '', s.code); c0.scope = 'row'; r.appendChild(c0);
         var sp = (s.specs || []).map(function (x) { var z = (x.width_cm != null && x.height_cm != null ? x.width_cm + ' x ' + x.height_cm + ' cm' : x.size_text || '') + (x.qty != null && x.qty !== 1 ? ' x' + x.qty : ''); return z ? (x.sign_type ? x.sign_type + ' ' : '') + z : ''; }).filter(Boolean);
-        var c1 = el('td', 'wrapcell'); c1.appendChild(el('div', '', [s.category, s.name].filter(Boolean).join(' · ') || '-'));
+        var c1 = el('td', 'wrapcell'); c1.appendChild(el('div', '', [s.category, s.name, signWords(s)].filter(Boolean).join(' · ') || '-'));
         // the kind is the same for every row of a tab, so it shows only where kinds mix
         var sub = [flo.view === 'free' ? KIND_TH[s.kind] || s.kind : '', s.kind === 'glass' || s.tenant === 'rent' ? TENANT_TH[s.tenant] : '',
           sp.length ? sp.slice(0, 2).join(', ') + (sp.length > 2 ? ' +' + (sp.length - 2) : '') : '', s.note || ''].filter(Boolean).join(' · ');
@@ -5028,13 +5041,13 @@
     var tenant = sel('ผู้ใช้ตำแหน่ง', [['icare', 'iCare ติดเอง'], ['rent', 'ให้ซัพพลายเออร์เช่า']], s ? s.tenant : 'icare');
     var note = fld('หมายเหตุ', s && s.note); d.appendChild(g);
     // sign specs of this place: edit one size, add or remove a line
-    var specs = ((s && s.specs) || []).map(function (x) { return { sign_type: x.sign_type || '', material: x.material || '', qty: x.qty == null ? '' : x.qty, width_cm: x.width_cm == null ? '' : x.width_cm, height_cm: x.height_cm == null ? '' : x.height_cm, size_text: x.size_text || '', note: x.note || '' }; });
+    var specs = ((s && s.specs) || []).map(function (x) { return { sign_type: x.sign_type || '', sign_text: x.sign_text || '', material: x.material || '', qty: x.qty == null ? '' : x.qty, width_cm: x.width_cm == null ? '' : x.width_cm, height_cm: x.height_cm == null ? '' : x.height_cm, size_text: x.size_text || '', note: x.note || '' }; });
     var specBox = el('div');
     function paintSpecs() {
       specBox.textContent = '';
       specs.forEach(function (x, i) {
         var r = el('div', 'brow');
-        [['sign_type', 'ประเภทป้าย', 'text'], ['material', 'วัสดุ', 'text'], ['width_cm', 'กว้าง (cm)', 'number'], ['height_cm', 'สูง (cm)', 'number'], ['qty', 'จำนวน', 'number'], ['note', 'หมายเหตุ', 'text']].forEach(function (f) {
+        [['sign_type', 'ประเภทป้าย', 'text'], ['sign_text', 'ข้อความบนป้าย', 'text'], ['material', 'วัสดุ', 'text'], ['width_cm', 'กว้าง (cm)', 'number'], ['height_cm', 'สูง (cm)', 'number'], ['qty', 'จำนวน', 'number'], ['note', 'หมายเหตุ', 'text']].forEach(function (f) {
           var l = el('label', 'f'); l.appendChild(el('span', 't', f[1])); var inp = el('input', 'input'); inp.type = f[2]; if (f[2] === 'number') inp.min = 0; inp.value = x[f[0]];
           inp.oninput = function () { x[f[0]] = inp.value; }; l.appendChild(inp); r.appendChild(l);
         });
@@ -5044,7 +5057,7 @@
       });
       if (!specs.length) specBox.appendChild(el('p', 'sub', 'ยังไม่มีรายการป้าย'));
     }
-    { d.appendChild(el('h3', '', 'รายการป้ายของตำแหน่งนี้')); paintSpecs(); d.appendChild(specBox); d.appendChild(button('+ เพิ่มรายการป้าย', 'alt', function () { specs.push({ sign_type: '', material: '', qty: 1, width_cm: '', height_cm: '', size_text: '', note: '' }); paintSpecs(); })); }
+    { d.appendChild(el('h3', '', 'รายการป้ายของตำแหน่งนี้')); paintSpecs(); d.appendChild(specBox); d.appendChild(button('+ เพิ่มรายการป้าย', 'alt', function () { specs.push({ sign_type: '', sign_text: '', material: '', qty: 1, width_cm: '', height_cm: '', size_text: '', note: '' }); paintSpecs(); })); }
     var shelf = s && (s.kind === 'header' || s.fixture) ? shelfEditor(d, s) : null;
     if (!s) d.appendChild(el('p', 'hint', 'ชั้นวางสำหรับขาย: บันทึกตำแหน่งก่อน แล้วกด "แก้ไข" อีกครั้งเพื่อกำหนดประเภทและจำนวนชั้น'));
     var al = el('label', 'check'), act = el('input'); act.type = 'checkbox'; act.checked = s ? s.active : true; al.appendChild(act); al.appendChild(document.createTextNode('ใช้งานอยู่ (ติ๊กออก = เลิกใช้)')); d.appendChild(al);
@@ -5053,7 +5066,7 @@
       if (!code.value.trim()) { show('ใส่รหัสตำแหน่งก่อน', 'err'); return; }
       if (shelf && !shelf.valid()) { show('จำนวนชั้น 1-20 และช่องต่อชั้น 1-10', 'err'); return; }
       var num = function (v) { return v === '' || v === null ? null : Number(v); };
-      var items = specs.map(function (x) { return { code: code.value.trim().toUpperCase(), sign_type: x.sign_type, material: x.material, qty: num(x.qty), width_cm: num(x.width_cm), height_cm: num(x.height_cm), size_text: x.size_text, note: x.note }; });
+      var items = specs.map(function (x) { return { code: code.value.trim().toUpperCase(), sign_type: x.sign_type, sign_text: x.sign_text, material: x.material, qty: num(x.qty), width_cm: num(x.width_cm), height_cm: num(x.height_cm), size_text: x.size_text, note: x.note }; });
       api('slot_save', { branch: flo.branch, code: code.value, name: name.value, category: cat.value, kind: kind.value, tenant: tenant.value, note: note.value, active: act.checked })
         .then(function () { return s || items.length ? api('slot_specs_save', { branch: flo.branch, items: items.length ? items : [{ code: code.value.trim().toUpperCase() }] }) : null; })
         .then(function () { return shelf && shelf.dirty() ? api('slot_shelves_save', shelf.body()) : null; })
@@ -5182,7 +5195,7 @@
       d.appendChild(box);
       var row = el('div', 'row'), go2 = button('นำเข้า', '', function () {
         go2.disabled = true; show('กำลังนำเข้า...');
-        api('slot_specs_save', { branch: flo.branch, items: r.items.map(function (x) { return { code: x.code, sign_type: x.sign_type, material: x.material, qty: x.qty, width_cm: x.width_cm, height_cm: x.height_cm, size_text: x.size_text, note: x.note }; }) })
+        api('slot_specs_save', { branch: flo.branch, items: r.items.map(function (x) { return { code: x.code, sign_type: x.sign_type, sign_text: x.sign_text, material: x.material, qty: x.qty, width_cm: x.width_cm, height_cm: x.height_cm, size_text: x.size_text, note: x.note }; }) })
           .then(function (x) { show('นำเข้ารายการป้ายของ ' + x.places + ' ตำแหน่งแล้ว', 'ok'); loadFloor(holder); })
           .catch(function (e) { go2.disabled = false; show(e.message, 'err'); });
       });
@@ -5190,10 +5203,14 @@
       holder.textContent = ''; holder.appendChild(d);
     }).catch(function (e) { show(e.message, 'err'); });
   }
+  // the words on a place's signs, each once (a Section with a header and shelf strips usually has one)
+  function signWords(s) {
+    return (s.specs || []).map(function (x) { return x.sign_text; }).filter(function (t, i, a) { return t && a.indexOf(t) === i; }).join(' · ');
+  }
   // "Sticker โปร่งแสง · 78 x 49 cm · 1 ชิ้น" for one spec
   function specLine(p) {
     var size = p.width_cm != null && p.height_cm != null ? p.width_cm + ' x ' + p.height_cm + ' cm' : p.size_text || '';
-    return [p.sign_type, p.material, size, p.qty != null ? p.qty + ' ชิ้น' : '', p.note].filter(Boolean).join(' · ');
+    return [p.sign_type, p.sign_text ? '"' + p.sign_text + '"' : '', p.material, size, p.qty != null ? p.qty + ' ชิ้น' : '', p.note].filter(Boolean).join(' · ');
   }
 
   var setTab = 'media', spotsOpen = false;
