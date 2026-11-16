@@ -545,6 +545,8 @@
   var ROLE_TH = { ADMIN: 'ผู้ดูแลระบบ', APPROVER: 'ผู้อนุมัติสื่อ', REGISTRANT: 'ผู้ลงทะเบียน', STAFF: 'สาขา', WAREHOUSE: 'คลัง' };
   var ERR = {
     has_dp: 'ลบงวดหรือกิจกรรมนี้ไม่ได้ เพราะตั้ง DP หรือออกใบแจ้งหนี้แล้ว',
+    taken: 'มีคนบันทึกเลขนี้ไปก่อนแล้ว โหลดหน้าใหม่เพื่อดูเลขล่าสุด', dp_locked: 'งวดหรือกิจกรรมที่ตั้ง DP หรือออกใบแจ้งหนี้แล้ว แก้วันที่ ยอด หรือชื่อไม่ได้ (NAV ใช้ตัวเลขนี้แล้ว)',
+    has_dp_cancel: 'TTA นี้มีรายการที่ตั้ง DP หรือออกใบแจ้งหนี้ใน NAV แล้ว',
     bad_file: 'แนบได้เฉพาะไฟล์ PDF, JPG หรือ PNG', too_big: 'ไฟล์ใหญ่เกิน 5 MB', too_many_files: 'TTA นี้มีไฟล์ครบ 20 ไฟล์แล้ว',
     jt: 'ระบบเก็บไฟล์ (Job Tracker) ไม่ตอบ ลองใหม่อีกครั้ง',
     period_mismatch: 'ตะกร้าเป็นช่วงวันอื่นอยู่', empty: 'ตะกร้ายังว่างอยู่', extended: 'ใบจองนี้ต่อเวลาไปแล้ว 1 ครั้ง ต่ออีกไม่ได้',
@@ -3911,8 +3913,13 @@
       var b = button('บันทึก', '', function () {
         if (!i.value.trim()) { badFields([[i, 'ใส่' + label]]); return; }
         b.disabled = true;
-        api(action, { kind: x.part.kind, id: x.part.id, no: i.value.trim() }).then(function () { reload(done + ' ' + i.value.trim() + ' แล้ว'); })
-          .catch(function (e) { b.disabled = false; show(e.code === 'no_dp' ? 'งวดนี้ยังไม่ได้ตั้ง DP' : e.message, 'err'); });
+        api(action, { kind: x.part.kind, id: x.part.id, no: i.value.trim() })
+          .then(function (r) { reload(done + ' ' + i.value.trim() + ' แล้ว' + (r && r.dup ? ' · เลข DP นี้ใช้กับงวดหรือกิจกรรมอื่นด้วย ตรวจว่าพิมพ์ถูก' : '')); })
+          .catch(function (e) {
+            b.disabled = false;
+            if (e.code === 'taken') { reload(''); show('มีคนบันทึก' + label + ' ' + (e.data && e.data.no ? e.data.no + ' ' : '') + 'ไปก่อนแล้ว', 'err'); return; }
+            show(e.code === 'no_dp' ? 'งวดนี้ยังไม่ได้ตั้ง DP' : e.message, 'err');
+          });
       });
       var w = el('div', 'row'); w.appendChild(i); w.appendChild(b); td.appendChild(w);
     }
@@ -3927,10 +3934,26 @@
       function (td, x) { numberBox(td, x, 'เลข DP', 'due_dp_set', 'บันทึก DP'); });
     if (q.can_invoice) table('รอออกใบแจ้งหนี้', 'หนึ่งใบแจ้งหนี้ต่อหนึ่ง DP ออกหลังตั้ง DP แล้ว', q.invoice,
       [['TTA', open], ['เวนเดอร์ (เลข NAV)', vend], ['รายการ', function (td, x) { due(td, x); if (x.part.on && x.part.on <= addDays(today(), 7)) td.appendChild(el('span', 'chip warn', x.part.on < today() ? 'เลยกำหนด' : 'ใกล้ครบกำหนด')); }],
-        ['DP', txt(function (x) { return x.part.dp_no; })]],
+        ['DP', function (td, x) {
+          td.appendChild(document.createTextNode(x.part.dp_no));
+          if (isContract()) {
+            var fb2 = el('button', 'linkbtn', 'แก้'); fb2.type = 'button'; fb2.setAttribute('aria-label', 'แก้เลข DP ' + x.part.dp_no);
+            fb2.onclick = function () { fixNo(x.part.kind, x.part.id, 'due_dp_set', 'เลข DP', x.part.dp_no, reload); };
+            td.appendChild(fb2);
+          }
+        }]],
       function (td, x) { numberBox(td, x, 'เลขใบแจ้งหนี้', 'due_invoice_set', 'บันทึกใบแจ้งหนี้'); });
     if (q.no_dues.length) table('ค่าเช่าพื้นที่ยังไม่ได้แบ่งงวด', 'ผู้อนุมัติ TTA หรือการเงินใส่งวดค่าเช่าใน TTA ก่อน (หัวข้อ การรับเงินและงวด) จึงตั้ง DP ของค่าเช่าได้ กิจกรรมตั้ง DP ได้เลย', q.no_dues,
       [['TTA', open], ['เวนเดอร์ (เลข NAV)', vend], ['อนุมัติมาแล้ว', txt(function (x) { return x.days + ' วัน'; })]], function () {});
+  }
+  // A contract approver corrects a DP or invoice number already saved (a typo); the change goes in the TTA history
+  function fixNo(kind, id, action, label, old, after) {
+    var no = (prompt('แก้' + label + ' จาก ' + old + ' เป็น' + String.fromCharCode(10) + '(บันทึกในประวัติของ TTA)', old) || '').trim();
+    if (!no || no === old) return;
+    api(action, { kind: kind, id: id, no: no, fix: true }).then(function (r) {
+      var msg = 'แก้' + label + ' เป็น ' + no + ' แล้ว' + (r && r.dup ? ' · เลขนี้ใช้กับงวดหรือกิจกรรมอื่นด้วย' : '');
+      if (after) after(msg); else { afterNote = [msg, 'ok']; contracts(); }
+    }).catch(function (e) { show(e.message, 'err'); });
   }
   // Vendor money of one agreement (payments received and dues expected): approvers and finance only; the server sends it to no one else
   function agPayPanel(p, a) {
@@ -3981,9 +4004,15 @@
       dues.forEach(function (x, i) {
         var r = el('div', 'brow');
         inputs(r, x, [['due_on', 'วันครบกำหนด', 'date'], ['amount', 'ยอด (บาท)', 'number'], ['note', 'หมายเหตุ', 'text']], paintDues);
+        if (x.dp_no || x.invoice_no) r.querySelectorAll('input[type=date], input[type=number]').forEach(function (inp) { inp.readOnly = true; inp.title = 'ตั้ง DP แล้ว แก้วันและยอดไม่ได้'; });
         if (x.due_on && x.due_on < today() && stSel.value !== 'paid') r.appendChild(el('span', 'chip err', 'เลยกำหนด'));
         if (x.dp_no) r.appendChild(el('span', 'chip', 'DP ' + x.dp_no)); if (x.invoice_no) r.appendChild(el('span', 'chip ok', 'ใบแจ้งหนี้ ' + x.invoice_no));
-        r.appendChild(button('ลบงวด', 'danger', function () { dues.splice(i, 1); paintDues(); }));
+        if (x.id && isContract()) {
+          if (x.dp_no) r.appendChild(button('แก้เลข DP', 'alt', function () { fixNo('due', x.id, 'due_dp_set', 'เลข DP', x.dp_no); }));
+          if (x.invoice_no) r.appendChild(button('แก้เลขใบแจ้งหนี้', 'alt', function () { fixNo('due', x.id, 'due_invoice_set', 'เลขใบแจ้งหนี้', x.invoice_no); }));
+        }
+        if (x.dp_no || x.invoice_no) r.appendChild(el('small', 'hint', 'ตั้ง DP แล้ว: แก้วันและยอดไม่ได้ ลบงวดไม่ได้'));
+        if (!x.dp_no && !x.invoice_no) r.appendChild(button('ลบงวด', 'danger', function () { dues.splice(i, 1); paintDues(); }));
         dueEl.appendChild(r);
       });
       if (!dues.length) dueEl.appendChild(el('p', 'sub', 'ยังไม่มีงวดที่ต้องได้รับ'));
@@ -4056,7 +4085,7 @@
     vendor.addEventListener('input', vendorCheck);
     navAttach(d, brand, vendor, function (r) { nav = r; vendorCheck(); });
     // other items (design v3 Q35: media, training, fees): no place, only an amount and a period, counted in the value
-    var items = (a.items || []).map(function (x) { return { id: x.id, item: x.item, amount: x.amount == null ? '' : Number(x.amount), start_date: x.start_date || '', end_date: x.end_date || '', rate_id: x.rate_id || null, note: x.note || '' }; });
+    var items = (a.items || []).map(function (x) { return { id: x.id, item: x.item, amount: x.amount == null ? '' : Number(x.amount), start_date: x.start_date || '', end_date: x.end_date || '', rate_id: x.rate_id || null, note: x.note || '', locked: !!(x.dp_no || x.invoice_no) }; });
     var ib = formPart(2, 'รายการอื่น (สื่อ อบรม ค่าธรรมเนียม)');
     ib.appendChild(el('p', 'hint', 'รายการที่ไม่มีตำแหน่ง มีแค่ยอดเงินและช่วงเวลา นับรวมในมูลค่า TTA เลือกจากตารางราคาของปีที่เริ่ม TTA หรือพิมพ์ชื่อเอง ราคาที่ใส่ให้แก้ได้'));
     var dl = el('datalist'); dl.id = 'ag-items-' + (a.id || 'new'); ib.appendChild(dl);
@@ -4101,7 +4130,10 @@
         am.oninput = function () { x.amount = am.value === '' ? '' : Number(am.value); sumNote(); };
         f1.onchange = function () { x.start_date = f1.value; }; f2.onchange = function () { x.end_date = f2.value; };
         r.appendChild(nm); r.appendChild(am); r.appendChild(f1); r.appendChild(f2);
-        r.appendChild(button('ลบ', 'alt', function () { items.splice(i, 1); paintItems(); sumNote(); }));
+        if (x.locked) {
+          [nm, am, f1, f2].forEach(function (inp) { inp.readOnly = true; inp.title = 'ตั้ง DP แล้ว แก้ไม่ได้'; });
+          r.appendChild(el('small', 'hint', 'ตั้ง DP แล้ว แก้หรือลบไม่ได้'));
+        } else r.appendChild(button('ลบ', 'alt', function () { items.splice(i, 1); paintItems(); sumNote(); }));
         irows.appendChild(r);
         x._inputs = [nm, am, f2];
       });
@@ -4255,7 +4287,11 @@
         var typed = prompt('ยกเลิกทั้ง TTA ' + key + '\n' + '\n' + 'รายการเช่าใน TTA นี้จะถูกยกเลิกด้วย ' + live.length + ' รายการเช่า' + (live.length ? ': ' + live.map(function (x) { return CON_KIND[x.kind] + ' ' + (x.sys_no || x.brand); }).join(', ') : '') + '\n' + 'รายการอื่นและงวดเงินจะไม่นับอีก' + '\n' + '\n' + 'พิมพ์ ' + (a.tta_no ? 'เลข TTA' : 'ชื่อแบรนด์') + ' "' + key + '" เพื่อยืนยัน');
         if (typed === null) { bad({ message: '' }); return; }
         if (typed.trim().toLowerCase() !== key.toLowerCase()) { alert('พิมพ์ไม่ตรงกับ "' + key + '" จึงยังไม่ยกเลิก'); bad({ message: '' }); return; }
-        run('agreement_cancel', { id: a.id }, 'ยกเลิก TTA แล้ว')(bad);
+        api('agreement_cancel', { id: a.id }).then(function () { afterNote = ['ยกเลิก TTA แล้ว', 'ok']; contracts(); }).catch(function (e) {
+          if (e.code !== 'has_dp_cancel') { bad(e); return; }
+          if (!confirm('TTA นี้มี ' + e.data.count + ' รายการที่ตั้ง DP หรือออกใบแจ้งหนี้ใน NAV แล้ว' + String.fromCharCode(10) + 'ยกเลิกแล้วต้องไปยกเลิก DP และใบแจ้งหนี้ใน NAV เอง' + String.fromCharCode(10) + String.fromCharCode(10) + 'ยกเลิก TTA ต่อหรือไม่?')) { bad({ message: '' }); return; }
+          run('agreement_cancel', { id: a.id, confirm_dp: true }, 'ยกเลิก TTA แล้ว · อย่าลืมยกเลิก DP และใบแจ้งหนี้ใน NAV')(bad);
+        });
       }, true);
     }
     if (!menu.empty()) row.appendChild(menu);
