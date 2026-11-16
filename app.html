@@ -2817,9 +2817,11 @@
     if (inv.data && inv.data.start_date === inv.from && inv.data.end_date === inv.to) invPaint(body, tb); else load();
   }
   // ---------- Display booking (docs/DESIGN-booking.md): cart -> request (keeps its places 7 days) -> booked ----------
-  // a confirmed booking sends its TTA within 30 days (design answer 3); counted from the confirmation
+  // a confirmed booking sends its TTA within 30 days (design answer 3); counted in Bangkok calendar days from the
+  // confirmation, the same count as the LINE reminders and the Job Tracker card (shd-digest bkkDay)
   function bkTtaDue(b) {
-    var left = 30 - Math.floor((Date.now() - Date.parse(b.decided_at)) / 86400000);
+    var day = function (ms) { return Math.floor((ms + 7 * 3600000) / 86400000); };
+    var left = 30 - (day(Date.now()) - day(Date.parse(b.decided_at)));
     return isNaN(left) ? '' : left >= 0 ? 'ส่ง TTA ภายใน ' + left + ' วัน' : 'เกิน 30 วัน ยังไม่มี TTA';
   }
   // the TTA page with the line made from a booking open
