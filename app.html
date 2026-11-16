@@ -2820,6 +2820,14 @@
     con.backHome = { key: con.sel, label: 'กลับไปใบจอง ' + (b.bk_no || ''), fn: function () { inv.tab = 'book'; bks.open = b.id; go('inventory'); } }; // the Booking tab opens it again once drawn
     window.scrollTo(0, 0); go('contracts');
   }
+  // one failed rate-card rule of a booking, in words (design answer 2)
+  function bkIssue(x) {
+    var at = x.branch ? x.branch + ' ' + x.code + ' ' : '';
+    return x.rule === 'min_months' ? at + 'เช่าขั้นต่ำ ' + x.months + ' เดือน' : x.rule === 'size' ? at + 'ไม่ขายในสาขาขนาด ' + x.size
+      : x.rule === 'off_sale' ? at + 'ปิดขายในตารางราคา' : x.rule === 'no_price' ? at + 'ยังไม่มีราคาในตาราง'
+        : x.rule === 'draft' ? 'ตารางราคาปี ' + (x.year + 543) + ' ยังเป็นร่าง' : at + x.rule;
+  }
+  function bkIssues(b) { return Array.isArray(b.rule_issues) ? b.rule_issues : []; }
   var BK_ST = { held: ['กันไว้ รอยืนยัน', 'warn'], booked: ['จองแล้ว', 'ok'], released: ['หมดเวลากัน', ''], cancelled: ['ยกเลิกแล้ว', ''], rejected: ['ส่งกลับ', 'err'] };
   function thTime(ts) { var t = bkk(ts); return thDate(t.slice(0, 10)) + ' ' + t.slice(11, 16) + ' น.'; }
   // what "+ ตะกร้า" asks for at a free place: the whole Section, else its first run of free shelves, else the place (its sign)
@@ -3022,7 +3030,8 @@
         if (miss.length) { badFields(miss); return; }
         send.disabled = true;
         api('bk_submit', { brand: br.value.trim(), purchase: pu.value, vendor: ve.value.trim(), note: no.value.trim() }).then(function (r) {
-          show('ส่งคำขอ ' + (r.bk_no || '') + ' แล้ว กันพื้นที่ไว้ถึง ' + thTime(r.held_until) + ' รอ Merchandise ยืนยัน'); bkReload();
+          show(r.auto ? 'ผ่านกฎ Rate card ระบบยืนยันการจอง ' + (r.bk_no || '') + ' แล้ว ขั้นต่อไป: สร้าง TTA ภายใน 30 วัน'
+            : 'ส่งคำขอ ' + (r.bk_no || '') + ' แล้ว กันพื้นที่ไว้ถึง ' + thTime(r.held_until) + ' รอ Merchandise ตรวจ: ' + (r.issues || []).map(bkIssue).join(', '), r.auto ? 'ok' : ''); bkReload();
         }).catch(function (e) {
           send.disabled = false;
           var gone = e.code === 'slot_taken' || e.code === 'slot_gone';
@@ -3042,9 +3051,9 @@
     });
     bar.appendChild(seg); lc.appendChild(bar);
     var rows = L.bookings.filter(function (b) { return !bks.mine || b.owner_user === L.me; });
-    var waiting = rows.filter(function (b) { return b.status === 'held' && b.live; });
+    var waiting = rows.filter(function (b) { return b.status === 'held' && b.live && !bkIssues(b).length; });
     if (L.can_decide && waiting.length) {
-      bar.appendChild(button('ยืนยันการจองที่เลือก', '', function () {
+      bar.appendChild(button('ยืนยันที่เลือก (ผ่านกฎแล้ว)', '', function () {
         var ids = waiting.filter(function (b) { return bks.sel[b.id]; }).map(function (b) { return b.id; });
         if (!ids.length) { show('ติ๊กใบจองที่จะยืนยันก่อน', 'err'); return; }
         api('bk_decide', { ids: ids, ok: true }).then(function (r) {
@@ -3059,7 +3068,7 @@
       h.appendChild(hr); t.appendChild(h);
       rows.forEach(function (b) {
         var tr = el('tr'), c0 = el('td');
-        if (L.can_decide && b.status === 'held' && b.live) {
+        if (L.can_decide && b.status === 'held' && b.live && !bkIssues(b).length) {
           var cb = el('input'); cb.type = 'checkbox'; cb.checked = !!bks.sel[b.id]; cb.setAttribute('aria-label', 'เลือก ' + b.bk_no);
           cb.onchange = function () { bks.sel[b.id] = cb.checked; }; c0.appendChild(cb);
         }
@@ -3073,7 +3082,8 @@
         tr.appendChild(el('td', 'num', baht(b.monthly)));
         var s = BK_ST[b.status] || [b.status, ''], c8 = el('td'); c8.appendChild(el('span', 'chip ' + s[1], s[0]));
         if (b.status === 'held' && b.live) c8.appendChild(el('small', '', ' ถึง ' + thTime(b.held_until) + (b.extended ? ' (ต่อแล้ว)' : '')));
-        if (b.status === 'booked') c8.appendChild(el('small', '', b.contract_id ? 'มี TTA แล้ว' : bkTtaDue(b)));
+        if (b.status === 'held' && b.live && bkIssues(b).length) c8.appendChild(el('small', 'chip err', 'ไม่ผ่านกฎ ' + bkIssues(b).length + ' ข้อ เปิดดูเพื่อตรวจ'));
+        if (b.status === 'booked') c8.appendChild(el('small', '', (b.auto_confirmed ? 'ระบบยืนยัน · ' : '') + (b.contract_id ? 'มี TTA แล้ว' : bkTtaDue(b))));
         if (b.decide_note) c8.appendChild(el('small', '', ' ' + b.decide_note));
         tr.appendChild(c8); tb.appendChild(tr);
       });
@@ -3107,6 +3117,10 @@
       det.appendChild(st);
       if (b.decided_by) det.appendChild(el('p', 'sub', (b.status === 'booked' ? 'ยืนยันโดย ' : b.status === 'rejected' ? 'ส่งกลับโดย ' : 'โดย ') + b.decided_by + ' ' + thTime(b.decided_at) + (b.decide_note ? ' · ' + b.decide_note : '')));
       if (b.note) det.appendChild(el('p', 'sub', 'หมายเหตุ: ' + b.note));
+      if (bkIssues(b).length && b.status !== 'cart') {
+        var iss = el('div', 'chips'); iss.appendChild(el('span', 'sub', 'ไม่ผ่านกฎ Rate card: '));
+        bkIssues(b).forEach(function (x) { iss.appendChild(el('span', 'chip err', bkIssue(x))); }); det.appendChild(iss);
+      }
       var tt = r.tta && r.tta.line_status !== 'cancelled' ? r.tta : null;
       if (tt) {
         var tp = el('p'), ts = tt.status === 'active' && !tt.needs_review ? ['TTA อนุมัติแล้ว', 'ok'] : tt.status === 'cancelled' ? ['TTA ยกเลิกแล้ว', 'err'] : ['TTA รออนุมัติ', 'warn'];
@@ -3137,14 +3151,20 @@
         api('bk_extend', { id: b.id }).then(function (x) { show('ต่อเวลาแล้ว กันถึง ' + thTime(x.held_until)); bkReload(); }).catch(fail2);
       }));
       if (r.can_decide && b.status === 'held' && b.live) {
-        acts.appendChild(button('ยืนยันการจอง', '', function () {
-          api('bk_decide', { ids: [b.id], ok: true }).then(function () { show('ยืนยันการจอง ' + b.bk_no + ' แล้ว'); bkReload(); }).catch(fail2);
+        acts.appendChild(button(bkIssues(b).length ? 'อนุญาตทั้งที่ไม่ผ่านกฎ' : 'ยืนยันการจอง', '', function () {
+          var why = '';
+          if (bkIssues(b).length) { why = prompt('เหตุผลที่อนุญาต (' + bkIssues(b).map(bkIssue).join(', ') + ')'); if (!why || !why.trim()) return; }
+          api('bk_decide', { ids: [b.id], ok: true, note: why.trim() }).then(function () { show('ยืนยันการจอง ' + b.bk_no + ' แล้ว'); bkReload(); }).catch(fail2);
         }));
         acts.appendChild(button('ส่งกลับ', 'alt', function () {
           var why = prompt('เหตุผลที่ส่งกลับ (ผู้ขอจะเห็นข้อความนี้)'); if (!why || !why.trim()) return;
           api('bk_decide', { ids: [b.id], ok: false, note: why.trim() }).then(function () { show('ส่งกลับ ' + b.bk_no + ' แล้ว'); bkReload(); }).catch(fail2);
         }));
       }
+      if (r.can_undo) acts.appendChild(button('ส่งกลับ (ยกเลิกการยืนยันของระบบ)', 'alt', function () {
+        var why = prompt('เหตุผลที่ส่งกลับ (ผู้ขอจะเห็นข้อความนี้) ทำได้ภายใน 2 วันหลังระบบยืนยัน'); if (!why || !why.trim()) return;
+        api('bk_decide', { ids: [b.id], ok: false, note: why.trim() }).then(function (x) { show(x.done ? 'ส่งกลับ ' + b.bk_no + ' แล้ว' : 'ส่งกลับไม่ได้แล้ว (เกิน 2 วัน หรือมี TTA แล้ว)', x.done ? '' : 'err'); bkReload(); }).catch(fail2);
+      }));
       if ((r.mine || r.can_decide) && (b.status === 'held' || b.status === 'booked') && !tt) acts.appendChild(button('ยกเลิกใบจอง', 'alt', function () {
         if (!confirm('ยกเลิก ' + b.bk_no + '? พื้นที่จะว่างให้คนอื่นจองได้ทันที')) return;
         api('bk_cancel', { id: b.id }).then(function () { show('ยกเลิก ' + b.bk_no + ' แล้ว'); bkReload(); }).catch(fail2);
