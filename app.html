@@ -511,6 +511,8 @@
   var ROLE_TH = { ADMIN: 'ผู้ดูแลระบบ', APPROVER: 'ผู้อนุมัติสื่อ', REGISTRANT: 'ผู้ลงทะเบียน', STAFF: 'สาขา', WAREHOUSE: 'คลัง' };
   var ERR = {
     has_dp: 'ลบงวดหรือกิจกรรมนี้ไม่ได้ เพราะตั้ง DP หรือออกใบแจ้งหนี้แล้ว',
+    bad_file: 'แนบได้เฉพาะไฟล์ PDF, JPG หรือ PNG', too_big: 'ไฟล์ใหญ่เกิน 5 MB', too_many_files: 'TTA นี้มีไฟล์ครบ 20 ไฟล์แล้ว',
+    jt: 'ระบบเก็บไฟล์ (Job Tracker) ไม่ตอบ ลองใหม่อีกครั้ง',
     period_mismatch: 'ตะกร้าเป็นช่วงวันอื่นอยู่', empty: 'ตะกร้ายังว่างอยู่', extended: 'ใบจองนี้ต่อเวลาไปแล้ว 1 ครั้ง ต่ออีกไม่ได้',
     state: 'สถานะของรายการนี้เปลี่ยนไปแล้ว โหลดหน้าใหม่แล้วลองอีกครั้ง', cart_not_empty: 'ตะกร้ายังมีรายการอยู่', too_many: 'ตะกร้าเต็มแล้ว (ไม่เกิน 300 จุด)',
     'missing:purchase': 'ยังไม่ได้เลือก Med หรือ Nonmed ของ TTA ใหม่', 'missing:brand': 'ยังไม่ได้ใส่แบรนด์/ผู้ส่ง', 'missing:position_type': 'ยังไม่ได้เลือกประเภทตำแหน่ง',
@@ -4076,6 +4078,58 @@
     return AG_ACT[e.action] || e.action;
   }
   // Agreement block of the contract panel: facts, its lines, the approval buttons and the history
+  // Signed TTA files: kept in Job Tracker's Drive folder, opened through shd-api (branch IT blocks Drive links)
+  function agFiles(box, a, mine) {
+    var files = a.files || [], me = sess.staff && sess.staff.u, sec = el('div', 'gapnote');
+    sec.appendChild(el('h4', '', 'ไฟล์ TTA ที่เซ็นแล้ว' + (files.length ? ' (' + files.length + ')' : '')));
+    if (!files.length) sec.appendChild(el('p', 'sub', 'ยังไม่มีไฟล์ แนบ TTA ที่เซ็นแล้ว (PDF หรือรูป) ได้ที่นี่'));
+    files.forEach(function (f) {
+      var row = el('div', 'row');
+      var open = el('button', 'linkbtn', f.name); open.type = 'button';
+      open.onclick = function () {
+        var w = window.open('', '_blank'); // opened on the click so the browser does not block it
+        open.disabled = true;
+        api('agreement_file_get', { id: a.id, file: f.id }).then(function (d) {
+          open.disabled = false;
+          var bin = atob(d.data), buf = new Uint8Array(bin.length);
+          for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+          var url = URL.createObjectURL(new Blob([buf], { type: d.mime }));
+          if (w) w.location = url; else location.href = url;
+          setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+        }).catch(function (e) { open.disabled = false; if (w) w.close(); show(e.message, 'err'); });
+      };
+      open.setAttribute('aria-label', 'เปิดไฟล์ ' + f.name);
+      row.appendChild(open);
+      row.appendChild(el('small', '', (f.by || '') + (f.at ? ' · ' + thDate(bkk(f.at).slice(0, 10)) : '') + (f.size ? ' · ' + Math.max(1, Math.round(f.size / 1024)) + ' KB' : '')));
+      if (f.user === me || isContract()) row.appendChild(button('เอาออก', 'danger', function () {
+        if (!confirm('เอาไฟล์ ' + f.name + ' ออกจาก TTA นี้?' + String.fromCharCode(10) + 'ไฟล์จะย้ายไปถังขยะของ Google Drive')) return;
+        api('agreement_file_del', { id: a.id, file: f.id }).then(function () { afterNote = ['เอาไฟล์ออกแล้ว', 'ok']; contracts(); }).catch(function (e) { show(e.message, 'err'); });
+      }));
+      sec.appendChild(row);
+    });
+    if (a.status !== 'cancelled' && (mine || con.canPay) && files.length < 20) {
+      var fi = el('input'); fi.type = 'file'; fi.accept = '.pdf,image/jpeg,image/png'; fi.hidden = true;
+      var add = button('+ แนบไฟล์ TTA', 'alt', function () { fi.click(); });
+      fi.onchange = function () {
+        var file = fi.files && fi.files[0]; fi.value = '';
+        if (!file) return;
+        if (['application/pdf', 'image/jpeg', 'image/png'].indexOf(file.type) === -1) { show(ERR.bad_file, 'err'); return; }
+        if (file.size > 5 * 1024 * 1024) { show(ERR.too_big, 'err'); return; }
+        add.disabled = true; add.textContent = 'กำลังแนบ...';
+        var rd = new FileReader();
+        rd.onload = function () {
+          api('agreement_file_add', { id: a.id, name: file.name, mime: file.type, data: String(rd.result).split(',')[1] })
+            .then(function () { afterNote = ['แนบไฟล์ ' + file.name + ' แล้ว', 'ok']; contracts(); })
+            .catch(function (e) { add.disabled = false; add.textContent = '+ แนบไฟล์ TTA'; show(e.message, 'err'); });
+        };
+        rd.onerror = function () { add.disabled = false; add.textContent = '+ แนบไฟล์ TTA'; show('อ่านไฟล์ไม่ได้', 'err'); };
+        rd.readAsDataURL(file);
+      };
+      var ar = el('div', 'row'); ar.appendChild(add); ar.appendChild(fi); sec.appendChild(ar);
+      sec.appendChild(el('p', 'hint', 'PDF, JPG หรือ PNG ไม่เกิน 5 MB ต่อไฟล์ เก็บใน Google Drive ของบริษัท แยกโฟลเดอร์ต่อ TTA'));
+    }
+    box.appendChild(sec);
+  }
   function agBlock(p, r) {
     var a = r.ag; if (!a) return;
     var box = el('section', 'boxscroll'), live = a.status !== 'cancelled', review = a.status === 'active' && a.needs_review;
@@ -4087,6 +4141,7 @@
     fact(dl, 'รายการอื่น', (a.items || []).map(function (x) { return x.item + ' ' + baht(x.amount) + ' บาท' + (x.start_date ? ' (' + thDate(x.start_date) + (x.end_date ? ' ถึง ' + thDate(x.end_date) : '') + ')' : '') + (x.dp_no ? ' · DP ' + x.dp_no : '') + (x.invoice_no ? ' · ใบแจ้งหนี้ ' + x.invoice_no : ''); }).join(', '));
     fact(dl, 'อนุมัติโดย', a.approved_by && a.approved_by !== 'migrated' ? a.approved_by + (a.approved_at ? ' · ' + thDate(bkk(a.approved_at).slice(0, 10)) : '') : '');
     box.appendChild(dl);
+    agFiles(box, a, mine);
     var chips = el('div', 'chips');
     chips.appendChild(el('span', 'chip ' + (a.status === 'cancelled' ? 'err' : waiting ? 'warn' : 'ok'), a.status === 'cancelled' ? 'ยกเลิกแล้ว' : review ? 'ต้องอนุมัติใหม่' : a.status === 'pending' ? 'รออนุมัติ' : 'อนุมัติแล้ว'));
     box.appendChild(chips);
