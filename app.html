@@ -165,6 +165,32 @@
   .formpart legend { display: flex; align-items: center; gap: var(--space-2); }
   .formpart .partno { display: inline-flex; align-items: center; justify-content: center; min-width: 1.75em; height: 1.75em; border-radius: var(--radius-pill);
     background: var(--c-brand); color: var(--c-on-brand); font-size: var(--fs-s); }
+  .flowline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; }
+  .flowline .arrow { color: var(--c-ink-2); }
+  .flowline .who { display: inline-flex; align-items: center; padding: var(--space-0) var(--space-3); border-radius: var(--radius-pill);
+    background: var(--c-surface); border: 1px solid var(--c-line-strong); font-size: var(--fs-s); }
+  .flowline .grp { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2);
+    border: 1px dashed var(--c-line-strong); border-radius: var(--radius-s); }
+  .flowline .lbl { font-size: var(--fs-xs); color: var(--c-ink-2); margin-left: var(--space-1); }
+  .wfrow { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: var(--space-2); padding: var(--space-3) 0; border-bottom: 1px solid var(--c-line); }
+  .wfrow:last-of-type { border-bottom: 0; }
+  .wfrow h4 { margin: 0; }
+  .stepedit { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--radius-s); padding: var(--space-3); margin-bottom: var(--space-2); }
+  .stepedit .stephead { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+  .stepedit .stephead .grow { flex: 1; }
+  .flowsay { background: var(--c-brand-soft); border: 1px solid var(--c-brand-line); border-radius: var(--radius-s); padding: var(--space-2) var(--space-3); margin: var(--space-3) 0; }
+  ol.track { list-style: none; margin: var(--space-3) 0; padding: 0; }
+  ol.track li { position: relative; padding: 0 0 var(--space-4) calc(var(--space-5) * 2); }
+  ol.track li::before { content: attr(data-n); position: absolute; left: 0; top: 0; width: 1.9em; height: 1.9em; border-radius: var(--radius-pill);
+    display: flex; align-items: center; justify-content: center; font-size: var(--fs-s); font-weight: 700;
+    background: var(--c-surface-2); color: var(--c-ink-2); border: var(--outline-w) solid var(--c-line-strong); }
+  ol.track li::after { content: ''; position: absolute; left: .9em; top: 2em; bottom: 0; border-left: var(--outline-w) solid var(--c-line); }
+  ol.track li:last-child::after { display: none; }
+  ol.track li.done::before { background: var(--c-ok-soft); color: var(--c-ok); border-color: var(--c-ok); }
+  ol.track li.now::before { background: var(--c-brand); color: var(--c-surface); border-color: var(--c-brand); }
+  ol.track .t { font-weight: 600; }
+  ol.track .chips { margin-top: var(--space-1); }
+  .queue-h { margin: var(--space-3) 0 var(--space-2); font-size: var(--fs-s); color: var(--c-ink-2); }
   .formpart .specrow { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--radius-s); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2); }
   .formpart .specno { flex-basis: 100%; }
   .formpart .specrow label.f.wide { flex: 1 1 100%; }
@@ -547,6 +573,7 @@
     has_dp: 'ลบงวดหรือกิจกรรมนี้ไม่ได้ เพราะตั้ง DP หรือออกใบแจ้งหนี้แล้ว',
     taken: 'มีคนบันทึกเลขนี้ไปก่อนแล้ว โหลดหน้าใหม่เพื่อดูเลขล่าสุด', dp_locked: 'งวดหรือกิจกรรมที่ตั้ง DP หรือออกใบแจ้งหนี้แล้ว แก้วันที่ ยอด หรือชื่อไม่ได้ (NAV ใช้ตัวเลขนี้แล้ว)',
     has_dp_cancel: 'TTA นี้มีรายการที่ตั้ง DP หรือออกใบแจ้งหนี้ใน NAV แล้ว',
+    no_flow: 'เลือก Workflow อนุมัติก่อน', not_your_step: 'ยังไม่ถึงลำดับของคุณ', already: 'คุณอนุมัติลำดับนี้แล้ว',
     bad_file: 'แนบได้เฉพาะไฟล์ PDF, JPG หรือ PNG', too_big: 'ไฟล์ใหญ่เกิน 5 MB', too_many_files: 'TTA นี้มีไฟล์ครบ 20 ไฟล์แล้ว',
     jt: 'ระบบเก็บไฟล์ (Job Tracker) ไม่ตอบ ลองใหม่อีกครั้ง',
     period_mismatch: 'ตะกร้าเป็นช่วงวันอื่นอยู่', empty: 'ตะกร้ายังว่างอยู่', extended: 'ใบจองนี้ต่อเวลาไปแล้ว 1 ครั้ง ต่ออีกไม่ได้',
@@ -1400,6 +1427,159 @@
     });
   }
 
+  // ---------- TTA approval workflows (spec 2026-11-18) ----------
+  var flowsCache = null;
+  function loadFlows(force) {
+    if (flowsCache && !force) return Promise.resolve(flowsCache);
+    return api('flow_list').then(function (d) { flowsCache = d.flows || []; return flowsCache; });
+  }
+  function nameOf(u) {
+    var k = String(u).toLowerCase();
+    for (var i = 0; i < people.length; i++) if (String(people[i].username).toLowerCase() === k) return people[i].name || people[i].username;
+    return u;
+  }
+  function joinNames(xs, word) { return xs.length < 2 ? xs.join('') : xs.slice(0, -1).join(', ') + word + xs[xs.length - 1]; }
+  function stepWord(st) { return st.users.length < 2 ? '' : st.mode === 'all' ? 'ต้องครบทั้ง ' + st.users.length + ' คน' : 'คนใดคนหนึ่ง'; }
+  // names joined by arrows; a step of several people in a dashed box that says all or any
+  function flowLine(steps) {
+    var box = el('div', 'flowline');
+    steps.forEach(function (st, i) {
+      if (i) { var ar = el('span', 'arrow', '›'); ar.setAttribute('aria-hidden', 'true'); box.appendChild(ar); }
+      var holder = st.users.length > 1 ? el('span', 'grp') : box;
+      st.users.forEach(function (u) { holder.appendChild(el('span', 'who', nameOf(u))); });
+      if (holder !== box) { holder.appendChild(el('span', 'lbl', stepWord(st))); box.appendChild(holder); }
+    });
+    box.setAttribute('aria-label', 'ลำดับอนุมัติ: ' + flowSentence(steps));
+    return box;
+  }
+  // the workflow read as a sentence, e.g. "สมชายอนุมัติก่อน แล้ววิภาและธนาต้องอนุมัติครบทั้ง 2 คน"
+  function flowSentence(steps) {
+    return steps.map(function (st, i) {
+      var names = st.users.map(nameOf), many = names.length > 1;
+      var who = many && st.mode === 'any' ? joinNames(names, ' หรือ') + ' คนใดคนหนึ่ง' : joinNames(names, 'และ');
+      var verb = many && st.mode === 'all' ? 'ต้องอนุมัติครบทั้ง ' + names.length + ' คน' : 'อนุมัติ';
+      return (i ? 'แล้ว' : '') + who + verb + (i === 0 && steps.length > 1 ? 'ก่อน' : '');
+    }).join(' ');
+  }
+  // the required "Workflow อนุมัติ" select of a form that makes a new TTA; hidden while no workflow is set up
+  function flowSelect(box) {
+    var l = el('label', 'f'), t = el('span', 't', 'Workflow อนุมัติ'), sel = el('select', 'input'), prev = el('div');
+    t.appendChild(el('span', 'req', ' *')); l.appendChild(t); l.appendChild(sel); l.appendChild(prev); l.hidden = true; box.appendChild(l);
+    var act = [];
+    function paint() {
+      prev.textContent = '';
+      var f = act.filter(function (x) { return String(x.id) === sel.value; })[0];
+      if (f) { prev.appendChild(flowLine(f.steps)); prev.appendChild(el('p', 'hint', 'สร้างแล้ว ' + joinNames(f.steps[0].users.map(nameOf), 'และ') + ' ได้รับแจ้งทาง LINE ทันที')); }
+    }
+    sel.onchange = paint;
+    loadFlows().then(function (fl) {
+      act = fl.filter(function (x) { return x.active; });
+      if (!act.length) return;
+      var o0 = el('option', '', 'เลือก workflow...'); o0.value = ''; sel.appendChild(o0);
+      act.forEach(function (x) { var o = el('option', '', x.name); o.value = x.id; sel.appendChild(o); });
+      if (act.length === 1) sel.value = String(act[0].id);
+      l.hidden = false; paint();
+    }).catch(function () { /* no list: the server still asks for one when workflows exist */ });
+    return {
+      need: function () { return act.length > 0; },
+      get: function () { return sel.value ? Number(sel.value) : undefined; },
+      field: sel
+    };
+  }
+  // the TTA card: one row per step, done / now / later, who approved in the current step and who is awaited
+  function flowTrack(a, waiting) {
+    var f = a.flow, cur = waiting ? Number(a.flow_step) || 0 : f.steps.length, ok = a.flow_ok || [];
+    var ol = el('ol', 'track'); ol.setAttribute('aria-label', 'ลำดับอนุมัติ ' + f.name);
+    f.steps.forEach(function (st, i) {
+      var li = el('li', i < cur ? 'done' : i === cur ? 'now' : ''); li.setAttribute('data-n', String(i + 1));
+      var names = st.users.map(nameOf), many = names.length > 1;
+      var head = i < cur ? joinNames(names, many && st.mode === 'any' ? ' หรือ' : 'และ') + ' · ผ่านแล้ว'
+        : joinNames(names, many && st.mode === 'any' ? ' หรือ' : 'และ') + (many ? ' · ' + (st.mode === 'all' ? 'ต้องครบทุกคน' : 'คนใดคนหนึ่ง') : '');
+      li.appendChild(el('div', 't', head));
+      if (i === cur) {
+        var ch = el('div', 'chips');
+        st.users.forEach(function (u) { var done = ok.indexOf(u) !== -1; ch.appendChild(el('span', 'chip ' + (done ? 'ok' : ''), (done ? 'อนุมัติแล้ว: ' : 'รอ ') + nameOf(u))); });
+        li.appendChild(ch);
+      } else if (i > cur) li.appendChild(el('div', 'sub', 'ยังไม่ถึงลำดับ'));
+      ol.appendChild(li);
+    });
+    return ol;
+  }
+  // Settings > TTA และการเงิน: the workflows and their editor
+  function flowSettings(v) {
+    var ff = fold('Workflow อนุมัติ TTA', 'ลำดับผู้อนุมัติที่เลือกได้ตอนสร้าง TTA', true), fb = ff.body; v.appendChild(ff.node);
+    function list() {
+      fb.textContent = '';
+      fb.appendChild(el('p', 'hint', 'ตอนสร้าง TTA ผู้ส่งเลือก workflow ระบบส่งให้อนุมัติทีละลำดับ ลำดับถัดไปได้รับแจ้งทาง LINE เมื่อลำดับก่อนหน้าครบ คนที่ลางานมอบงานแทนได้ในเมนูมอบงานแทนของ Job Tracker ยังไม่มี workflow = TTA อนุมัติแบบเดิม (ผู้อนุมัติ TTA คนใดก็ได้)'));
+      loadFlows(true).then(function (fl) {
+        if (!fl.length) fb.appendChild(el('p', 'empty-note', 'ยังไม่มี workflow'));
+        fl.forEach(function (x) {
+          var r = el('div', 'wfrow'), info = el('div'), h = el('h4', '', x.name);
+          if (!x.active) h.appendChild(el('span', 'chip', 'ปิดใช้แล้ว'));
+          info.appendChild(h); info.appendChild(flowLine(x.steps)); r.appendChild(info);
+          r.appendChild(button('แก้', 'alt', function () { edit(x); }));
+          fb.appendChild(r);
+        });
+        var row = el('div', 'row'); row.appendChild(button('+ เพิ่ม workflow', '', function () { edit(null); })); fb.appendChild(row);
+      }).catch(function (e) { show(e.message, 'err'); });
+    }
+    function edit(x) {
+      fb.textContent = '';
+      var steps = x ? x.steps.map(function (st) { return { mode: st.mode, users: st.users.slice() }; }) : [{ mode: 'any', users: [] }];
+      var nl = el('label', 'f'); nl.appendChild(el('span', 't', 'ชื่อ workflow')); var name = el('input', 'input'); name.value = x ? x.name : ''; name.maxLength = 80; nl.appendChild(name); fb.appendChild(nl);
+      var box = el('div'), say = el('p', 'flowsay'), acts = el('div', 'row');
+      fb.appendChild(box); fb.appendChild(button('+ เพิ่มลำดับ', 'alt', function () { if (steps.length < 5) { steps.push({ mode: 'any', users: [] }); paint(); } })); fb.appendChild(say); fb.appendChild(acts);
+      function sayIt() {
+        var full = steps.filter(function (st) { return st.users.length; });
+        say.textContent = full.length ? 'อ่านว่า: ' + flowSentence(full) : 'อ่านว่า: ยังไม่ได้เลือกคน';
+      }
+      function paint() {
+        box.textContent = '';
+        steps.forEach(function (st, i) {
+          var se = el('div', 'stepedit'), hd = el('div', 'stephead');
+          hd.appendChild(el('span', 'chip', 'ลำดับ ' + (i + 1))); hd.appendChild(el('span', 'grow'));
+          if (steps.length > 1) { var rm = el('button', 'linkbtn', 'ลบลำดับ'); rm.type = 'button'; rm.onclick = function () { steps.splice(i, 1); paint(); }; hd.appendChild(rm); }
+          se.appendChild(hd);
+          var mode = el('div'), byName = {}; people.forEach(function (p) { byName[String(p.username).toLowerCase()] = p.name; });
+          multiPicker(se, {
+            title: 'คนในลำดับ ' + (i + 1), required: true, noun: 'คน', placeholder: 'เลือกคน...', searchPlaceholder: 'พิมพ์ชื่อ...', initial: st.users,
+            items: people.map(function (p) { var u = String(p.username).toLowerCase(); return { code: u, name: p.name, sub: p.username, leaves: [u] }; }),
+            labelOf: function (code) { return byName[code] || code; },
+            onChange: function (codes) { st.users = codes.slice(0, 10); modeBox(); sayIt(); }
+          });
+          se.appendChild(mode);
+          function modeBox() {
+            mode.textContent = '';
+            if (st.users.length < 2) return; // one person: nothing to choose
+            mode.appendChild(el('p', 'hint', 'มีหลายคนในลำดับนี้ ต้องอนุมัติแบบไหน'));
+            var sg = el('div', 'seg'); sg.setAttribute('role', 'group'); sg.setAttribute('aria-label', 'แบบการอนุมัติของลำดับ ' + (i + 1));
+            [['all', 'ต้องครบทุกคน'], ['any', 'คนใดคนหนึ่งก็พอ']].forEach(function (m) {
+              var b = el('button', '', m[1]); b.type = 'button'; b.setAttribute('aria-pressed', String(st.mode === m[0]));
+              b.onclick = function () { st.mode = m[0]; modeBox(); sayIt(); }; sg.appendChild(b);
+            });
+            mode.appendChild(sg);
+          }
+          modeBox();
+          box.appendChild(se);
+        });
+        sayIt();
+      }
+      paint();
+      acts.appendChild(button('บันทึก', '', function () {
+        if (!name.value.trim()) { badFields([[name, 'ตั้งชื่อ workflow']]); return; }
+        if (steps.some(function (st) { return !st.users.length; })) { show('ทุกลำดับต้องมีอย่างน้อย 1 คน', 'err'); return; }
+        api('flow_save', { id: x ? x.id : undefined, name: name.value.trim(), steps: steps }).then(function () { show('บันทึก workflow แล้ว', 'ok'); list(); })
+          .catch(function (e) { show(e.code === 'name_taken' ? 'ชื่อนี้มีแล้ว ตั้งชื่ออื่น' : e.code === 'bad_steps' ? 'ลำดับไม่ถูกต้อง (1-5 ลำดับ ลำดับละ 1-10 คน)' : e.message, 'err'); });
+      }));
+      acts.appendChild(button('ยกเลิก', 'alt', list));
+      if (x) acts.appendChild(button(x.active ? 'ปิดใช้ workflow นี้' : 'เปิดใช้อีกครั้ง', x.active ? 'danger' : 'alt', function () {
+        if (x.active && !confirm('ปิดใช้ "' + x.name + '"?' + String.fromCharCode(10) + 'TTA ที่ใช้ workflow นี้อยู่ยังเดินต่อจนจบ แต่ TTA ใหม่เลือกไม่ได้')) return;
+        api('flow_active', { id: x.id, active: !x.active }).then(function () { show(x.active ? 'ปิดใช้แล้ว' : 'เปิดใช้แล้ว', 'ok'); list(); }).catch(function (e) { show(e.message, 'err'); });
+      }));
+    }
+    list();
+  }
+
   // ---------- form ----------
   // Resize to at most 1600 px and re-encode as JPEG, so a phone photo is about 300 KB; resolves to the base64 text.
   function toJpegBase64(file, maxSide) {
@@ -2156,6 +2336,7 @@
     var agr = fld2('เลข TTA', 'text', c && c.agreement_no), adn = fld2('เลขโฆษณา', 'text', c && c.ad_no); ttaWatch(agr, c && c.agreement_id);
     var adx = fld2('วันหมดอายุโฆษณา', 'date', c && c.ad_expiry), sup = fld2('ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c && c.supplier_contact);
     var pur = !savedId && !agId ? purchaseSel(g2, '', 'ฝ่าย Med/Nonmed (ใช้เมื่อสร้าง TTA ใหม่)') : null;
+    var wf = pur ? flowSelect(g2) : null;
     var how = fld('วิธีวาง/ข้อห้าม (สาขาจะเห็น)', 'textarea', c && c.how_to_place); how.rows = 2; d.appendChild(how.parentNode);
     var ret = fld('หลังสิ้นสุดให้ทำอย่างไร (สาขาจะเห็น)', 'textarea', c && c.return_to); ret.rows = 2; d.appendChild(ret.parentNode);
     // Branches: none chosen = every branch, like media campaigns.
@@ -2184,7 +2365,8 @@
       (savedId || agId ? Promise.resolve(null) : chooseAgreement(brand.value.trim(), from.value, to.value)).then(function (pick) {
       if (pick === false) { save.disabled = false; return; }
       if (pick) { b.agreement_id = pick; agId = pick; }
-      if (!b.id && !b.agreement_id) { if (!pur || !pur.value) { save.disabled = false; if (pur) badFields([[pur, 'เลือก Med หรือ Nonmed สำหรับ TTA ใหม่']]); return; } b.purchase = pur.value; }
+      if (!b.id && !b.agreement_id) { if (!pur || !pur.value) { save.disabled = false; if (pur) badFields([[pur, 'เลือก Med หรือ Nonmed สำหรับ TTA ใหม่']]); return; } b.purchase = pur.value;
+        if (wf && wf.need() && !wf.get()) { save.disabled = false; badFields([[wf.field, 'เลือก Workflow อนุมัติ']]); return; } if (wf) b.flow_id = wf.get(); }
       api('cashier_save', b).then(function (r) {
         savedId = r.id; told = told || r.notified; toldOnce = told; return pm.flush(r.id);
       }).then(function () { afterNote = !c && !agId ? ['บันทึกแล้ว รออนุมัติ TTA ก่อนจึงจะแจ้งคลังและแสดงให้สาขาเห็น', 'ok'] : [notify.checked && !told ? 'บันทึกแล้ว แต่แจ้งกลุ่มคลังไม่สำเร็จ กด "แจ้งคลังอีกครั้ง" ที่รายการเช่า' : notify.checked ? 'บันทึกแล้ว และแจ้งกลุ่มคลังแล้ว' : 'บันทึกแล้ว', notify.checked && !told ? 'err' : 'ok']; (formBack || cashier)(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
@@ -3196,10 +3378,28 @@
       det.appendChild(bkLineTable(b, null)); det.appendChild(el('p', '', bkSums(b)));
       var acts = el('div', 'toolbar');
       if (r.can_tta) {
+        var mkBox = el('div');
         var mk = button('สร้าง TTA จากใบจอง', '', function () {
-          if (!confirm('สร้าง TTA จาก ' + b.bk_no + ' (' + b.lines.length + ' จุด · ' + bkSums(b) + ')?\n\nTTA จะรออนุมัติ ขั้นต่อไปในหน้า TTA: ใส่เลข TTA และเลือกผู้อนุมัติ')) return;
           mk.disabled = true;
-          api('bk_tta', { id: b.id }).then(function (x) {
+          loadFlows().then(function (fl) {
+            if (!fl.some(function (x) { return x.active; })) { mk.disabled = false; go(undefined); return; }
+            // workflows are set up: pick one before the TTA is made (spec 2026-11-18)
+            mkBox.textContent = '';
+            var card = el('section', 'card cform'); card.appendChild(el('h3', '', 'สร้าง TTA จาก ' + b.bk_no + ' · ' + b.brand));
+            card.appendChild(el('p', 'hint', b.lines.length + ' จุด · ' + bkSums(b)));
+            var w = flowSelect(card), r2 = el('div', 'row');
+            r2.appendChild(button('สร้าง TTA และส่งอนุมัติ', '', function () {
+              if (!w.get()) { badFields([[w.field, 'เลือก Workflow อนุมัติ']]); return; }
+              go(w.get());
+            }));
+            r2.appendChild(button('ยกเลิก', 'alt', function () { mkBox.textContent = ''; mk.disabled = false; }));
+            card.appendChild(r2); mkBox.appendChild(card);
+          }).catch(function () { mk.disabled = false; go(undefined); });
+        });
+        var go = function (flowId) {
+          if (flowId === undefined && !confirm('สร้าง TTA จาก ' + b.bk_no + ' (' + b.lines.length + ' จุด · ' + bkSums(b) + ')?\n\nTTA จะรออนุมัติ ขั้นต่อไปในหน้า TTA: ใส่เลข TTA และเลือกผู้อนุมัติ')) return;
+          mk.disabled = true;
+          api('bk_tta', { id: b.id, flow_id: flowId }).then(function (x) {
             afterNote = ['สร้าง TTA จาก ' + b.bk_no + ' แล้ว ใส่เลข TTA และเลือกผู้อนุมัติต่อได้เลย', 'ok']; // shown once the TTA page loads
             bkOpenTta({ contract_id: x.contract_id, line_status: 'pending' }, b);
           }).catch(function (e) {
@@ -3208,8 +3408,8 @@
               : e.code === 'has_tta' ? 'ใบจองนี้มี TTA แล้ว' : e.code === 'missing:purchase' ? 'ใบจองนี้ยังไม่ระบุ Med/Nonmed' : e.message, 'err');
             if (e.code === 'has_tta') bkReload();
           });
-        });
-        acts.appendChild(mk);
+        };
+        acts.appendChild(mk); det.appendChild(mkBox);
       }
       acts.appendChild(button('ใบเสนอ (พิมพ์ / PDF)', 'alt', function () { bkQuote(b); }));
       if (r.mine && b.status === 'held' && b.live && !b.extended) acts.appendChild(button('ต่อเวลาอีก ' + L.hold_days + ' วัน', 'alt', function () {
@@ -3868,7 +4068,11 @@
     function paint() {
       list.textContent = ''; more.textContent = ''; var rows = conRows();
       if (!rows.length) list.appendChild(el('p', 'empty-note', 'ไม่มีรายการเช่าในกลุ่มนี้'));
-      rows.slice(0, con.limit).forEach(function (r) {
+      var turn = function (r) { return !!(r.ag && r.ag.can_approve); }, nTurn = 0;
+      if (con.view === 'wait') { var mineQ = rows.filter(turn); nTurn = mineQ.length; rows = mineQ.concat(rows.filter(function (r) { return !turn(r); })); }
+      rows.slice(0, con.limit).forEach(function (r, ri) {
+        if (con.view === 'wait' && nTurn && ri === 0) list.appendChild(el('h3', 'queue-h', 'ถึงคิวคุณอนุมัติ ' + nTurn + ' รายการ'));
+        if (con.view === 'wait' && nTurn && ri === nTurn) list.appendChild(el('h3', 'queue-h', 'รอคนอื่นอนุมัติ'));
         var b = el('button', 'trow signline'); b.type = 'button'; if (r.key === con.sel) b.setAttribute('aria-current', 'true');
         b.appendChild(el('b', 'slot-code', r.c.brand)); b.appendChild(el('span', 'chip', CON_KIND[r.kind])); b.appendChild(el('span', 'sub grow', [r.c.vendor, r.scope, String(r.c.note || (r.ag && r.ag.note) || '').slice(0, 80)].filter(Boolean).join(' · ')));
         if (r.rent != null) b.appendChild(el('span', 'sub', baht(r.rent) + ' บาท/เดือน'));
@@ -3876,6 +4080,7 @@
         if (r.kind === 'sign' && !r.c.slots.length) b.appendChild(el('span', 'chip warn', 'รอระบุตำแหน่ง'));
         if (r.c.status === 'pending' || (r.ag && r.ag.status === 'pending')) b.appendChild(el('span', 'chip warn', 'รออนุมัติ'));
         if (r.ag && r.ag.needs_review) b.appendChild(el('span', 'chip warn', 'ต้องอนุมัติใหม่'));
+        if (turn(r)) b.appendChild(el('span', 'chip ok', r.ag.approve_as ? 'ถึงคิวคุณ (แทน ' + nameOf(r.ag.approve_as) + ')' : 'ถึงคิวคุณ'));
         var st = cashState(r.c), left = daysTo(r.c.end_date);
         b.appendChild(el('span', 'chip ' + (st === 'live' ? (left <= 30 ? 'warn' : 'ok') : st === 'cancelled' ? 'err' : ''), st === 'next' ? 'เริ่ม ' + thDate(r.c.start_date) : thDate(r.c.end_date)));
         b.onclick = function () { con.sel = r.key; paint(); conPanel(side); };
@@ -4145,7 +4350,10 @@
     ib.appendChild(irow); ib.appendChild(sum); d.appendChild(ib);
     paintItems(); sumNote();
     var p3 = formPart(3, 'ผู้อนุมัติและหมายเหตุ'); d.appendChild(p3);
-    var dz = people.length ? peoplePicker(p3, a.designated || []) : { getCodes: function () { return a.designated || []; } };
+    // a workflow TTA shows its own steps; a new one picks a workflow (the named approvers are for TTAs without one)
+    var wfn = !a.id ? flowSelect(p3) : null;
+    if (a.flow) { p3.appendChild(el('p', 'hint', 'Workflow: ' + a.flow.name)); p3.appendChild(flowLine(a.flow.steps)); }
+    var dz = a.flow ? { getCodes: function () { return a.designated || []; } } : people.length ? peoplePicker(p3, a.designated || []) : { getCodes: function () { return a.designated || []; } };
     var note = fld('หมายเหตุ', 'textarea', a.note); note.rows = 2; p3.appendChild(note.parentNode);
     var row = el('div', 'row');
     var save = button('บันทึก', '', function () {
@@ -4158,8 +4366,9 @@
         if (x.start_date && x.end_date && x.end_date < x.start_date) ibad.push([x._inputs[2], 'วันสิ้นสุดต้องไม่ก่อนวันเริ่ม']);
       });
       if (ibad.length) { badFields(ibad); return; }
+      if (wfn && wfn.need() && !wfn.get()) { badFields([[wfn.field, 'เลือก Workflow อนุมัติ']]); return; }
       save.disabled = true;
-      api('agreement_save', { items: used.map(function (x) { return { id: x.id, item: x.item, amount: Number(x.amount), start_date: x.start_date || null, end_date: x.end_date || null, rate_id: x.rate_id, note: x.note || null }; }), id: a.id || undefined, purchase: pur.value || undefined, tta_no: tta.value, vendor: vendor.value, vendor_no: vendorNo(), brand: brand.value, start_date: from.value, end_date: to.value, total: total.value === '' ? null : Number(total.value), designated: dz.getCodes(), note: note.value })
+      api('agreement_save', { flow_id: wfn ? wfn.get() : undefined, items: used.map(function (x) { return { id: x.id, item: x.item, amount: Number(x.amount), start_date: x.start_date || null, end_date: x.end_date || null, rate_id: x.rate_id, note: x.note || null }; }), id: a.id || undefined, purchase: pur.value || undefined, tta_no: tta.value, vendor: vendor.value, vendor_no: vendorNo(), brand: brand.value, start_date: from.value, end_date: to.value, total: total.value === '' ? null : Number(total.value), designated: dz.getCodes(), note: note.value })
         .then(function (r) { afterNote = r.tta_dup ? ['บันทึก TTA แล้ว แต่เลข TTA นี้ซ้ำกับ TTA อื่น ตรวจเลขอีกครั้ง', 'err'] : ['บันทึก TTA แล้ว', 'ok']; contracts(); }).catch(function (e) { save.disabled = false; show(e.message, 'err'); });
     });
     row.appendChild(save); row.appendChild(button('ยกเลิก', 'alt', contracts)); d.appendChild(row); v.appendChild(d);
@@ -4240,8 +4449,10 @@
     if (r.kind !== 'deal') tl.appendChild(el('div', 'eyebrow', 'TTA ที่รายการนี้อยู่'));
     tl.appendChild(el('h3', '', 'TTA ' + (a.tta_no || '(ยังไม่มีเลข)')));
     th.appendChild(tl);
-    th.appendChild(el('span', 'chip ' + (a.status === 'cancelled' ? 'err' : waiting ? 'warn' : 'ok'), a.status === 'cancelled' ? 'ยกเลิกแล้ว' : review ? 'ต้องอนุมัติใหม่' : a.status === 'pending' ? 'รออนุมัติ' : 'อนุมัติแล้ว'));
+    var stepNo = a.flow && waiting ? ' ลำดับ ' + ((Number(a.flow_step) || 0) + 1) + ' จาก ' + a.flow.steps.length : '';
+    th.appendChild(el('span', 'chip ' + (a.status === 'cancelled' ? 'err' : waiting ? 'warn' : 'ok'), a.status === 'cancelled' ? 'ยกเลิกแล้ว' : review ? 'ต้องอนุมัติใหม่' + stepNo : a.status === 'pending' ? 'รออนุมัติ' + stepNo : 'อนุมัติแล้ว'));
     box.appendChild(th);
+    if (a.flow && a.status !== 'cancelled') { box.appendChild(el('p', 'sub', 'Workflow: ' + a.flow.name)); box.appendChild(flowTrack(a, waiting)); }
     var dl = el('dl', 'facts');
     fact(dl, 'เวนเดอร์', a.vendor); fact(dl, 'ฝ่าย', PURCHASE[a.purchase] || 'ยังไม่ระบุ Med/Nonmed'); fact(dl, 'ช่วงเวลา', a.start_date ? thDate(a.start_date) + ' ถึง ' + thDate(a.end_date) : '');
     fact(dl, 'มูลค่ารวม', a.total != null ? baht(a.total) + ' บาท' : ''); fact(dl, 'ผู้ลงทะเบียน', a.registrant_name);
@@ -4260,14 +4471,28 @@
     if ((a.lines || []).length) lsec.appendChild(ls); else lsec.appendChild(el('p', 'sub', 'ยังไม่มีรายการเช่า'));
     box.appendChild(lsec);
     agFiles(box, a, mine);
-    var row = el('div', 'row'), menu = moreMenu('จัดการ TTA');
+    var row = el('div', 'row'), menu = moreMenu('จัดการ TTA'), flowHint = null;
     // more = true: into the menu (rare or risky); the row keeps what is done most
     function act(label, cls, fn, more) { var b = button(label, cls, function () { b.disabled = true; fn(function (e) { b.disabled = false; if (e.message) show(e.message, 'err'); }); }); if (more) menu.add(b); else row.appendChild(b); }
     function run(action, body, ok) { return function (bad) { api(action, body).then(function () { afterNote = [ok, 'ok']; contracts(); }).catch(bad); }; }
     // a cancelled contract only shows its agreement: the agreement is handled from one of its live contracts
     if (live && r.c.status === 'cancelled') box.appendChild(el('p', 'hint gapnote', 'รายการนี้ยกเลิกแล้ว จัดการ TTA ได้จากรายการเช่าที่ยังใช้งานอยู่ใน TTA (กดชื่อรายการเช่าด้านบน)'));
     if (live && r.c.status !== 'cancelled') {
-      if (con.canApprove && waiting) act('อนุมัติ TTA', '', function (bad) { run('agreement_approve', { id: a.id }, 'อนุมัติ TTA แล้ว')(bad); });
+      if (a.flow) {
+        // on a workflow: only the current step (or whoever they cover for) approves; it may also send the TTA back
+        var last = (Number(a.flow_step) || 0) >= a.flow.steps.length - 1;
+        if (waiting && a.can_approve) act(a.approve_as ? 'อนุมัติแทน ' + nameOf(a.approve_as) : 'อนุมัติ', '', function (bad) {
+          api('agreement_approve', { id: a.id }).then(function (x) {
+            afterNote = [x.done ? 'อนุมัติครบทุกลำดับแล้ว รายการเช่าเปิดให้สาขาเห็น' : x.step !== (Number(a.flow_step) || 0) ? 'อนุมัติแล้ว ระบบแจ้งลำดับถัดไปทาง LINE' : 'อนุมัติแล้ว รอคนอื่นในลำดับนี้', 'ok']; contracts();
+          }).catch(function (e) { if (e.code === 'taken') { afterNote = ['มีคนอนุมัติพร้อมกัน โหลดใหม่แล้ว ถ้ายังถึงคิวคุณ กดอีกครั้ง', 'err']; contracts(); return; } bad(e); });
+        });
+        if (waiting && (a.can_approve || sess.staff.role === 'ADMIN')) act('ส่งกลับให้แก้', 'alt', function (bad) {
+          var why = (prompt('ส่ง TTA ' + (a.tta_no || a.brand) + ' กลับให้ผู้ลงทะเบียนแก้' + String.fromCharCode(10) + 'แก้แล้วต้องเริ่มอนุมัติใหม่จากลำดับ 1' + String.fromCharCode(10) + String.fromCharCode(10) + 'เหตุผล:') || '').trim();
+          if (!why) { bad({ message: 'ใส่เหตุผลก่อน' }); return; }
+          run('agreement_flow_back', { id: a.id, reason: why }, 'ส่งกลับแล้ว ผู้ลงทะเบียนได้รับแจ้งทาง LINE')(bad);
+        });
+        if (waiting && a.can_approve) flowHint = el('p', 'hint', last ? 'ถ้าลำดับนี้ครบ TTA จะอนุมัติ รายการเช่าเปิดให้สาขาเห็น และผู้ลงทะเบียนได้รับแจ้ง' : 'ถ้าลำดับนี้ครบ ระบบแจ้งลำดับถัดไปทาง LINE');
+      } else if (con.canApprove && waiting) act('อนุมัติ TTA', '', function (bad) { run('agreement_approve', { id: a.id }, 'อนุมัติ TTA แล้ว')(bad); });
       if (con.canApprove && a.status === 'active' && !a.needs_review) act('ถอนอนุมัติ', 'alt', function (bad) {
         var why = (prompt('ถอนอนุมัติ TTA ' + (a.tta_no || '') + ' กลับเป็นรออนุมัติ\n\nเหตุผล:') || '').trim();
         if (!why) { bad({ message: 'ใส่เหตุผลก่อน' }); return; }
@@ -4296,6 +4521,7 @@
     }
     if (!menu.empty()) row.appendChild(menu);
     if (row.children.length) box.insertBefore(row, th.nextSibling); // main actions right under the title
+    if (flowHint && row.parentNode) box.insertBefore(flowHint, row.nextSibling); // what the press does, under the buttons
     var det = el('details', 'hist'), loaded = false; det.appendChild(el('summary', '', 'ประวัติ'));
     det.addEventListener('toggle', function () {
       if (!det.open || loaded) return; loaded = true;
@@ -4843,6 +5069,7 @@
     if (renew && c.agreement_no) { agr.placeholder = 'เดิม: ' + c.agreement_no; agr.parentNode.appendChild(button('ใช้เลขเดิม', 'alt', function () { agr.value = c.agreement_no; })); }
     var adx = add(g2, 'วันหมดอายุโฆษณา', 'date', renew ? '' : c && c.ad_expiry), sup = add(g2, 'ผู้ติดต่อฝั่งซัพพลายเออร์', 'text', c && c.supplier_contact);
     var pur = !savedId && !agId ? purchaseSel(g2, '', 'ฝ่าย Med/Nonmed (ใช้เมื่อสร้าง TTA ใหม่)') : null;
+    var wf = pur ? flowSelect(g2) : null;
     function area(text, val) { var f = fld(text, 'textarea', val); f.i.rows = 2; d.appendChild(f.l); return f.i; }
     var how = area('วิธีวาง/ข้อห้าม (สาขาจะเห็น)', c && c.how_to_place), ret = area('หลังสิ้นสุดให้ทำอย่างไร (สาขาจะเห็น)', c && c.return_to), note = area('รายละเอียด/หมายเหตุ (แสดงในรายการเช่า)', c && c.note);
     // places: pick the branches first (one, a group, or every branch the supplier rents in), then the place in each; rent is per place per month
@@ -5159,7 +5386,8 @@
         (savedId || agId ? Promise.resolve(null) : chooseAgreement(brand.value.trim(), from.value, to.value)).then(function (pick) {
           if (pick === false) { save.disabled = false; return; }
           if (pick) { b.agreement_id = pick; agId = pick; }
-          if (!b.id && !b.agreement_id) { if (!pur || !pur.value) { save.disabled = false; if (pur) badFields([[pur, 'เลือก Med หรือ Nonmed สำหรับ TTA ใหม่']]); return; } b.purchase = pur.value; }
+          if (!b.id && !b.agreement_id) { if (!pur || !pur.value) { save.disabled = false; if (pur) badFields([[pur, 'เลือก Med หรือ Nonmed สำหรับ TTA ใหม่']]); return; } b.purchase = pur.value;
+        if (wf && wf.need() && !wf.get()) { save.disabled = false; badFields([[wf.field, 'เลือก Workflow อนุมัติ']]); return; } if (wf) b.flow_id = wf.get(); }
           api('sign_save', b).then(function (r) { savedId = r.id; flo.signsReq = null; return pm.flush(r.id); }).then(function () { var msg = edit ? 'บันทึกแล้ว' : agId ? 'บันทึกแล้ว TTA ต้องอนุมัติรายการนี้ก่อนจึงจะแจ้งคลังได้' : 'บันทึกแล้ว รออนุมัติ TTA ก่อนจึงจะแจ้งคลังและแสดงให้สาขาเห็น'; if (formBack) { afterNote = [msg, 'ok']; formBack(); } else { show(msg, 'ok'); loadFloor(holder); } })
             .catch(function (e) { save.disabled = false; show(e.code === 'slot_taken' ? 'ตำแหน่งเหล่านี้มีรายการเช่าอื่นอยู่ในช่วงวันที่ชนกัน: ' + e.data.slots.join(', ') + ' (เอาออกหรือเปลี่ยนวันที่)'
               : e.code === 'slot_booked' ? 'ตำแหน่งเหล่านี้มีใบจองของคนอื่นกันไว้อยู่: ' + e.data.slots.join(', ') + ' (ติดต่อผู้จอง หรือเอาออก)' : e.message, 'err'); });
@@ -5541,6 +5769,7 @@
     var tb = el('div', 'toolbar'); tb.appendChild(seg); v.appendChild(tb);
     if (setTab === 'cashier') { cashierSettings(v); return; }
     if (setTab === 'money') {
+      flowSettings(v);
       editorsFold(v, 'ผู้ตั้ง DP ใน NAV', 'ใครเห็นคิวรอตั้ง DP และใส่เลข DP ได้', 'dp_setters', 'dp_setters_save', 'ผู้ดูแลและผู้อนุมัติ TTA ใส่ได้เสมอ คนที่เลือกไว้ที่นี่เห็นคิว "รอตั้ง DP ใน NAV" ในหน้า TTA และได้ LINE เตือนวันที่ 20 และ 27 หลังอนุมัติ TTA ถ้ายังมีงวดที่ไม่ได้ตั้ง DP');
       editorsFold(v, 'ผู้ออกใบแจ้งหนี้', 'ใครเห็นคิวรอออกใบแจ้งหนี้และใส่เลขใบแจ้งหนี้ได้', 'invoicers', 'invoicers_save', 'ผู้ดูแล ผู้อนุมัติ TTA และรายชื่อการเงินใน Job Tracker (SHD_FINANCE) ใส่ได้เสมอ เพิ่มคนอื่นได้ที่นี่');
       return;
